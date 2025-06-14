@@ -10,15 +10,15 @@ export const API_CONFIG = {
     API_KEY: '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'
   },
   GOOGLE: {
-    ANALYTICS_API: process.env.GOOGLE_ANALYTICS_API,
-    SEARCH_CONSOLE_API: process.env.GOOGLE_SEARCH_CONSOLE_API,
-    ADS_API: process.env.GOOGLE_ADS_API
+    ANALYTICS_API: import.meta.env.VITE_GOOGLE_ANALYTICS_API || '',
+    SEARCH_CONSOLE_API: import.meta.env.VITE_GOOGLE_SEARCH_CONSOLE_API || '',
+    ADS_API: import.meta.env.VITE_GOOGLE_ADS_API || ''
   },
   SOCIAL: {
-    FACEBOOK_API: process.env.FACEBOOK_API,
-    TWITTER_API: process.env.TWITTER_API,
-    LINKEDIN_API: process.env.LINKEDIN_API,
-    INSTAGRAM_API: process.env.INSTAGRAM_API
+    FACEBOOK_API: import.meta.env.VITE_FACEBOOK_API || '',
+    TWITTER_API: import.meta.env.VITE_TWITTER_API || '',
+    LINKEDIN_API: import.meta.env.VITE_LINKEDIN_API || '',
+    INSTAGRAM_API: import.meta.env.VITE_INSTAGRAM_API || ''
   }
 };
 
