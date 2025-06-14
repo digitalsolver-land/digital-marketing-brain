@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Bell, Search, Sun, Moon, User, Settings } from 'lucide-react';
+import { Bell, Search, Sun, Moon, User, Settings, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -10,6 +10,8 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator
 } from '@/components/ui/dropdown-menu';
+import { Badge } from '@/components/ui/badge';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface HeaderProps {
   activeSection: string;
@@ -22,6 +24,8 @@ export const Header: React.FC<HeaderProps> = ({
   isDarkMode, 
   onToggleDarkMode 
 }) => {
+  const { user, profile, isAdmin, signOut } = useAuth();
+
   const getSectionTitle = (section: string) => {
     const titles: Record<string, string> = {
       dashboard: 'Dashboard Principal',
@@ -39,14 +43,41 @@ export const Header: React.FC<HeaderProps> = ({
     return titles[section] || 'Dashboard';
   };
 
+  const getUserDisplayName = () => {
+    if (profile?.first_name && profile?.last_name) {
+      return `${profile.first_name} ${profile.last_name}`;
+    }
+    if (profile?.first_name) {
+      return profile.first_name;
+    }
+    return user?.email?.split('@')[0] || 'Utilisateur';
+  };
+
+  const getUserInitials = () => {
+    if (profile?.first_name && profile?.last_name) {
+      return `${profile.first_name[0]}${profile.last_name[0]}`.toUpperCase();
+    }
+    if (profile?.first_name) {
+      return profile.first_name[0].toUpperCase();
+    }
+    return user?.email?.[0]?.toUpperCase() || 'U';
+  };
+
   return (
     <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 px-6 py-4">
       <div className="flex items-center justify-between">
         {/* Section Title */}
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-            {getSectionTitle(activeSection)}
-          </h1>
+          <div className="flex items-center space-x-3">
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+              {getSectionTitle(activeSection)}
+            </h1>
+            {isAdmin && (
+              <Badge variant="secondary" className="bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
+                Admin
+              </Badge>
+            )}
+          </div>
           <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
             Plateforme de Marketing Digital Intégré
           </p>
@@ -81,12 +112,25 @@ export const Header: React.FC<HeaderProps> = ({
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="sm" className="flex items-center space-x-2">
                 <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-                  <User className="w-4 h-4 text-white" />
+                  <span className="text-white text-sm font-medium">{getUserInitials()}</span>
                 </div>
-                <span className="hidden md:block text-sm font-medium">Admin</span>
+                <div className="hidden md:block text-left">
+                  <p className="text-sm font-medium">{getUserDisplayName()}</p>
+                  <p className="text-xs text-slate-500">{user?.email}</p>
+                </div>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
+              <div className="px-2 py-1.5">
+                <p className="text-sm font-medium">{getUserDisplayName()}</p>
+                <p className="text-xs text-slate-500">{user?.email}</p>
+                {isAdmin && (
+                  <Badge variant="secondary" className="mt-1 text-xs">
+                    Administrateur
+                  </Badge>
+                )}
+              </div>
+              <DropdownMenuSeparator />
               <DropdownMenuItem>
                 <User className="w-4 h-4 mr-2" />
                 Profil
@@ -96,7 +140,11 @@ export const Header: React.FC<HeaderProps> = ({
                 Paramètres
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-red-600">
+              <DropdownMenuItem 
+                className="text-red-600 focus:text-red-600 focus:bg-red-50"
+                onClick={signOut}
+              >
+                <LogOut className="w-4 h-4 mr-2" />
                 Déconnexion
               </DropdownMenuItem>
             </DropdownMenuContent>
