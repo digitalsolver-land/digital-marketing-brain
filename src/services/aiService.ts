@@ -1,4 +1,3 @@
-
 import { API_CONFIG } from '@/config/api';
 
 export class AIService {
@@ -13,7 +12,7 @@ export class AIService {
     return AIService.instance;
   }
 
-  async generateContent(prompt: string, type: 'blog' | 'social' | 'email' | 'ad', seoKeywords?: string[]): Promise<string> {
+  async generateContent(prompt: string, type: 'blog' | 'social' | 'email' | 'ad' | 'whatsapp', seoKeywords?: string[]): Promise<string> {
     try {
       const systemPrompt = this.getSystemPrompt(type, seoKeywords);
       
@@ -39,6 +38,49 @@ export class AIService {
     } catch (error) {
       console.error('Erreur génération contenu:', error);
       throw new Error('Échec de la génération de contenu');
+    }
+  }
+
+  async generateWhatsAppResponse(
+    userMessage: string, 
+    customInstructions?: string, 
+    context?: any
+  ): Promise<string> {
+    try {
+      const systemPrompt = `${customInstructions || 'Tu es un assistant WhatsApp professionnel qui répond de manière courtoise et utile.'} 
+      
+      RÈGLES IMPORTANTES:
+      - Réponds en français
+      - Sois concis et direct (WhatsApp favorise les messages courts)
+      - Reste professionnel mais amical
+      - Si tu ne peux pas aider, oriente vers un humain
+      - N'invente jamais d'informations
+      - Pour les questions complexes, propose un appel ou un rendez-vous
+      
+      Contexte: ${context ? JSON.stringify(context) : 'Aucun contexte spécifique'}`;
+      
+      const response = await fetch(`${this.baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'anthropic/claude-3.5-sonnet',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userMessage }
+          ],
+          temperature: 0.6,
+          max_tokens: 500 // Limite pour WhatsApp
+        })
+      });
+
+      const data = await response.json();
+      return data.choices[0].message.content;
+    } catch (error) {
+      console.error('Erreur génération réponse WhatsApp:', error);
+      throw new Error('Échec de la génération de réponse WhatsApp');
     }
   }
 
@@ -151,6 +193,8 @@ export class AIService {
         return `${basePrompt} Crée un email marketing persuasif avec un CTA fort. ${seoInstructions}`;
       case 'ad':
         return `${basePrompt} Crée une publicité concise et impactante. ${seoInstructions}`;
+      case 'whatsapp':
+        return `${basePrompt} Crée du contenu optimisé pour WhatsApp (court, direct, engageant). ${seoInstructions}`;
       default:
         return basePrompt;
     }

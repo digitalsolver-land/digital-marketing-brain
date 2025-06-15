@@ -22,7 +22,8 @@ import {
   Users, 
   Shield,
   Trash2,
-  ArrowLeft
+  ArrowLeft,
+  MessageCircle
 } from 'lucide-react';
 
 interface AppSettings {
@@ -35,6 +36,12 @@ interface AppSettings {
   twitter_api?: string;
   linkedin_api?: string;
   instagram_api?: string;
+  whatsapp_api_token?: string;
+  whatsapp_phone_number_id?: string;
+  whatsapp_verify_token?: string;
+  whatsapp_ai_enabled?: boolean;
+  whatsapp_ai_instructions?: string;
+  whatsapp_response_mode?: string;
   default_language?: string;
   timezone?: string;
   email_notifications?: boolean;
@@ -68,7 +75,10 @@ const Settings = () => {
     auto_backup: true,
     backup_frequency: 'daily',
     max_workflows: 50,
-    data_retention_days: 90
+    data_retention_days: 90,
+    whatsapp_ai_enabled: false,
+    whatsapp_response_mode: 'auto',
+    whatsapp_ai_instructions: 'Tu es un assistant professionnel qui répond aux questions des clients de manière courtoise et utile.'
   });
   const [users, setUsers] = useState<UserWithRoles[]>([]);
 
@@ -275,6 +285,105 @@ const Settings = () => {
                     onChange={(e) => setSettings({ ...settings, n8n_api_key: e.target.value })}
                     placeholder="Votre clé API n8n"
                   />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <MessageCircle className="w-5 h-5" />
+                  <span>Configuration WhatsApp Business</span>
+                </CardTitle>
+                <CardDescription>
+                  Configurez l'intégration WhatsApp avec IA pour répondre automatiquement aux messages
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="whatsapp_api_token">WhatsApp API Token</Label>
+                    <Input
+                      id="whatsapp_api_token"
+                      type="password"
+                      value={settings.whatsapp_api_token || ''}
+                      onChange={(e) => setSettings({ ...settings, whatsapp_api_token: e.target.value })}
+                      placeholder="Token d'accès WhatsApp Business"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="whatsapp_phone_number_id">ID Numéro de téléphone</Label>
+                    <Input
+                      id="whatsapp_phone_number_id"
+                      value={settings.whatsapp_phone_number_id || ''}
+                      onChange={(e) => setSettings({ ...settings, whatsapp_phone_number_id: e.target.value })}
+                      placeholder="ID du numéro WhatsApp Business"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="whatsapp_verify_token">Token de vérification</Label>
+                  <Input
+                    id="whatsapp_verify_token"
+                    value={settings.whatsapp_verify_token || ''}
+                    onChange={(e) => setSettings({ ...settings, whatsapp_verify_token: e.target.value })}
+                    placeholder="Token pour vérifier le webhook"
+                  />
+                </div>
+
+                <Separator />
+
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="whatsapp_ai_enabled">Activer l'IA WhatsApp</Label>
+                      <p className="text-sm text-slate-600">
+                        Permettre à l'IA de répondre automatiquement aux messages WhatsApp
+                      </p>
+                    </div>
+                    <Switch
+                      id="whatsapp_ai_enabled"
+                      checked={settings.whatsapp_ai_enabled || false}
+                      onCheckedChange={(checked) => setSettings({ ...settings, whatsapp_ai_enabled: checked })}
+                    />
+                  </div>
+
+                  {settings.whatsapp_ai_enabled && (
+                    <>
+                      <div className="space-y-2">
+                        <Label htmlFor="whatsapp_response_mode">Mode de réponse</Label>
+                        <Select 
+                          value={settings.whatsapp_response_mode} 
+                          onValueChange={(value) => setSettings({ ...settings, whatsapp_response_mode: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Sélectionner le mode" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="auto">Automatique (réponse immédiate)</SelectItem>
+                            <SelectItem value="manual">Manuel (nécessite validation)</SelectItem>
+                            <SelectItem value="smart">Intelligent (IA décide)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="whatsapp_ai_instructions">Instructions pour l'IA</Label>
+                        <Textarea
+                          id="whatsapp_ai_instructions"
+                          value={settings.whatsapp_ai_instructions || ''}
+                          onChange={(e) => setSettings({ ...settings, whatsapp_ai_instructions: e.target.value })}
+                          placeholder="Décrivez comment l'IA doit se comporter, quels types de réponses donner, et quelles sont les consignes à suivre..."
+                          rows={6}
+                          className="resize-none"
+                        />
+                        <p className="text-xs text-slate-500">
+                          Exemple: "Tu es l'assistant client de [nom de l'entreprise]. Réponds de manière professionnelle et courtoise. Pour les demandes techniques, oriente vers le support. Ne donne jamais d'informations de prix sans confirmation."
+                        </p>
+                      </div>
+                    </>
+                  )}
                 </div>
               </CardContent>
             </Card>
