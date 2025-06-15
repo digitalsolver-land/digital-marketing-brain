@@ -27,15 +27,20 @@ import {
   CheckCircle,
   XCircle,
   AlertCircle,
-  Eye
+  Eye,
+  Copy,
+  Sync,
+  BarChart3,
+  Layers
 } from 'lucide-react';
 import { n8nService } from '@/services/n8nService';
 import { aiService } from '@/services/aiService';
 import { useToast } from '@/hooks/use-toast';
 import { Workflow } from '@/types/platform';
-import { workflowService } from '@/services/workflowService';
+import { enhancedWorkflowService } from '@/services/enhancedWorkflowService';
 import { WorkflowVisualization } from './WorkflowVisualization';
 import { WorkflowJsonImporter } from './WorkflowJsonImporter';
+import { WorkflowTemplateSelector } from './WorkflowTemplateSelector';
 
 interface N8nExecution {
   id: number;
@@ -93,6 +98,10 @@ export const WorkflowManager: React.FC = () => {
     connections: any[];
   } | null>(null);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
+  
+  // Nouveaux states pour les fonctionnalités avancées
+  const [workflowStats, setWorkflowStats] = useState<{[key: string]: any}>({});
+  const [isLoadingStats, setIsLoadingStats] = useState(false);
   
   const { toast } = useToast();
 
@@ -499,12 +508,91 @@ export const WorkflowManager: React.FC = () => {
       <XCircle className="w-4 h-4 text-red-500" />;
   };
 
+  const loadWorkflowStats = async (workflowId: string) => {
+    if (workflowStats[workflowId]) return; // Déjà chargé
+    
+    setIsLoadingStats(true);
+    try {
+      const stats = await enhancedWorkflowService.getWorkflowStats(workflowId);
+      setWorkflowStats(prev => ({ ...prev, [workflowId]: stats }));
+    } catch (error) {
+      console.error('Erreur chargement stats:', error);
+    } finally {
+      setIsLoadingStats(false);
+    }
+  };
+
+  const duplicateWorkflow = async (workflowId: string, workflow: Workflow) => {
+    try {
+      await enhancedWorkflowService.duplicateWorkflow(workflowId, `${workflow.name} (Copie)`);
+      toast({
+        title: "Succès",
+        description: "Workflow dupliqué avec succès"
+      });
+      loadWorkflows();
+    } catch (error) {
+      toast({
+        title: "Erreur",
+        description: "Échec de la duplication du workflow",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const exportWorkflow = async (workflowId: string, workflowName: string) => {
+    try {
+      const workflowJson = await enhancedWorkflowService.exportWorkflow(workflowId);
+      
+      const dataStr = JSON.stringify(workflowJson, null, 2);
+      const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+      
+      const exportFileDefaultName = `${workflowName.replace(/\s+/g, '_').toLowerCase()}_export.json`;
+      
+      const linkElement = document.createElement('a');
+      linkElement.setAttribute('href', dataUri);
+      linkElement.setAttribute('download', exportFileDefaultName);
+      linkElement.click();
+      
+      toast({
+        title: "Succès",
+        description: "Workflow exporté avec succès"
+      });
+    } catch (error) {
+      toast({
+        title: "Erreur",
+        description: "Échec de l'exportation du workflow",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const syncWithN8n = async (workflowId: string) => {
+    try {
+      await enhancedWorkflowService.syncWithN8n(workflowId);
+      toast({
+        title: "Succès",
+        description: "Synchronisation n8n réussie"
+      });
+      loadWorkflows();
+    } catch (error) {
+      toast({
+        title: "Erreur",
+        description: "Échec de la synchronisation n8n",
+        variant: "destructive"
+      });
+    }
+  };
+
   const filteredWorkflows = workflows.filter(workflow => {
     const matchesStatus = statusFilter === 'all' || workflow.status === statusFilter;
     const matchesSearch = workflow.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesTag = selectedTag === 'all' || workflow.tags?.includes(selectedTag);
     return matchesStatus && matchesSearch && matchesTag;
   });
+
+  const handleTemplateCreated = () => {
+    loadWorkflows();
+  };
 
   return (
     <div className="space-y-6">
@@ -529,8 +617,9 @@ export const WorkflowManager: React.FC = () => {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="workflows">Workflows</TabsTrigger>
+          <TabsTrigger value="templates">Templates</TabsTrigger>
           <TabsTrigger value="visualization">Visualisation</TabsTrigger>
           <TabsTrigger value="executions">Exécutions</TabsTrigger>
           <TabsTrigger value="tags">Tags</TabsTrigger>
@@ -650,7 +739,11 @@ export const WorkflowManager: React.FC = () => {
           {/* Workflows Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredWorkflows.map((workflow) => (
-              <Card key={workflow.id} className="hover:shadow-lg transition-shadow">
+              <Card 
+                key={workflow.id} 
+                className="hover:shadow-lg transition-shadow"
+                onMouseEnter={() => loadWorkflowStats(workflow.id)}
+              >
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-lg truncate">{workflow.name}</CardTitle>
@@ -673,11 +766,20 @@ export const WorkflowManager: React.FC = () => {
                     {workflow.description || 'Aucune description'}
                   </p>
                   
+                  {/* Statistiques */}
                   <div className="space-y-2 mb-4">
-                    <div className="flex justify-between text-sm">
-                      <span>Exécutions:</span>
-                      <span className="font-medium">{workflow.executionCount || 0}</span>
-                    </div>
+                    {workflowStats[workflow.id] && (
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className="flex justify-between">
+                          <span>Exécutions:</span>
+                          <span className="font-medium">{workflowStats[workflow.id].totalExecutions}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Succès:</span>
+                          <span className="font-medium text-green-600">{workflowStats[workflow.id].successfulExecutions}</span>
+                        </div>
+                      </div>
+                    )}
                     <div className="flex justify-between text-sm">
                       <span>Créé:</span>
                       <span className="font-medium">
@@ -686,45 +788,70 @@ export const WorkflowManager: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="flex space-x-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => viewWorkflowDetails(workflow.id)}
-                      className="flex-1"
-                    >
-                      <Eye className="w-4 h-4 mr-1" />
-                      Voir
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        // Utiliser le service local ou n8n selon l'origine
-                        if (workflow.id.includes('-')) {
-                          executeLocalWorkflow(workflow.id);
-                        } else {
-                          executeWorkflow(workflow.id);
-                        }
-                      }}
-                      className="flex-1"
-                    >
-                      <Play className="w-4 h-4 mr-1" />
-                      Exécuter
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      onClick={() => {
-                        // Utiliser le service local ou n8n selon l'origine
-                        if (workflow.id.includes('-')) {
-                          deleteLocalWorkflow(workflow.id);
-                        } else {
-                          deleteWorkflow(workflow.id);
-                        }
-                      }}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                  {/* Actions */}
+                  <div className="space-y-2">
+                    <div className="flex space-x-1">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => viewWorkflowDetails(workflow.id)}
+                        className="flex-1"
+                      >
+                        <Eye className="w-3 h-3 mr-1" />
+                        Voir
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          if (workflow.id.includes('-')) {
+                            executeLocalWorkflow(workflow.id);
+                          } else {
+                            executeWorkflow(workflow.id);
+                          }
+                        }}
+                        className="flex-1"
+                      >
+                        <Play className="w-3 h-3 mr-1" />
+                        Exec
+                      </Button>
+                    </div>
+                    
+                    <div className="flex space-x-1">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => duplicateWorkflow(workflow.id, workflow)}
+                      >
+                        <Copy className="w-3 h-3" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => exportWorkflow(workflow.id, workflow.name)}
+                      >
+                        <Download className="w-3 h-3" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => syncWithN8n(workflow.id)}
+                      >
+                        <Sync className="w-3 h-3" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => {
+                          if (workflow.id.includes('-')) {
+                            deleteLocalWorkflow(workflow.id);
+                          } else {
+                            deleteWorkflow(workflow.id);
+                          }
+                        }}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -744,6 +871,11 @@ export const WorkflowManager: React.FC = () => {
               </p>
             </div>
           )}
+        </TabsContent>
+
+        {/* TEMPLATES TAB */}
+        <TabsContent value="templates" className="space-y-6">
+          <WorkflowTemplateSelector onTemplateCreated={handleTemplateCreated} />
         </TabsContent>
 
         {/* VISUALIZATION TAB */}

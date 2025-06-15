@@ -1,3 +1,4 @@
+
 import { supabase } from '@/integrations/supabase/client';
 import { Workflow } from '@/types/platform';
 
@@ -83,71 +84,64 @@ class WorkflowService {
 
       if (workflowError) throw workflowError;
 
-      // Créer les nœuds
-      if (jsonData.nodes && jsonData.nodes.length > 0) {
-        const nodes = jsonData.nodes.map(node => ({
-          workflow_id: workflow.id,
-          node_id: node.id,
-          node_type: node.type,
-          name: node.name,
-          position_x: node.position[0],
-          position_y: node.position[1],
-          parameters: node.parameters || {}
-        }));
+      // Créer les nœuds et connexions
+      await this.createNodesAndConnections(workflow.id, jsonData);
 
-        const { error: nodesError } = await supabase
-          .from('workflow_nodes')
-          .insert(nodes);
-
-        if (nodesError) throw nodesError;
-      }
-
-      // Créer les connexions
-      if (jsonData.connections) {
-        const connections: any[] = [];
-        
-        Object.entries(jsonData.connections).forEach(([sourceNodeId, nodeConnections]) => {
-          if (nodeConnections.main) {
-            nodeConnections.main.forEach((connectionGroup, sourceIndex) => {
-              connectionGroup.forEach(connection => {
-                connections.push({
-                  workflow_id: workflow.id,
-                  source_node_id: sourceNodeId,
-                  target_node_id: connection.node,
-                  source_index: sourceIndex,
-                  target_index: connection.index,
-                  connection_type: connection.type
-                });
-              });
-            });
-          }
-        });
-
-        if (connections.length > 0) {
-          const { error: connectionsError } = await supabase
-            .from('workflow_connections')
-            .insert(connections);
-
-          if (connectionsError) throw connectionsError;
-        }
-      }
-
-      return {
-        id: workflow.id,
-        name: workflow.name,
-        description: workflow.description || '',
-        status: workflow.status as 'active' | 'inactive' | 'draft',
-        trigger: 'manual',
-        nodes: [],
-        executionCount: 0,
-        successRate: 100,
-        tags: workflow.tags || [],
-        createdAt: workflow.created_at,
-        updatedAt: workflow.updated_at
-      };
+      return this.mapToWorkflow(workflow);
     } catch (error) {
       console.error('Erreur création workflow:', error);
       throw new Error('Impossible de créer le workflow');
+    }
+  }
+
+  private async createNodesAndConnections(workflowId: string, jsonData: N8nWorkflowJSON) {
+    // Créer les nœuds
+    if (jsonData.nodes && jsonData.nodes.length > 0) {
+      const nodes = jsonData.nodes.map(node => ({
+        workflow_id: workflowId,
+        node_id: node.id,
+        node_type: node.type,
+        name: node.name,
+        position_x: node.position[0],
+        position_y: node.position[1],
+        parameters: node.parameters || {}
+      }));
+
+      const { error: nodesError } = await supabase
+        .from('workflow_nodes')
+        .insert(nodes);
+
+      if (nodesError) throw nodesError;
+    }
+
+    // Créer les connexions
+    if (jsonData.connections) {
+      const connections: any[] = [];
+      
+      Object.entries(jsonData.connections).forEach(([sourceNodeId, nodeConnections]) => {
+        if (nodeConnections.main) {
+          nodeConnections.main.forEach((connectionGroup, sourceIndex) => {
+            connectionGroup.forEach(connection => {
+              connections.push({
+                workflow_id: workflowId,
+                source_node_id: sourceNodeId,
+                target_node_id: connection.node,
+                source_index: sourceIndex,
+                target_index: connection.index,
+                connection_type: connection.type
+              });
+            });
+          });
+        }
+      });
+
+      if (connections.length > 0) {
+        const { error: connectionsError } = await supabase
+          .from('workflow_connections')
+          .insert(connections);
+
+        if (connectionsError) throw connectionsError;
+      }
     }
   }
 
@@ -170,64 +164,11 @@ class WorkflowService {
       if (workflowError) throw workflowError;
 
       // Supprimer les anciens nœuds et connexions
-      await supabase
-        .from('workflow_nodes')
-        .delete()
-        .eq('workflow_id', workflowId);
+      await supabase.from('workflow_nodes').delete().eq('workflow_id', workflowId);
+      await supabase.from('workflow_connections').delete().eq('workflow_id', workflowId);
 
-      await supabase
-        .from('workflow_connections')
-        .delete()
-        .eq('workflow_id', workflowId);
-
-      // Recréer les nœuds
-      if (jsonData.nodes && jsonData.nodes.length > 0) {
-        const nodes = jsonData.nodes.map(node => ({
-          workflow_id: workflowId,
-          node_id: node.id,
-          node_type: node.type,
-          name: node.name,
-          position_x: node.position[0],
-          position_y: node.position[1],
-          parameters: node.parameters || {}
-        }));
-
-        const { error: nodesError } = await supabase
-          .from('workflow_nodes')
-          .insert(nodes);
-
-        if (nodesError) throw nodesError;
-      }
-
-      // Recréer les connexions
-      if (jsonData.connections) {
-        const connections: any[] = [];
-        
-        Object.entries(jsonData.connections).forEach(([sourceNodeId, nodeConnections]) => {
-          if (nodeConnections.main) {
-            nodeConnections.main.forEach((connectionGroup, sourceIndex) => {
-              connectionGroup.forEach(connection => {
-                connections.push({
-                  workflow_id: workflowId,
-                  source_node_id: sourceNodeId,
-                  target_node_id: connection.node,
-                  source_index: sourceIndex,
-                  target_index: connection.index,
-                  connection_type: connection.type
-                });
-              });
-            });
-          }
-        });
-
-        if (connections.length > 0) {
-          const { error: connectionsError } = await supabase
-            .from('workflow_connections')
-            .insert(connections);
-
-          if (connectionsError) throw connectionsError;
-        }
-      }
+      // Recréer les nœuds et connexions
+      await this.createNodesAndConnections(workflowId, jsonData);
     } catch (error) {
       console.error('Erreur mise à jour workflow:', error);
       throw new Error('Impossible de mettre à jour le workflow');
@@ -247,19 +188,7 @@ class WorkflowService {
 
       if (error) throw error;
 
-      return workflows.map(workflow => ({
-        id: workflow.id,
-        name: workflow.name,
-        description: workflow.description || '',
-        status: workflow.status as 'active' | 'inactive' | 'draft',
-        trigger: 'manual',
-        nodes: [],
-        executionCount: 0,
-        successRate: 100,
-        tags: workflow.tags || [],
-        createdAt: workflow.created_at,
-        updatedAt: workflow.updated_at
-      }));
+      return workflows.map(workflow => this.mapToWorkflow(workflow));
     } catch (error) {
       console.error('Erreur récupération workflows:', error);
       return [];
@@ -346,6 +275,22 @@ class WorkflowService {
       console.error('Erreur mise à jour statut workflow:', error);
       throw new Error('Impossible de mettre à jour le statut');
     }
+  }
+
+  private mapToWorkflow(workflow: any): Workflow {
+    return {
+      id: workflow.id,
+      name: workflow.name,
+      description: workflow.description || '',
+      status: workflow.status as 'active' | 'inactive' | 'draft',
+      trigger: 'manual',
+      nodes: [],
+      executionCount: 0,
+      successRate: 100,
+      tags: workflow.tags || [],
+      createdAt: workflow.created_at,
+      updatedAt: workflow.updated_at
+    };
   }
 }
 
