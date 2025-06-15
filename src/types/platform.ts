@@ -1,4 +1,3 @@
-
 export interface DashboardMetrics {
   seo: {
     organicTraffic: number;
@@ -36,6 +35,9 @@ export interface Workflow {
   lastExecution?: Date;
   executionCount: number;
   successRate: number;
+  tags?: string[];
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface WorkflowNode {
