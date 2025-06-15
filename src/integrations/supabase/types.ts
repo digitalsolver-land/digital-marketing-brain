@@ -162,6 +162,171 @@ export type Database = {
         }
         Relationships: []
       }
+      workflow_connections: {
+        Row: {
+          connection_type: string | null
+          created_at: string
+          id: string
+          source_index: number | null
+          source_node_id: string
+          target_index: number | null
+          target_node_id: string
+          workflow_id: string
+        }
+        Insert: {
+          connection_type?: string | null
+          created_at?: string
+          id?: string
+          source_index?: number | null
+          source_node_id: string
+          target_index?: number | null
+          target_node_id: string
+          workflow_id: string
+        }
+        Update: {
+          connection_type?: string | null
+          created_at?: string
+          id?: string
+          source_index?: number | null
+          source_node_id?: string
+          target_index?: number | null
+          target_node_id?: string
+          workflow_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workflow_connections_workflow_id_fkey"
+            columns: ["workflow_id"]
+            isOneToOne: false
+            referencedRelation: "workflows"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workflow_executions: {
+        Row: {
+          error_message: string | null
+          execution_data: Json | null
+          finished_at: string | null
+          id: string
+          n8n_execution_id: number | null
+          started_at: string
+          status: string
+          workflow_id: string
+        }
+        Insert: {
+          error_message?: string | null
+          execution_data?: Json | null
+          finished_at?: string | null
+          id?: string
+          n8n_execution_id?: number | null
+          started_at?: string
+          status: string
+          workflow_id: string
+        }
+        Update: {
+          error_message?: string | null
+          execution_data?: Json | null
+          finished_at?: string | null
+          id?: string
+          n8n_execution_id?: number | null
+          started_at?: string
+          status?: string
+          workflow_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workflow_executions_workflow_id_fkey"
+            columns: ["workflow_id"]
+            isOneToOne: false
+            referencedRelation: "workflows"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workflow_nodes: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          node_id: string
+          node_type: string
+          parameters: Json | null
+          position_x: number
+          position_y: number
+          workflow_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          node_id: string
+          node_type: string
+          parameters?: Json | null
+          position_x: number
+          position_y: number
+          workflow_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          node_id?: string
+          node_type?: string
+          parameters?: Json | null
+          position_x?: number
+          position_y?: number
+          workflow_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workflow_nodes_workflow_id_fkey"
+            columns: ["workflow_id"]
+            isOneToOne: false
+            referencedRelation: "workflows"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workflows: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          json_data: Json
+          n8n_workflow_id: string | null
+          name: string
+          status: string
+          tags: string[] | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          json_data: Json
+          n8n_workflow_id?: string | null
+          name: string
+          status?: string
+          tags?: string[] | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          json_data?: Json
+          n8n_workflow_id?: string | null
+          name?: string
+          status?: string
+          tags?: string[] | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

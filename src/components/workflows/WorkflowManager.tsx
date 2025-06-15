@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -27,12 +26,16 @@ import {
   Clock,
   CheckCircle,
   XCircle,
-  AlertCircle
+  AlertCircle,
+  Eye
 } from 'lucide-react';
 import { n8nService } from '@/services/n8nService';
 import { aiService } from '@/services/aiService';
 import { useToast } from '@/hooks/use-toast';
 import { Workflow } from '@/types/platform';
+import { workflowService } from '@/services/workflowService';
+import { WorkflowVisualization } from './WorkflowVisualization';
+import { WorkflowJsonImporter } from './WorkflowJsonImporter';
 
 interface N8nExecution {
   id: number;
@@ -82,6 +85,15 @@ export const WorkflowManager: React.FC = () => {
   const [newVariable, setNewVariable] = useState({ key: '', value: '' });
   const [editingVariable, setEditingVariable] = useState<N8nVariable | null>(null);
   
+  // Nouveau state pour la visualisation
+  const [selectedWorkflow, setSelectedWorkflow] = useState<any>(null);
+  const [workflowDetails, setWorkflowDetails] = useState<{
+    workflow: any;
+    nodes: any[];
+    connections: any[];
+  } | null>(null);
+  const [isLoadingDetails, setIsLoadingDetails] = useState(false);
+  
   const { toast } = useToast();
 
   useEffect(() => {
@@ -104,12 +116,24 @@ export const WorkflowManager: React.FC = () => {
 
   const loadWorkflows = async () => {
     try {
-      const data = await n8nService.getWorkflows({
-        active: statusFilter === 'all' ? undefined : statusFilter === 'active',
-        name: searchTerm || undefined,
-        limit: 100
-      });
-      setWorkflows(data);
+      // Charger d'abord les workflows locaux
+      const localWorkflows = await workflowService.getWorkflows();
+      
+      // Puis charger les workflows n8n si disponible
+      let n8nWorkflows: Workflow[] = [];
+      try {
+        n8nWorkflows = await n8nService.getWorkflows({
+          active: statusFilter === 'all' ? undefined : statusFilter === 'active',
+          name: searchTerm || undefined,
+          limit: 100
+        });
+      } catch (error) {
+        console.log('n8n non disponible, utilisation des workflows locaux uniquement');
+      }
+
+      // Combiner les deux listes
+      const allWorkflows = [...localWorkflows, ...n8nWorkflows];
+      setWorkflows(allWorkflows);
     } catch (error) {
       toast({
         title: "Erreur",
@@ -405,12 +429,68 @@ export const WorkflowManager: React.FC = () => {
     }
   };
 
-  const filteredWorkflows = workflows.filter(workflow => {
-    const matchesStatus = statusFilter === 'all' || workflow.status === statusFilter;
-    const matchesSearch = workflow.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesTag = selectedTag === 'all' || workflow.tags?.includes(selectedTag);
-    return matchesStatus && matchesSearch && matchesTag;
-  });
+  const handleImportSuccess = () => {
+    loadWorkflows();
+  };
+
+  const executeLocalWorkflow = async (workflowId: string) => {
+    try {
+      await workflowService.updateWorkflowStatus(workflowId, 'active');
+      toast({
+        title: "Succès",
+        description: "Workflow activé avec succès"
+      });
+      loadWorkflows();
+    } catch (error) {
+      toast({
+        title: "Erreur",
+        description: "Échec de l'activation du workflow",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const deleteLocalWorkflow = async (workflowId: string) => {
+    try {
+      await workflowService.deleteWorkflow(workflowId);
+      toast({
+        title: "Succès",
+        description: "Workflow supprimé avec succès"
+      });
+      loadWorkflows();
+      if (selectedWorkflow?.id === workflowId) {
+        setSelectedWorkflow(null);
+        setWorkflowDetails(null);
+        setActiveTab('workflows');
+      }
+    } catch (error) {
+      toast({
+        title: "Erreur",
+        description: "Échec de la suppression du workflow",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const viewWorkflowDetails = async (workflowId: string) => {
+    setIsLoadingDetails(true);
+    try {
+      const details = await workflowService.getWorkflowWithDetails(workflowId);
+      if (details) {
+        setWorkflowDetails(details);
+        setSelectedWorkflow(details.workflow);
+        setActiveTab('visualization');
+      }
+    } catch (error) {
+      toast({
+        title: "Erreur",
+        description: "Impossible de charger les détails du workflow",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoadingDetails(false);
+    }
+  };
 
   const getExecutionStatusIcon = (execution: N8nExecution) => {
     if (!execution.finished) return <Clock className="w-4 h-4 text-yellow-500" />;
@@ -418,6 +498,13 @@ export const WorkflowManager: React.FC = () => {
       <CheckCircle className="w-4 h-4 text-green-500" /> : 
       <XCircle className="w-4 h-4 text-red-500" />;
   };
+
+  const filteredWorkflows = workflows.filter(workflow => {
+    const matchesStatus = statusFilter === 'all' || workflow.status === statusFilter;
+    const matchesSearch = workflow.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesTag = selectedTag === 'all' || workflow.tags?.includes(selectedTag);
+    return matchesStatus && matchesSearch && matchesTag;
+  });
 
   return (
     <div className="space-y-6">
@@ -442,8 +529,9 @@ export const WorkflowManager: React.FC = () => {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="workflows">Workflows</TabsTrigger>
+          <TabsTrigger value="visualization">Visualisation</TabsTrigger>
           <TabsTrigger value="executions">Exécutions</TabsTrigger>
           <TabsTrigger value="tags">Tags</TabsTrigger>
           <TabsTrigger value="variables">Variables</TabsTrigger>
@@ -494,19 +582,8 @@ export const WorkflowManager: React.FC = () => {
             </div>
 
             <div className="flex flex-wrap gap-2">
-              {/* Import */}
-              <div className="relative">
-                <input
-                  type="file"
-                  accept=".json"
-                  onChange={handleFileUpload}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                />
-                <Button variant="outline" className="flex items-center space-x-2">
-                  <Upload className="w-4 h-4" />
-                  <span>Importer</span>
-                </Button>
-              </div>
+              {/* Import JSON */}
+              <WorkflowJsonImporter onImportSuccess={handleImportSuccess} />
 
               {/* Create Manual */}
               <Dialog>
@@ -613,18 +690,22 @@ export const WorkflowManager: React.FC = () => {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => toggleWorkflow(workflow.id, workflow.status === 'active')}
+                      onClick={() => viewWorkflowDetails(workflow.id)}
                       className="flex-1"
                     >
-                      {workflow.status === 'active' ? (
-                        <><Pause className="w-4 h-4 mr-1" /> Pause</>
-                      ) : (
-                        <><Play className="w-4 h-4 mr-1" /> Activer</>
-                      )}
+                      <Eye className="w-4 h-4 mr-1" />
+                      Voir
                     </Button>
                     <Button
                       size="sm"
-                      onClick={() => executeWorkflow(workflow.id)}
+                      onClick={() => {
+                        // Utiliser le service local ou n8n selon l'origine
+                        if (workflow.id.includes('-')) {
+                          executeLocalWorkflow(workflow.id);
+                        } else {
+                          executeWorkflow(workflow.id);
+                        }
+                      }}
                       className="flex-1"
                     >
                       <Play className="w-4 h-4 mr-1" />
@@ -633,7 +714,14 @@ export const WorkflowManager: React.FC = () => {
                     <Button
                       size="sm"
                       variant="destructive"
-                      onClick={() => deleteWorkflow(workflow.id)}
+                      onClick={() => {
+                        // Utiliser le service local ou n8n selon l'origine
+                        if (workflow.id.includes('-')) {
+                          deleteLocalWorkflow(workflow.id);
+                        } else {
+                          deleteWorkflow(workflow.id);
+                        }
+                      }}
                     >
                       <Trash2 className="w-4 h-4" />
                     </Button>
@@ -653,6 +741,36 @@ export const WorkflowManager: React.FC = () => {
               </h3>
               <p className="text-slate-600 dark:text-slate-400">
                 Créez votre premier workflow pour commencer l'automatisation
+              </p>
+            </div>
+          )}
+        </TabsContent>
+
+        {/* VISUALIZATION TAB */}
+        <TabsContent value="visualization" className="space-y-6">
+          {isLoadingDetails ? (
+            <div className="flex items-center justify-center py-12">
+              <RefreshCw className="w-8 h-8 animate-spin text-gray-400" />
+              <span className="ml-2 text-gray-600">Chargement des détails...</span>
+            </div>
+          ) : workflowDetails ? (
+            <WorkflowVisualization
+              workflow={workflowDetails.workflow}
+              nodes={workflowDetails.nodes}
+              connections={workflowDetails.connections}
+              onExecute={() => executeLocalWorkflow(workflowDetails.workflow.id)}
+              onDelete={() => deleteLocalWorkflow(workflowDetails.workflow.id)}
+            />
+          ) : (
+            <div className="text-center py-12">
+              <div className="w-16 h-16 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Eye className="w-8 h-8 text-slate-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">
+                Aucun workflow sélectionné
+              </h3>
+              <p className="text-slate-600 dark:text-slate-400">
+                Sélectionnez un workflow dans l'onglet "Workflows" pour le visualiser
               </p>
             </div>
           )}
