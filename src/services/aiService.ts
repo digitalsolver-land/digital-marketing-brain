@@ -1,9 +1,10 @@
-import { API_CONFIG } from '@/config/api';
+
+import { supabase } from '@/integrations/supabase/client';
 
 export class AIService {
   private static instance: AIService;
-  private apiKey = API_CONFIG.OPENROUTER.API_KEY;
-  private baseUrl = API_CONFIG.OPENROUTER.BASE_URL;
+  private apiKey = '';
+  private baseUrl = 'https://openrouter.ai/api/v1';
 
   public static getInstance(): AIService {
     if (!AIService.instance) {
@@ -12,7 +13,27 @@ export class AIService {
     return AIService.instance;
   }
 
+  async initialize(userId: string) {
+    try {
+      const { data } = await supabase
+        .from('app_settings')
+        .select('openrouter_api_key')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (data?.openrouter_api_key) {
+        this.apiKey = data.openrouter_api_key;
+      }
+    } catch (error) {
+      console.error('Error initializing AI service:', error);
+    }
+  }
+
   async generateContent(prompt: string, type: 'blog' | 'social' | 'email' | 'ad' | 'whatsapp', seoKeywords?: string[]): Promise<string> {
+    if (!this.apiKey) {
+      throw new Error('Clé API OpenRouter non configurée. Rendez-vous dans les paramètres.');
+    }
+
     try {
       const systemPrompt = this.getSystemPrompt(type, seoKeywords);
       
@@ -33,11 +54,15 @@ export class AIService {
         })
       });
 
+      if (!response.ok) {
+        throw new Error(`Erreur API: ${response.status} ${response.statusText}`);
+      }
+
       const data = await response.json();
       return data.choices[0].message.content;
     } catch (error) {
       console.error('Erreur génération contenu:', error);
-      throw new Error('Échec de la génération de contenu');
+      throw new Error('Échec de la génération de contenu. Vérifiez votre configuration.');
     }
   }
 
@@ -46,6 +71,10 @@ export class AIService {
     customInstructions?: string, 
     context?: any
   ): Promise<string> {
+    if (!this.apiKey) {
+      throw new Error('Clé API OpenRouter non configurée');
+    }
+
     try {
       const systemPrompt = `${customInstructions || 'Tu es un assistant WhatsApp professionnel qui répond de manière courtoise et utile.'} 
       
@@ -72,7 +101,7 @@ export class AIService {
             { role: 'user', content: userMessage }
           ],
           temperature: 0.6,
-          max_tokens: 500 // Limite pour WhatsApp
+          max_tokens: 500
         })
       });
 
@@ -181,20 +210,20 @@ export class AIService {
   }
 
   private getSystemPrompt(type: string, seoKeywords?: string[]): string {
-    const basePrompt = 'Tu es un expert en marketing digital et copywriting.';
+    const basePrompt = 'Tu es un expert en marketing digital et copywriting français.';
     const seoInstructions = seoKeywords ? `Optimise pour les mots-clés: ${seoKeywords.join(', ')}` : '';
     
     switch (type) {
       case 'blog':
-        return `${basePrompt} Crée un article de blog engageant et informatif. ${seoInstructions}`;
+        return `${basePrompt} Crée un article de blog engageant et informatif en français. Structure avec titre, introduction, développement et conclusion. ${seoInstructions}`;
       case 'social':
-        return `${basePrompt} Crée du contenu social média accrocheur et viral. ${seoInstructions}`;
+        return `${basePrompt} Crée du contenu social média accrocheur et viral en français. Inclus des hashtags pertinents et un call-to-action. Adapte le ton selon le réseau (professionnel pour LinkedIn, décontracté pour Instagram/TikTok). ${seoInstructions}`;
       case 'email':
-        return `${basePrompt} Crée un email marketing persuasif avec un CTA fort. ${seoInstructions}`;
+        return `${basePrompt} Crée un email marketing persuasif en français avec un objet accrocheur et un CTA fort. Structure: salutation, accroche, corps du message, CTA. ${seoInstructions}`;
       case 'ad':
-        return `${basePrompt} Crée une publicité concise et impactante. ${seoInstructions}`;
+        return `${basePrompt} Crée une publicité concise et impactante en français. Focus sur le bénéfice client et l'urgence. Maximum 150 mots. ${seoInstructions}`;
       case 'whatsapp':
-        return `${basePrompt} Crée du contenu optimisé pour WhatsApp (court, direct, engageant). ${seoInstructions}`;
+        return `${basePrompt} Crée du contenu optimisé pour WhatsApp en français (court, direct, engageant). Utilise des emojis et un ton conversationnel. ${seoInstructions}`;
       default:
         return basePrompt;
     }

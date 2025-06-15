@@ -23,12 +23,15 @@ import {
   Shield,
   Trash2,
   ArrowLeft,
-  MessageCircle
+  MessageCircle,
+  Share2
 } from 'lucide-react';
 
 interface AppSettings {
   n8n_api_key?: string;
   openrouter_api_key?: string;
+  postiz_api_key?: string;
+  postiz_api_url?: string;
   google_analytics_api?: string;
   google_search_console_api?: string;
   google_ads_api?: string;
@@ -78,7 +81,8 @@ const Settings = () => {
     data_retention_days: 90,
     whatsapp_ai_enabled: false,
     whatsapp_response_mode: 'auto',
-    whatsapp_ai_instructions: 'Tu es un assistant professionnel qui répond aux questions des clients de manière courtoise et utile.'
+    whatsapp_ai_instructions: 'Tu es un assistant professionnel qui répond aux questions des clients de manière courtoise et utile.',
+    postiz_api_url: 'https://api.postiz.com/public/v1'
   });
   const [users, setUsers] = useState<UserWithRoles[]>([]);
 
@@ -285,6 +289,45 @@ const Settings = () => {
                     onChange={(e) => setSettings({ ...settings, n8n_api_key: e.target.value })}
                     placeholder="Votre clé API n8n"
                   />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <Share2 className="w-5 h-5" />
+                  <span>Configuration Postiz</span>
+                </CardTitle>
+                <CardDescription>
+                  Configurez l'intégration Postiz pour la gestion des réseaux sociaux
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="postiz_api_key">Clé API Postiz</Label>
+                  <Input
+                    id="postiz_api_key"
+                    type="password"
+                    value={settings.postiz_api_key || ''}
+                    onChange={(e) => setSettings({ ...settings, postiz_api_key: e.target.value })}
+                    placeholder="Votre clé API Postiz"
+                  />
+                  <p className="text-xs text-slate-500">
+                    Trouvez votre clé API dans les paramètres de votre instance Postiz
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="postiz_api_url">URL de l'API Postiz</Label>
+                  <Input
+                    id="postiz_api_url"
+                    value={settings.postiz_api_url || ''}
+                    onChange={(e) => setSettings({ ...settings, postiz_api_url: e.target.value })}
+                    placeholder="https://votre-instance.postiz.com/public/v1"
+                  />
+                  <p className="text-xs text-slate-500">
+                    URL de votre instance Postiz (locale ou serveur). Par défaut: https://api.postiz.com/public/v1
+                  </p>
                 </div>
               </CardContent>
             </Card>

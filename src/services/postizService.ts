@@ -1,5 +1,5 @@
 
-import { API_CONFIG } from '@/config/api';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface PostizIntegration {
   id: string;
@@ -58,8 +58,31 @@ class PostizService {
   private baseURL = 'https://api.postiz.com/public/v1';
   private apiKey = '';
 
+  async initialize(userId: string) {
+    try {
+      const { data } = await supabase
+        .from('app_settings')
+        .select('postiz_api_key, postiz_api_url')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (data?.postiz_api_key) {
+        this.apiKey = data.postiz_api_key;
+        if (data.postiz_api_url) {
+          this.baseURL = data.postiz_api_url;
+        }
+      }
+    } catch (error) {
+      console.error('Error initializing Postiz service:', error);
+    }
+  }
+
   setApiKey(key: string) {
     this.apiKey = key;
+  }
+
+  setBaseURL(url: string) {
+    this.baseURL = url;
   }
 
   private async makeRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {

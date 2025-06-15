@@ -2,66 +2,45 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Settings, Plus, Calendar, FileText, Users, AlertCircle } from 'lucide-react';
+import { Settings, Plus, Calendar, FileText, Users, AlertCircle, Sparkles, BarChart3 } from 'lucide-react';
 import { postizService, PostizIntegration, PostizPost } from '@/services/postizService';
 import { PostizCreatePost } from './PostizCreatePost';
 import { PostizPostsList } from './PostizPostsList';
 import { PostizIntegrations } from './PostizIntegrations';
+import { PostizAIGenerator } from './PostizAIGenerator';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 
 export const PostizDashboard = () => {
-  const [apiKey, setApiKey] = useState('');
+  const { user } = useAuth();
   const [isConfigured, setIsConfigured] = useState(false);
   const [integrations, setIntegrations] = useState<PostizIntegration[]>([]);
   const [posts, setPosts] = useState<PostizPost[]>([]);
   const [loading, setLoading] = useState(false);
+  const [aiGeneratedContent, setAIGeneratedContent] = useState('');
+  const [activeTab, setActiveTab] = useState('create');
   const { toast } = useToast();
 
   useEffect(() => {
-    const savedApiKey = localStorage.getItem('postiz_api_key');
-    if (savedApiKey) {
-      setApiKey(savedApiKey);
-      postizService.setApiKey(savedApiKey);
-      setIsConfigured(true);
-      loadData();
+    if (user) {
+      initializePostiz();
     }
-  }, []);
+  }, [user]);
 
-  const handleApiKeySubmit = async () => {
-    if (!apiKey.trim()) {
-      toast({
-        title: "Erreur",
-        description: "Veuillez entrer une clé API valide",
-        variant: "destructive"
-      });
-      return;
-    }
-
+  const initializePostiz = async () => {
+    if (!user) return;
+    
     setLoading(true);
     try {
-      postizService.setApiKey(apiKey);
-      await postizService.getIntegrations(); // Test de la clé
-      
-      localStorage.setItem('postiz_api_key', apiKey);
-      setIsConfigured(true);
-      
-      toast({
-        title: "Succès",
-        description: "Connexion à Postiz établie avec succès"
-      });
-      
+      await postizService.initialize(user.id);
       await loadData();
+      setIsConfigured(true);
     } catch (error) {
-      toast({
-        title: "Erreur de connexion",
-        description: "Vérifiez votre clé API Postiz",
-        variant: "destructive"
-      });
+      console.error('Error initializing Postiz:', error);
+      setIsConfigured(false);
     } finally {
       setLoading(false);
     }
@@ -84,26 +63,39 @@ export const PostizDashboard = () => {
     } catch (error) {
       toast({
         title: "Erreur",
-        description: "Impossible de charger les données Postiz",
+        description: "Impossible de charger les données Postiz. Vérifiez votre configuration dans les paramètres.",
         variant: "destructive"
       });
+      setIsConfigured(false);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDisconnect = () => {
-    localStorage.removeItem('postiz_api_key');
-    setApiKey('');
-    setIsConfigured(false);
-    setIntegrations([]);
-    setPosts([]);
-    
-    toast({
-      title: "Déconnecté",
-      description: "Vous avez été déconnecté de Postiz"
-    });
+  const handleAIContentGenerated = (content: string, type: string) => {
+    setAIGeneratedContent(content);
+    setActiveTab('create');
   };
+
+  const getPostStats = () => {
+    const published = posts.filter(p => p.state === 'PUBLISHED').length;
+    const scheduled = posts.filter(p => p.state === 'QUEUE').length;
+    const drafts = posts.filter(p => p.state === 'DRAFT').length;
+    const errors = posts.filter(p => p.state === 'ERROR').length;
+    
+    return { published, scheduled, drafts, errors };
+  };
+
+  if (loading && !isConfigured) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2"></div>
+          <p>Initialisation de Postiz...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!isConfigured) {
     return (
@@ -119,39 +111,34 @@ export const PostizDashboard = () => {
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                Pour utiliser Postiz, vous devez d'abord configurer votre clé API. 
-                Rendez-vous dans les paramètres de votre compte Postiz pour obtenir votre clé API.
+                Postiz n'est pas configuré. Rendez-vous dans les paramètres pour configurer votre clé API et l'URL de votre instance Postiz.
               </AlertDescription>
             </Alert>
             
-            <div className="space-y-2">
-              <Label htmlFor="api-key">Clé API Postiz</Label>
-              <Input
-                id="api-key"
-                type="password"
-                placeholder="Entrez votre clé API Postiz"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-              />
+            <div className="text-sm text-gray-600 space-y-2">
+              <p><strong>Étapes de configuration :</strong></p>
+              <ol className="list-decimal list-inside space-y-1">
+                <li>Allez dans Paramètres → API & Intégrations</li>
+                <li>Configurez votre clé API Postiz</li>
+                <li>Définissez l'URL de votre instance (locale ou serveur)</li>
+                <li>Sauvegardez vos paramètres</li>
+              </ol>
             </div>
             
-            <Button onClick={handleApiKeySubmit} disabled={loading}>
-              {loading ? 'Connexion...' : 'Connecter à Postiz'}
+            <Button onClick={() => window.location.href = '/settings'}>
+              Configurer Postiz
             </Button>
-            
-            <div className="text-sm text-gray-600">
-              <p><strong>URL de l'API:</strong> https://api.postiz.com/public/v1</p>
-              <p><strong>Limite:</strong> 30 requêtes par heure</p>
-            </div>
           </CardContent>
         </Card>
       </div>
     );
   }
 
+  const stats = getPostStats();
+
   return (
     <div className="space-y-6">
-      {/* En-tête avec statut */}
+      {/* En-tête avec statistiques */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
@@ -159,37 +146,44 @@ export const PostizDashboard = () => {
               <FileText className="w-5 h-5 text-blue-500" />
               <span>Gestionnaire Postiz</span>
             </div>
-            <div className="flex items-center space-x-2">
-              <Badge className="bg-green-500">
-                ✓ Connecté à Postiz
-              </Badge>
-              <Button variant="outline" size="sm" onClick={handleDisconnect}>
-                Déconnecter
-              </Button>
-            </div>
+            <Badge className="bg-green-500">
+              ✓ Connecté à Postiz
+            </Badge>
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <div className="text-center">
               <div className="text-2xl font-bold text-blue-600">{integrations.length}</div>
               <div className="text-sm text-gray-600">Réseaux connectés</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-green-600">{posts.filter(p => p.state === 'PUBLISHED').length}</div>
-              <div className="text-sm text-gray-600">Posts publiés</div>
+              <div className="text-2xl font-bold text-green-600">{stats.published}</div>
+              <div className="text-sm text-gray-600">Publiés</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-orange-600">{posts.filter(p => p.state === 'QUEUE').length}</div>
-              <div className="text-sm text-gray-600">Posts programmés</div>
+              <div className="text-2xl font-bold text-orange-600">{stats.scheduled}</div>
+              <div className="text-sm text-gray-600">Programmés</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-gray-600">{stats.drafts}</div>
+              <div className="text-sm text-gray-600">Brouillons</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-red-600">{stats.errors}</div>
+              <div className="text-sm text-gray-600">Erreurs</div>
             </div>
           </div>
         </CardContent>
       </Card>
 
       {/* Onglets principaux */}
-      <Tabs defaultValue="create" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <TabsList className="grid w-full grid-cols-5">
+          <TabsTrigger value="ai" className="flex items-center space-x-2">
+            <Sparkles className="w-4 h-4" />
+            <span>IA Générateur</span>
+          </TabsTrigger>
           <TabsTrigger value="create" className="flex items-center space-x-2">
             <Plus className="w-4 h-4" />
             <span>Créer</span>
@@ -202,12 +196,22 @@ export const PostizDashboard = () => {
             <Users className="w-4 h-4" />
             <span>Réseaux</span>
           </TabsTrigger>
+          <TabsTrigger value="analytics" className="flex items-center space-x-2">
+            <BarChart3 className="w-4 h-4" />
+            <span>Analytics</span>
+          </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="ai">
+          <PostizAIGenerator onContentGenerated={handleAIContentGenerated} />
+        </TabsContent>
 
         <TabsContent value="create">
           <PostizCreatePost 
             integrations={integrations} 
             onPostCreated={loadData}
+            initialContent={aiGeneratedContent}
+            onContentUsed={() => setAIGeneratedContent('')}
           />
         </TabsContent>
 
@@ -221,6 +225,72 @@ export const PostizDashboard = () => {
 
         <TabsContent value="integrations">
           <PostizIntegrations integrations={integrations} />
+        </TabsContent>
+
+        <TabsContent value="analytics">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <BarChart3 className="w-5 h-5 text-blue-500" />
+                <span>Analytics des Publications</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-6 md:grid-cols-2">
+                <div className="space-y-4">
+                  <h3 className="font-semibold">Répartition par statut</h3>
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm">Publications réussies</span>
+                      <Badge className="bg-green-500">{stats.published}</Badge>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm">Publications programmées</span>
+                      <Badge className="bg-orange-500">{stats.scheduled}</Badge>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm">Brouillons</span>
+                      <Badge variant="secondary">{stats.drafts}</Badge>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm">Erreurs</span>
+                      <Badge variant="destructive">{stats.errors}</Badge>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="font-semibold">Répartition par réseau</h3>
+                  <div className="space-y-2">
+                    {integrations.map((integration) => {
+                      const count = posts.filter(p => p.integration.id === integration.id).length;
+                      return (
+                        <div key={integration.id} className="flex justify-between items-center">
+                          <div className="flex items-center space-x-2">
+                            <img src={integration.picture} alt={integration.name} className="w-4 h-4 rounded-full" />
+                            <span className="text-sm">{integration.name}</span>
+                          </div>
+                          <Badge variant="outline">{count}</Badge>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {posts.length === 0 && (
+                <div className="text-center py-8">
+                  <BarChart3 className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-gray-600 mb-2">
+                    Aucune donnée disponible
+                  </h3>
+                  <p className="text-gray-500">
+                    Créez vos premières publications pour voir les analytics
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>
