@@ -6,26 +6,23 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { 
   Settings as SettingsIcon, 
+  Save, 
   Key, 
-  Users, 
   Globe, 
   Bell, 
-  Database, 
-  Save,
-  Eye,
-  EyeOff,
+  Users, 
   Shield,
   Trash2
 } from 'lucide-react';
-import type { Database } from '@/integrations/supabase/types';
 
 interface AppSettings {
   n8n_api_key?: string;
@@ -37,17 +34,17 @@ interface AppSettings {
   twitter_api?: string;
   linkedin_api?: string;
   instagram_api?: string;
-  default_language: string;
-  timezone: string;
-  email_notifications: boolean;
-  sms_notifications: boolean;
-  auto_backup: boolean;
-  backup_frequency: string;
-  max_workflows: number;
-  data_retention_days: number;
+  default_language?: string;
+  timezone?: string;
+  email_notifications?: boolean;
+  sms_notifications?: boolean;
+  auto_backup?: boolean;
+  backup_frequency?: string;
+  max_workflows?: number;
+  data_retention_days?: number;
 }
 
-interface UserWithRole {
+interface UserWithRoles {
   id: string;
   email: string;
   first_name?: string;
@@ -55,13 +52,12 @@ interface UserWithRole {
   roles: string[];
 }
 
-type AppRole = Database['public']['Enums']['app_role'];
+type AppRole = 'admin' | 'moderator' | 'user' | 'commercial' | 'client';
 
 const Settings = () => {
   const { user, isAdmin } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [showApiKeys, setShowApiKeys] = useState<{[key: string]: boolean}>({});
   const [settings, setSettings] = useState<AppSettings>({
     default_language: 'fr',
     timezone: 'Europe/Paris',
@@ -72,10 +68,12 @@ const Settings = () => {
     max_workflows: 50,
     data_retention_days: 90
   });
-  const [users, setUsers] = useState<UserWithRole[]>([]);
+  const [users, setUsers] = useState<UserWithRoles[]>([]);
 
   useEffect(() => {
-    fetchSettings();
+    if (user) {
+      fetchSettings();
+    }
     if (isAdmin) {
       fetchUsers();
     }
@@ -89,10 +87,13 @@ const Settings = () => {
         .from('app_settings')
         .select('*')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
-      if (error && error.code !== 'PGRST116') throw error;
-      
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error fetching settings:', error);
+        return;
+      }
+
       if (data) {
         setSettings(data);
       }
@@ -103,37 +104,48 @@ const Settings = () => {
 
   const fetchUsers = async () => {
     try {
-      const { data: profilesData, error: profilesError } = await supabase
+      const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
         .select('id, email, first_name, last_name');
 
       if (profilesError) throw profilesError;
 
-      const { data: rolesData, error: rolesError } = await supabase
+      const { data: userRoles, error: rolesError } = await supabase
         .from('user_roles')
         .select('user_id, role');
 
       if (rolesError) throw rolesError;
 
-      const usersWithRoles = profilesData.map(profile => ({
+      const usersWithRoles = profiles.map(profile => ({
         ...profile,
-        roles: rolesData.filter(role => role.user_id === profile.id).map(role => role.role)
+        roles: userRoles
+          .filter(role => role.user_id === profile.id)
+          .map(role => role.role)
       }));
 
       setUsers(usersWithRoles);
     } catch (error) {
       console.error('Error fetching users:', error);
+      toast({
+        variant: "destructive",
+        title: "Erreur",
+        description: "Impossible de charger la liste des utilisateurs.",
+      });
     }
   };
 
-  const saveSettings = async () => {
+  const handleSaveSettings = async () => {
     if (!user) return;
-    setLoading(true);
 
+    setLoading(true);
     try {
       const { error } = await supabase
         .from('app_settings')
-        .upsert({ ...settings, user_id: user.id });
+        .upsert({ 
+          user_id: user.id,
+          ...settings,
+          updated_at: new Date().toISOString()
+        });
 
       if (error) throw error;
 
@@ -152,9 +164,9 @@ const Settings = () => {
     }
   };
 
-  const updateUserRole = async (userId: string, newRole: string) => {
+  const handleRoleChange = async (userId: string, newRole: string) => {
     try {
-      // Supprimer tous les rôles existants
+      // Supprimer tous les rôles existants pour cet utilisateur
       await supabase
         .from('user_roles')
         .delete()
@@ -174,7 +186,7 @@ const Settings = () => {
         description: "Le rôle de l'utilisateur a été modifié avec succès.",
       });
 
-      fetchUsers(); // Refresh users list
+      fetchUsers();
     } catch (error: any) {
       toast({
         variant: "destructive",
@@ -184,135 +196,107 @@ const Settings = () => {
     }
   };
 
-  const toggleApiKeyVisibility = (key: string) => {
-    setShowApiKeys(prev => ({ ...prev, [key]: !prev[key] }));
+  const getRoleBadgeColor = (role: string) => {
+    switch (role) {
+      case 'admin': return 'bg-red-500 hover:bg-red-600';
+      case 'commercial': return 'bg-blue-500 hover:bg-blue-600';
+      case 'client': return 'bg-green-500 hover:bg-green-600';
+      case 'moderator': return 'bg-yellow-500 hover:bg-yellow-600';
+      default: return 'bg-gray-500 hover:bg-gray-600';
+    }
   };
 
-  const maskApiKey = (key: string) => {
-    if (!key) return '';
-    return showApiKeys[key] ? key : key.substring(0, 8) + '•••••••••••••••••';
-  };
+  if (!user) {
+    return <div>Chargement...</div>;
+  }
 
   return (
     <div className="container mx-auto p-6 max-w-6xl">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-slate-900">Paramètres</h1>
-        <p className="text-slate-600 mt-2">Configurez votre application et gérez vos intégrations</p>
+        <p className="text-slate-600 mt-2">Configurez votre application et gérez vos préférences</p>
       </div>
 
-      <Tabs defaultValue="apis" className="space-y-6">
+      <Tabs defaultValue="api" className="space-y-6">
         <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="apis">
-            <Key className="w-4 h-4 mr-2" />
-            APIs
-          </TabsTrigger>
-          <TabsTrigger value="preferences">
-            <SettingsIcon className="w-4 h-4 mr-2" />
-            Préférences
-          </TabsTrigger>
-          <TabsTrigger value="notifications">
-            <Bell className="w-4 h-4 mr-2" />
-            Notifications
-          </TabsTrigger>
-          {isAdmin && (
-            <TabsTrigger value="users">
-              <Users className="w-4 h-4 mr-2" />
-              Utilisateurs
-            </TabsTrigger>
-          )}
+          <TabsTrigger value="api">API & Intégrations</TabsTrigger>
+          <TabsTrigger value="general">Général</TabsTrigger>
+          <TabsTrigger value="notifications">Notifications</TabsTrigger>
+          {isAdmin && <TabsTrigger value="users">Gestion Utilisateurs</TabsTrigger>}
         </TabsList>
 
-        {/* Onglet APIs */}
-        <TabsContent value="apis">
-          <div className="grid gap-6 md:grid-cols-2">
+        <TabsContent value="api">
+          <div className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Intégrations IA</CardTitle>
+                <CardTitle className="flex items-center space-x-2">
+                  <Key className="w-5 h-5" />
+                  <span>Clés API Intelligence Artificielle</span>
+                </CardTitle>
                 <CardDescription>
-                  Configurez vos clés API pour les services d'intelligence artificielle
+                  Configurez vos clés API pour les services d'IA
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="openrouter_api">OpenRouter API Key</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="openrouter_api"
-                      type={showApiKeys.openrouter ? "text" : "password"}
-                      value={maskApiKey(settings.openrouter_api_key || '')}
-                      onChange={(e) => setSettings({ ...settings, openrouter_api_key: e.target.value })}
-                      placeholder="or-v1-xxxxxxxxxxxxxxxxxxxxx"
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      onClick={() => toggleApiKeyVisibility('openrouter')}
-                    >
-                      {showApiKeys.openrouter ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </Button>
-                  </div>
+                  <Label htmlFor="openrouter_api_key">OpenRouter API Key</Label>
+                  <Input
+                    id="openrouter_api_key"
+                    type="password"
+                    value={settings.openrouter_api_key || ''}
+                    onChange={(e) => setSettings({ ...settings, openrouter_api_key: e.target.value })}
+                    placeholder="sk-or-..."
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="n8n_api_key">n8n API Key</Label>
+                  <Input
+                    id="n8n_api_key"
+                    type="password"
+                    value={settings.n8n_api_key || ''}
+                    onChange={(e) => setSettings({ ...settings, n8n_api_key: e.target.value })}
+                    placeholder="Votre clé API n8n"
+                  />
                 </div>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
-                <CardTitle>Automatisation</CardTitle>
-                <CardDescription>
-                  Configurez n8n pour l'automatisation des workflows
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="n8n_api">n8n API Key</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="n8n_api"
-                      type={showApiKeys.n8n ? "text" : "password"}
-                      value={maskApiKey(settings.n8n_api_key || '')}
-                      onChange={(e) => setSettings({ ...settings, n8n_api_key: e.target.value })}
-                      placeholder="n8n_api_xxxxxxxxxxxxxxxxxxxxx"
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      onClick={() => toggleApiKeyVisibility('n8n')}
-                    >
-                      {showApiKeys.n8n ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Google Services</CardTitle>
+                <CardTitle>APIs Google</CardTitle>
                 <CardDescription>
                   Intégrations avec les services Google
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="google_analytics">Google Analytics API</Label>
+                  <Label htmlFor="google_analytics_api">Google Analytics API</Label>
                   <Input
-                    id="google_analytics"
-                    type={showApiKeys.ga ? "text" : "password"}
-                    value={maskApiKey(settings.google_analytics_api || '')}
+                    id="google_analytics_api"
+                    type="password"
+                    value={settings.google_analytics_api || ''}
                     onChange={(e) => setSettings({ ...settings, google_analytics_api: e.target.value })}
-                    placeholder="GA API Key"
+                    placeholder="Clé API Google Analytics"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="google_ads">Google Ads API</Label>
+                  <Label htmlFor="google_search_console_api">Google Search Console API</Label>
                   <Input
-                    id="google_ads"
-                    type={showApiKeys.gads ? "text" : "password"}
-                    value={maskApiKey(settings.google_ads_api || '')}
+                    id="google_search_console_api"
+                    type="password"
+                    value={settings.google_search_console_api || ''}
+                    onChange={(e) => setSettings({ ...settings, google_search_console_api: e.target.value })}
+                    placeholder="Clé API Google Search Console"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="google_ads_api">Google Ads API</Label>
+                  <Input
+                    id="google_ads_api"
+                    type="password"
+                    value={settings.google_ads_api || ''}
                     onChange={(e) => setSettings({ ...settings, google_ads_api: e.target.value })}
-                    placeholder="Google Ads API Key"
+                    placeholder="Clé API Google Ads"
                   />
                 </div>
               </CardContent>
@@ -320,118 +304,183 @@ const Settings = () => {
 
             <Card>
               <CardHeader>
-                <CardTitle>Réseaux Sociaux</CardTitle>
+                <CardTitle>APIs Réseaux Sociaux</CardTitle>
                 <CardDescription>
-                  Clés API pour les plateformes sociales
+                  Intégrations avec les plateformes sociales
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="facebook_api">Facebook API</Label>
-                  <Input
-                    id="facebook_api"
-                    type={showApiKeys.fb ? "text" : "password"}
-                    value={maskApiKey(settings.facebook_api || '')}
-                    onChange={(e) => setSettings({ ...settings, facebook_api: e.target.value })}
-                    placeholder="Facebook API Key"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="linkedin_api">LinkedIn API</Label>
-                  <Input
-                    id="linkedin_api"
-                    type={showApiKeys.linkedin ? "text" : "password"}
-                    value={maskApiKey(settings.linkedin_api || '')}
-                    onChange={(e) => setSettings({ ...settings, linkedin_api: e.target.value })}
-                    placeholder="LinkedIn API Key"
-                  />
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="facebook_api">Facebook API</Label>
+                    <Input
+                      id="facebook_api"
+                      type="password"
+                      value={settings.facebook_api || ''}
+                      onChange={(e) => setSettings({ ...settings, facebook_api: e.target.value })}
+                      placeholder="Token Facebook"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="twitter_api">Twitter API</Label>
+                    <Input
+                      id="twitter_api"
+                      type="password"
+                      value={settings.twitter_api || ''}
+                      onChange={(e) => setSettings({ ...settings, twitter_api: e.target.value })}
+                      placeholder="Token Twitter"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="linkedin_api">LinkedIn API</Label>
+                    <Input
+                      id="linkedin_api"
+                      type="password"
+                      value={settings.linkedin_api || ''}
+                      onChange={(e) => setSettings({ ...settings, linkedin_api: e.target.value })}
+                      placeholder="Token LinkedIn"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="instagram_api">Instagram API</Label>
+                    <Input
+                      id="instagram_api"
+                      type="password"
+                      value={settings.instagram_api || ''}
+                      onChange={(e) => setSettings({ ...settings, instagram_api: e.target.value })}
+                      placeholder="Token Instagram"
+                    />
+                  </div>
                 </div>
               </CardContent>
             </Card>
           </div>
         </TabsContent>
 
-        {/* Onglet Préférences */}
-        <TabsContent value="preferences">
-          <div className="grid gap-6 md:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>Préférences générales</CardTitle>
-                <CardDescription>
-                  Configurez vos préférences d'utilisation
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
+        <TabsContent value="general">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <Globe className="w-5 h-5" />
+                <span>Préférences Générales</span>
+              </CardTitle>
+              <CardDescription>
+                Configurez les paramètres généraux de l'application
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="language">Langue par défaut</Label>
-                  <Select
-                    value={settings.default_language}
-                    onValueChange={(value) => setSettings({ ...settings, default_language: value })}
-                  >
+                  <Label htmlFor="default_language">Langue par défaut</Label>
+                  <Select value={settings.default_language} onValueChange={(value) => setSettings({ ...settings, default_language: value })}>
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue placeholder="Sélectionner une langue" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="fr">Français</SelectItem>
                       <SelectItem value="en">English</SelectItem>
                       <SelectItem value="es">Español</SelectItem>
+                      <SelectItem value="de">Deutsch</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="timezone">Fuseau horaire</Label>
-                  <Select
-                    value={settings.timezone}
-                    onValueChange={(value) => setSettings({ ...settings, timezone: value })}
-                  >
+                  <Select value={settings.timezone} onValueChange={(value) => setSettings({ ...settings, timezone: value })}>
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue placeholder="Sélectionner un fuseau" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="Europe/Paris">Europe/Paris</SelectItem>
+                      <SelectItem value="Europe/London">Europe/London</SelectItem>
                       <SelectItem value="America/New_York">America/New_York</SelectItem>
+                      <SelectItem value="America/Los_Angeles">America/Los_Angeles</SelectItem>
                       <SelectItem value="Asia/Tokyo">Asia/Tokyo</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Limites et quotas</CardTitle>
-                <CardDescription>
-                  Configurez les limites d'utilisation
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="max_workflows">Nombre maximum de workflows</Label>
-                  <Input
-                    id="max_workflows"
-                    type="number"
-                    value={settings.max_workflows}
-                    onChange={(e) => setSettings({ ...settings, max_workflows: parseInt(e.target.value) })}
+              <Separator />
+
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold">Limites et quotas</h3>
+                
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="max_workflows">Nombre maximum de workflows</Label>
+                    <Input
+                      id="max_workflows"
+                      type="number"
+                      value={settings.max_workflows || 50}
+                      onChange={(e) => setSettings({ ...settings, max_workflows: parseInt(e.target.value) })}
+                      min="1"
+                      max="1000"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="data_retention_days">Rétention des données (jours)</Label>
+                    <Input
+                      id="data_retention_days"
+                      type="number"
+                      value={settings.data_retention_days || 90}
+                      onChange={(e) => setSettings({ ...settings, data_retention_days: parseInt(e.target.value) })}
+                      min="7"
+                      max="365"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold">Sauvegarde automatique</h3>
+                
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="auto_backup">Sauvegarde automatique</Label>
+                    <p className="text-sm text-slate-600">
+                      Effectuer des sauvegardes régulières de vos données
+                    </p>
+                  </div>
+                  <Switch
+                    id="auto_backup"
+                    checked={settings.auto_backup || false}
+                    onCheckedChange={(checked) => setSettings({ ...settings, auto_backup: checked })}
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="data_retention">Rétention des données (jours)</Label>
-                  <Input
-                    id="data_retention"
-                    type="number"
-                    value={settings.data_retention_days}
-                    onChange={(e) => setSettings({ ...settings, data_retention_days: parseInt(e.target.value) })}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+
+                {settings.auto_backup && (
+                  <div className="space-y-2">
+                    <Label htmlFor="backup_frequency">Fréquence de sauvegarde</Label>
+                    <Select value={settings.backup_frequency} onValueChange={(value) => setSettings({ ...settings, backup_frequency: value })}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Sélectionner une fréquence" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="hourly">Toutes les heures</SelectItem>
+                        <SelectItem value="daily">Quotidienne</SelectItem>
+                        <SelectItem value="weekly">Hebdomadaire</SelectItem>
+                        <SelectItem value="monthly">Mensuelle</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="notifications">
           <Card>
             <CardHeader>
-              <CardTitle>Paramètres de notification</CardTitle>
+              <CardTitle className="flex items-center space-x-2">
+                <Bell className="w-5 h-5" />
+                <span>Notifications</span>
+              </CardTitle>
               <CardDescription>
                 Gérez vos préférences de notification
               </CardDescription>
@@ -439,74 +488,64 @@ const Settings = () => {
             <CardContent className="space-y-6">
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
-                  <Label>Notifications par email</Label>
+                  <Label htmlFor="email_notifications">Notifications par email</Label>
                   <p className="text-sm text-slate-600">
-                    Recevez des notifications par email pour les événements importants
+                    Recevoir des notifications importantes par email
                   </p>
                 </div>
                 <Switch
-                  checked={settings.email_notifications}
+                  id="email_notifications"
+                  checked={settings.email_notifications || false}
                   onCheckedChange={(checked) => setSettings({ ...settings, email_notifications: checked })}
                 />
               </div>
+
               <Separator />
+
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
-                  <Label>Sauvegarde automatique</Label>
+                  <Label htmlFor="sms_notifications">Notifications SMS</Label>
                   <p className="text-sm text-slate-600">
-                    Sauvegarde automatique de vos données
+                    Recevoir des alertes urgentes par SMS
                   </p>
                 </div>
                 <Switch
-                  checked={settings.auto_backup}
-                  onCheckedChange={(checked) => setSettings({ ...settings, auto_backup: checked })}
+                  id="sms_notifications"
+                  checked={settings.sms_notifications || false}
+                  onCheckedChange={(checked) => setSettings({ ...settings, sms_notifications: checked })}
                 />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="backup_frequency">Fréquence de sauvegarde</Label>
-                <Select
-                  value={settings.backup_frequency}
-                  onValueChange={(value) => setSettings({ ...settings, backup_frequency: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="daily">Quotidienne</SelectItem>
-                    <SelectItem value="weekly">Hebdomadaire</SelectItem>
-                    <SelectItem value="monthly">Mensuelle</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* Onglet Utilisateurs (Admin uniquement) */}
         {isAdmin && (
           <TabsContent value="users">
             <Card>
               <CardHeader>
-                <CardTitle>Gestion des utilisateurs</CardTitle>
+                <CardTitle className="flex items-center space-x-2">
+                  <Users className="w-5 h-5" />
+                  <span>Gestion des Utilisateurs</span>
+                </CardTitle>
                 <CardDescription>
                   Gérez les rôles et permissions des utilisateurs
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {users.map((user) => (
-                    <div key={user.id} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <div>
-                          <p className="font-medium">
-                            {user.first_name} {user.last_name}
-                          </p>
-                          <p className="text-sm text-slate-600">{user.email}</p>
+                  {users.map((userItem) => (
+                    <div key={userItem.id} className="flex items-center justify-between p-4 border rounded-lg">
+                      <div className="flex-1">
+                        <div className="font-medium">
+                          {userItem.first_name && userItem.last_name 
+                            ? `${userItem.first_name} ${userItem.last_name}` 
+                            : userItem.email}
                         </div>
-                        <div className="flex gap-1">
-                          {user.roles.length > 0 ? (
-                            user.roles.map((role) => (
-                              <Badge key={role} variant="outline">
+                        <div className="text-sm text-slate-600">{userItem.email}</div>
+                        <div className="flex gap-1 mt-2">
+                          {userItem.roles.length > 0 ? (
+                            userItem.roles.map((role) => (
+                              <Badge key={role} className={`${getRoleBadgeColor(role)} text-white`}>
                                 {role}
                               </Badge>
                             ))
@@ -515,18 +554,19 @@ const Settings = () => {
                           )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center space-x-2">
                         <Select
-                          value={user.roles[0] || 'user'}
-                          onValueChange={(value) => updateUserRole(user.id, value)}
+                          value={userItem.roles[0] || 'user'}
+                          onValueChange={(value) => handleRoleChange(userItem.id, value)}
                         >
                           <SelectTrigger className="w-32">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="user">Utilisateur</SelectItem>
+                            <SelectItem value="user">User</SelectItem>
                             <SelectItem value="client">Client</SelectItem>
                             <SelectItem value="commercial">Commercial</SelectItem>
+                            <SelectItem value="moderator">Moderator</SelectItem>
                             <SelectItem value="admin">Admin</SelectItem>
                           </SelectContent>
                         </Select>
@@ -540,8 +580,8 @@ const Settings = () => {
         )}
       </Tabs>
 
-      <div className="flex justify-end mt-6">
-        <Button onClick={saveSettings} disabled={loading}>
+      <div className="flex justify-end mt-8">
+        <Button onClick={handleSaveSettings} disabled={loading}>
           <Save className="w-4 h-4 mr-2" />
           {loading ? 'Sauvegarde...' : 'Sauvegarder les paramètres'}
         </Button>

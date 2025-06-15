@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
@@ -89,20 +90,58 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => subscription.unsubscribe();
   }, []);
 
+  const createProfile = async (userId: string, email: string, firstName?: string, lastName?: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .insert({
+          id: userId,
+          email: email,
+          first_name: firstName || '',
+          last_name: lastName || '',
+          preferences: {}
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error creating profile:', error);
+      throw error;
+    }
+  };
+
   const fetchUserProfile = async (userId: string) => {
     try {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
 
       if (error) {
         console.error('Error fetching profile:', error);
         return;
       }
 
-      setProfile(data);
+      if (!data && user) {
+        // Si le profil n'existe pas, le créer
+        console.log('Profile not found, creating one...');
+        try {
+          const newProfile = await createProfile(
+            userId, 
+            user.email || '', 
+            user.user_metadata?.first_name,
+            user.user_metadata?.last_name
+          );
+          setProfile(newProfile);
+        } catch (createError) {
+          console.error('Error creating profile:', createError);
+        }
+      } else {
+        setProfile(data);
+      }
     } catch (error) {
       console.error('Error fetching profile:', error);
     }
