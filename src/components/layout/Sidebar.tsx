@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { 
   BarChart3, 
@@ -14,7 +13,8 @@ import {
   Database,
   Brain,
   Menu,
-  X
+  X,
+  MessageCircle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -29,6 +29,7 @@ const menuItems = [
   { id: 'ai-chat', label: 'IA Assistant', icon: Brain, color: 'text-green-500' },
   { id: 'content', label: 'Générateur Contenu', icon: FileText, color: 'text-orange-500' },
   { id: 'analytics', label: 'Analytics', icon: TrendingUp, color: 'text-indigo-500' },
+  { id: 'whatsapp', label: 'WhatsApp Business', icon: MessageCircle, color: 'text-green-600' },
   { id: 'campaigns', label: 'Campagnes', icon: Target, color: 'text-red-500' },
   { id: 'social', label: 'Réseaux Sociaux', icon: Users, color: 'text-pink-500' },
   { id: 'competitors', label: 'Concurrents', icon: Search, color: 'text-yellow-500' },
