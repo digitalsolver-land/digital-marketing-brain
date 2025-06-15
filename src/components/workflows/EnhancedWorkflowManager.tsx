@@ -4,10 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { 
   Play, 
@@ -15,26 +13,20 @@ import {
   Download, 
   Upload, 
   RefreshCw, 
-  Settings, 
-  Users, 
-  Shield, 
-  Database,
-  Plus,
-  Edit,
-  Trash2,
   CheckCircle,
   XCircle,
   AlertTriangle,
-  Activity,
   FileJson,
   Eye,
-  Copy,
+  Edit,
+  Trash2,
   Search
 } from 'lucide-react';
 
 import { unifiedN8nService, N8nWorkflow } from '@/services/unifiedN8nService';
 import { workflowService } from '@/services/workflowService';
 import { WorkflowVisualization } from './WorkflowVisualization';
+import { EnhancedWorkflowCreator } from './EnhancedWorkflowCreator';
 
 export const EnhancedWorkflowManager: React.FC = () => {
   const { toast } = useToast();
@@ -47,11 +39,6 @@ export const EnhancedWorkflowManager: React.FC = () => {
   // États pour les données
   const [workflows, setWorkflows] = useState<N8nWorkflow[]>([]);
   const [selectedWorkflow, setSelectedWorkflow] = useState<N8nWorkflow | null>(null);
-  const [newWorkflowData, setNewWorkflowData] = useState({
-    name: '',
-    description: '',
-    active: false
-  });
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
@@ -234,113 +221,6 @@ export const EnhancedWorkflowManager: React.FC = () => {
     }
   };
 
-  const createWorkflow = async () => {
-    if (!newWorkflowData.name.trim()) {
-      toast({
-        variant: "destructive",
-        title: "Erreur",
-        description: "Le nom du workflow est requis",
-      });
-      return;
-    }
-
-    setLoading(true);
-    try {
-      console.log('🚀 Création workflow:', newWorkflowData.name);
-
-      if (n8nConnected) {
-        // Créer via l'API n8n
-        const workflowData = {
-          name: newWorkflowData.name,
-          nodes: [
-            {
-              id: 'start',
-              name: 'Start',
-              type: 'n8n-nodes-base.start',
-              position: [250, 300] as [number, number],
-              parameters: {}
-            }
-          ],
-          connections: {},
-          active: newWorkflowData.active,
-          settings: {
-            saveExecutionProgress: true,
-            saveManualExecutions: true,
-            saveDataErrorExecution: 'all' as const,
-            saveDataSuccessExecution: 'all' as const,
-            executionTimeout: 3600,
-            timezone: 'Europe/Paris'
-          }
-        };
-
-        const newWorkflow = await unifiedN8nService.createWorkflow(workflowData);
-        setWorkflows(prev => [newWorkflow, ...prev]);
-        
-        toast({
-          title: "Workflow créé",
-          description: `Le workflow "${newWorkflow.name}" a été créé avec succès sur n8n`,
-        });
-      } else {
-        // Créer en local via Supabase
-        const jsonData = {
-          name: newWorkflowData.name,
-          nodes: [
-            {
-              id: 'start',
-              name: 'Start',
-              type: 'n8n-nodes-base.start',
-              position: [250, 300] as [number, number],
-              parameters: {}
-            }
-          ],
-          connections: {},
-          active: newWorkflowData.active
-        };
-
-        const localWorkflow = await workflowService.createWorkflow({
-          name: newWorkflowData.name,
-          description: newWorkflowData.description || 'Nouveau workflow',
-          status: newWorkflowData.active ? 'active' : 'inactive',
-          jsonData
-        });
-        
-        // Convertir au format N8nWorkflow
-        const n8nWorkflow: N8nWorkflow = {
-          id: localWorkflow.id,
-          name: localWorkflow.name,
-          active: localWorkflow.status === 'active',
-          nodes: jsonData.nodes,
-          connections: jsonData.connections,
-          settings: {},
-          staticData: {},
-          tags: [],
-          createdAt: localWorkflow.createdAt,
-          updatedAt: localWorkflow.updatedAt
-        };
-        
-        setWorkflows(prev => [n8nWorkflow, ...prev]);
-        
-        toast({
-          title: "Workflow créé",
-          description: `Le workflow "${newWorkflowData.name}" a été créé localement`,
-        });
-      }
-
-      // Reset du formulaire
-      setNewWorkflowData({ name: '', description: '', active: false });
-      
-    } catch (error) {
-      console.error('❌ Erreur création workflow:', error);
-      toast({
-        variant: "destructive",
-        title: "Erreur de création",
-        description: error instanceof Error ? error.message : "Impossible de créer le workflow",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const toggleWorkflowStatus = async (workflow: N8nWorkflow) => {
     if (!workflow.id) return;
 
@@ -437,68 +317,6 @@ export const EnhancedWorkflowManager: React.FC = () => {
     }
   };
 
-  const importWorkflowFromJson = async () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json';
-    input.onchange = async (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (!file) return;
-
-      try {
-        const text = await file.text();
-        const jsonData = JSON.parse(text);
-
-        if (n8nConnected) {
-          // Importer vers n8n
-          const importedWorkflow = await unifiedN8nService.createWorkflow(jsonData);
-          setWorkflows(prev => [importedWorkflow, ...prev]);
-          
-          toast({
-            title: "Workflow importé",
-            description: `Le workflow "${importedWorkflow.name}" a été importé sur n8n`,
-          });
-        } else {
-          // Importer localement
-          const localWorkflow = await workflowService.createWorkflow({
-            name: jsonData.name || 'Workflow importé',
-            description: 'Workflow importé depuis JSON',
-            status: jsonData.active ? 'active' : 'inactive',
-            jsonData
-          });
-
-          const n8nWorkflow: N8nWorkflow = {
-            id: localWorkflow.id,
-            name: localWorkflow.name,
-            active: localWorkflow.status === 'active',
-            nodes: jsonData.nodes || [],
-            connections: jsonData.connections || {},
-            settings: jsonData.settings || {},
-            staticData: jsonData.staticData || {},
-            tags: jsonData.tags || [],
-            createdAt: localWorkflow.createdAt,
-            updatedAt: localWorkflow.updatedAt
-          };
-
-          setWorkflows(prev => [n8nWorkflow, ...prev]);
-          
-          toast({
-            title: "Workflow importé",
-            description: `Le workflow "${jsonData.name}" a été importé localement`,
-          });
-        }
-      } catch (error) {
-        console.error('❌ Erreur import JSON:', error);
-        toast({
-          variant: "destructive",
-          title: "Erreur d'import",
-          description: "Impossible d'importer le fichier JSON",
-        });
-      }
-    };
-    input.click();
-  };
-
   const exportWorkflowToJson = (workflow: N8nWorkflow) => {
     const exportData = {
       name: workflow.name,
@@ -585,8 +403,9 @@ export const EnhancedWorkflowManager: React.FC = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="workflows">Workflows</TabsTrigger>
+          <TabsTrigger value="creator">Créateur</TabsTrigger>
           <TabsTrigger value="visualization">Visualisation</TabsTrigger>
         </TabsList>
 
@@ -604,15 +423,6 @@ export const EnhancedWorkflowManager: React.FC = () => {
                 
                 <div className="flex items-center space-x-2">
                   <Button 
-                    variant="outline" 
-                    onClick={importWorkflowFromJson}
-                    disabled={loading}
-                  >
-                    <Upload className="w-4 h-4 mr-2" />
-                    Importer JSON
-                  </Button>
-                  
-                  <Button 
                     onClick={n8nConnected ? loadN8nWorkflows : loadLocalWorkflows} 
                     disabled={loading}
                   >
@@ -624,50 +434,6 @@ export const EnhancedWorkflowManager: React.FC = () => {
             </CardHeader>
             
             <CardContent className="space-y-6">
-              {/* Formulaire de création */}
-              <div className="grid gap-4 p-4 border rounded-lg bg-slate-50">
-                <h3 className="font-semibold">Créer un nouveau workflow</h3>
-                
-                <div className="grid gap-4 md:grid-cols-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="workflow-name">Nom du workflow</Label>
-                    <Input
-                      id="workflow-name"
-                      value={newWorkflowData.name}
-                      onChange={(e) => setNewWorkflowData(prev => ({ ...prev, name: e.target.value }))}
-                      placeholder="Mon workflow automatisé"
-                    />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="workflow-description">Description</Label>
-                    <Input
-                      id="workflow-description"
-                      value={newWorkflowData.description}
-                      onChange={(e) => setNewWorkflowData(prev => ({ ...prev, description: e.target.value }))}
-                      placeholder="Description du workflow"
-                    />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="workflow-active">Actif</Label>
-                    <div className="flex items-center space-x-2">
-                      <Switch
-                        id="workflow-active"
-                        checked={newWorkflowData.active}
-                        onCheckedChange={(checked) => setNewWorkflowData(prev => ({ ...prev, active: checked }))}
-                      />
-                      <span className="text-sm">{newWorkflowData.active ? 'Actif' : 'Inactif'}</span>
-                    </div>
-                  </div>
-                </div>
-                
-                <Button onClick={createWorkflow} disabled={loading || !newWorkflowData.name.trim()}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Créer le workflow
-                </Button>
-              </div>
-
               {/* Filtres et recherche */}
               <div className="flex items-center space-x-4">
                 <div className="flex-1">
@@ -826,6 +592,20 @@ export const EnhancedWorkflowManager: React.FC = () => {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* === ONGLET CRÉATEUR === */}
+        <TabsContent value="creator" className="space-y-6">
+          <EnhancedWorkflowCreator 
+            connected={n8nConnected}
+            onWorkflowCreated={() => {
+              if (n8nConnected) {
+                loadN8nWorkflows();
+              } else {
+                loadLocalWorkflows();
+              }
+            }}
+          />
         </TabsContent>
 
         {/* === ONGLET VISUALISATION === */}

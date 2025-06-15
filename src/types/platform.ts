@@ -1,29 +1,3 @@
-export interface DashboardMetrics {
-  seo: {
-    organicTraffic: number;
-    keywordRankings: number;
-    backlinks: number;
-    technicalIssues: number;
-  };
-  sem: {
-    impressions: number;
-    clicks: number;
-    ctr: number;
-    cost: number;
-    conversions: number;
-  };
-  social: {
-    followers: number;
-    engagement: number;
-    reach: number;
-    posts: number;
-  };
-  overall: {
-    totalVisits: number;
-    conversionRate: number;
-    roi: number;
-  };
-}
 
 export interface Workflow {
   id: string;
@@ -31,81 +5,76 @@ export interface Workflow {
   description: string;
   status: 'active' | 'inactive' | 'draft';
   trigger: string;
-  nodes: WorkflowNode[];
-  lastExecution?: Date;
+  nodes: any[];
   executionCount: number;
   successRate: number;
-  tags?: string[];
-  createdAt?: string;
-  updatedAt?: string;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+  n8nWorkflowId?: string;
+  jsonData?: any;
 }
 
-export interface WorkflowNode {
+export interface User {
   id: string;
-  type: string;
-  position: { x: number; y: number };
-  data: any;
-}
-
-export interface AIConversation {
-  id: string;
-  messages: ChatMessage[];
-  context: string;
-  timestamp: Date;
-}
-
-export interface ChatMessage {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: Date;
-  actions?: AIAction[];
-}
-
-export interface AIAction {
-  type: 'workflow_creation' | 'api_call' | 'content_generation' | 'analysis';
-  description: string;
-  payload: any;
-  status: 'pending' | 'completed' | 'failed';
-}
-
-export interface ContentTemplate {
-  id: string;
-  name: string;
-  type: 'blog' | 'social' | 'email' | 'ad';
-  template: string;
-  variables: string[];
-  seoOptimized: boolean;
-}
-
-export interface CompetitorAnalysis {
-  competitor: string;
-  domain: string;
-  seoMetrics: {
-    organicKeywords: number;
-    organicTraffic: number;
-    backlinks: number;
-  };
-  contentStrategy: {
-    postFrequency: number;
-    topTopics: string[];
-    avgEngagement: number;
-  };
-  lastUpdated: Date;
+  email: string;
+  firstName: string;
+  lastName: string;
+  company?: string;
+  avatarUrl?: string;
+  preferences: any;
 }
 
 export interface Campaign {
   id: string;
   name: string;
-  type: 'seo' | 'sem' | 'social' | 'integrated';
   status: 'active' | 'paused' | 'completed';
-  startDate: Date;
-  endDate?: Date;
-  budget: number;
-  performance: {
-    impressions: number;
-    clicks: number;
-    conversions: number;
-    cost: number;
-  };
+  type: 'email' | 'social' | 'ads';
+  startDate: string;
+  endDate?: string;
+  budget?: number;
+  spent?: number;
+  impressions: number;
+  clicks: number;
+  conversions: number;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Contact {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone?: string;
+  company?: string;
+  tags: string[];
+  status: 'active' | 'inactive' | 'blocked';
+  source: string;
+  lastInteraction?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Message {
+  id: string;
+  conversationId: string;
+  senderId: string;
+  content: string;
+  type: 'text' | 'image' | 'file' | 'audio';
+  timestamp: string;
+  read: boolean;
+  metadata?: any;
+}
+
+export interface Conversation {
+  id: string;
+  contactId: string;
+  platform: 'whatsapp' | 'email' | 'sms';
+  status: 'open' | 'closed' | 'pending';
+  lastMessage?: Message;
+  unreadCount: number;
+  createdAt: string;
+  updatedAt: string;
 }

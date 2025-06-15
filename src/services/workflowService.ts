@@ -1,4 +1,3 @@
-
 import { supabase } from '@/integrations/supabase/client';
 import { Workflow } from '@/types/platform';
 
@@ -61,6 +60,86 @@ class WorkflowService {
       WorkflowService.instance = new WorkflowService();
     }
     return WorkflowService.instance;
+  }
+
+  async createWorkflow(workflowData: {
+    name: string;
+    description?: string;
+    status?: 'active' | 'inactive' | 'draft';
+    n8nWorkflowId?: string;
+    jsonData?: any;
+  }): Promise<Workflow> {
+    try {
+      console.log('🚀 Création workflow:', workflowData);
+      
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.error('❌ Utilisateur non authentifié');
+        throw new Error('Utilisateur non authentifié');
+      }
+
+      const insertData = {
+        user_id: user.id,
+        name: workflowData.name.trim(),
+        description: workflowData.description || '',
+        json_data: workflowData.jsonData || { nodes: [], connections: {} },
+        status: workflowData.status || 'inactive',
+        n8n_workflow_id: workflowData.n8nWorkflowId,
+        tags: []
+      };
+
+      const { data: workflow, error: workflowError } = await supabase
+        .from('workflows')
+        .insert(insertData)
+        .select()
+        .single();
+
+      if (workflowError) {
+        console.error('❌ Erreur création workflow:', workflowError);
+        throw new Error(`Erreur base de données: ${workflowError.message}`);
+      }
+
+      console.log('✅ Workflow créé avec ID:', workflow.id);
+      return this.mapToWorkflow(workflow);
+    } catch (error) {
+      console.error('💥 Erreur création workflow:', error);
+      throw new Error(`Impossible de créer le workflow: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
+    }
+  }
+
+  async updateWorkflow(workflowId: string, updateData: {
+    name?: string;
+    description?: string;
+    status?: 'active' | 'inactive' | 'draft';
+    jsonData?: any;
+  }): Promise<void> {
+    try {
+      console.log('🔄 Mise à jour workflow:', workflowId);
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Utilisateur non authentifié');
+
+      const { error } = await supabase
+        .from('workflows')
+        .update({
+          name: updateData.name,
+          description: updateData.description,
+          status: updateData.status,
+          json_data: updateData.jsonData
+        })
+        .eq('id', workflowId)
+        .eq('user_id', user.id);
+
+      if (error) {
+        console.error('❌ Erreur mise à jour workflow:', error);
+        throw error;
+      }
+
+      console.log('✅ Workflow mis à jour avec succès');
+    } catch (error) {
+      console.error('💥 Erreur mise à jour workflow:', error);
+      throw new Error(`Impossible de mettre à jour le workflow: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
+    }
   }
 
   async createWorkflowFromJSON(jsonData: N8nWorkflowJSON): Promise<Workflow> {
@@ -423,7 +502,9 @@ class WorkflowService {
       successRate: 100,
       tags: workflow.tags || [],
       createdAt: workflow.created_at,
-      updatedAt: workflow.updated_at
+      updatedAt: workflow.updated_at,
+      n8nWorkflowId: workflow.n8n_workflow_id,
+      jsonData: workflow.json_data
     };
   }
 }
