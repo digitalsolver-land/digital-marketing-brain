@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,7 +13,8 @@ import {
   RefreshCw, 
   Search,
   FileJson,
-  Activity
+  Activity,
+  ExternalLink
 } from 'lucide-react';
 
 import { unifiedN8nService, N8nWorkflow } from '@/services/unifiedN8nService';
@@ -47,13 +47,13 @@ export const WorkflowListManager: React.FC<WorkflowListManagerProps> = ({
     try {
       const result = await unifiedN8nService.getWorkflows({ limit: 50 });
       setWorkflows(result.data);
-      console.log(`✅ ${result.data.length} workflows chargés`);
+      console.log(`✅ ${result.data.length} workflows chargés depuis n8n`);
     } catch (error) {
       console.error('Erreur chargement workflows:', error);
       toast({
         variant: "destructive",
         title: "Erreur de chargement",
-        description: "Impossible de charger les workflows",
+        description: "Impossible de charger les workflows depuis n8n",
       });
     } finally {
       setLoading(false);
@@ -95,6 +95,9 @@ export const WorkflowListManager: React.FC<WorkflowListManagerProps> = ({
   const deleteWorkflow = async (workflow: N8nWorkflow) => {
     if (!workflow.id) return;
 
+    const confirmed = window.confirm(`Êtes-vous sûr de vouloir supprimer le workflow "${workflow.name}" ?`);
+    if (!confirmed) return;
+
     setLoading(true);
     try {
       await unifiedN8nService.deleteWorkflow(workflow.id);
@@ -117,6 +120,13 @@ export const WorkflowListManager: React.FC<WorkflowListManagerProps> = ({
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const openWorkflowInN8n = (workflow: N8nWorkflow) => {
+    if (workflow.id) {
+      const n8nUrl = `https://n8n.srv860213.hstgr.cloud/workflow/${workflow.id}`;
+      window.open(n8nUrl, '_blank');
     }
   };
 
@@ -144,7 +154,22 @@ export const WorkflowListManager: React.FC<WorkflowListManagerProps> = ({
         </div>
         
         <WorkflowVisualization 
-          workflow={selectedWorkflow}
+          workflow={{
+            id: selectedWorkflow.id,
+            name: selectedWorkflow.name,
+            description: `Workflow n8n avec ${selectedWorkflow.nodes?.length || 0} nœuds`,
+            status: selectedWorkflow.active ? 'active' : 'inactive',
+            n8n_workflow_id: selectedWorkflow.id,
+            json_data: {
+              name: selectedWorkflow.name,
+              nodes: selectedWorkflow.nodes || [],
+              connections: selectedWorkflow.connections || {},
+              active: selectedWorkflow.active,
+              settings: selectedWorkflow.settings || {},
+              staticData: selectedWorkflow.staticData || {},
+              tags: selectedWorkflow.tags || []
+            }
+          }}
           nodes={selectedWorkflow.nodes?.map(node => ({
             id: node.id || '',
             workflow_id: selectedWorkflow.id || '',
@@ -156,18 +181,8 @@ export const WorkflowListManager: React.FC<WorkflowListManagerProps> = ({
             parameters: node.parameters || {}
           })) || []}
           connections={[]}
-          onExecute={() => {
-            toast({
-              title: "Workflow exécuté",
-              description: `Le workflow "${selectedWorkflow.name}" a été exécuté`,
-            });
-          }}
-          onEdit={() => {
-            toast({
-              title: "Édition workflow",
-              description: "Ouverture de l'éditeur...",
-            });
-          }}
+          onExecute={() => toggleWorkflowStatus(selectedWorkflow)}
+          onEdit={() => openWorkflowInN8n(selectedWorkflow)}
           onDelete={() => deleteWorkflow(selectedWorkflow)}
         />
       </div>
@@ -179,9 +194,9 @@ export const WorkflowListManager: React.FC<WorkflowListManagerProps> = ({
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle>Liste des workflows</CardTitle>
+            <CardTitle>Workflows n8n</CardTitle>
             <CardDescription>
-              Gérez vos workflows d'automatisation
+              Gérez vos workflows d'automatisation connectés depuis n8n
             </CardDescription>
           </div>
           
@@ -224,7 +239,15 @@ export const WorkflowListManager: React.FC<WorkflowListManagerProps> = ({
           {loading ? (
             <div className="text-center py-8">
               <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />
-              <p className="text-slate-600">Chargement des workflows...</p>
+              <p className="text-slate-600">Chargement des workflows depuis n8n...</p>
+            </div>
+          ) : !connected ? (
+            <div className="text-center py-8 text-slate-600">
+              <Activity className="w-12 h-12 mx-auto mb-4 text-slate-400" />
+              <p>Connectez-vous à n8n pour voir vos workflows</p>
+              <Button onClick={onRefreshConnection} className="mt-4">
+                Configurer la connexion
+              </Button>
             </div>
           ) : filteredWorkflows.length === 0 ? (
             <div className="text-center py-8 text-slate-600">
@@ -232,6 +255,9 @@ export const WorkflowListManager: React.FC<WorkflowListManagerProps> = ({
               <p>Aucun workflow trouvé</p>
               {searchTerm && (
                 <p className="text-sm">Essayez de modifier votre recherche</p>
+              )}
+              {workflows.length === 0 && (
+                <p className="text-sm">Créez votre premier workflow dans n8n</p>
               )}
             </div>
           ) : (
@@ -253,6 +279,15 @@ export const WorkflowListManager: React.FC<WorkflowListManagerProps> = ({
                             Modifié: {new Date(workflow.updatedAt).toLocaleDateString()}
                           </span>
                         )}
+                        {workflow.tags && workflow.tags.length > 0 && (
+                          <div className="flex space-x-1">
+                            {workflow.tags.slice(0, 2).map((tag, index) => (
+                              <Badge key={index} variant="outline" className="text-xs">
+                                {tag.name}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -263,6 +298,7 @@ export const WorkflowListManager: React.FC<WorkflowListManagerProps> = ({
                     variant="outline"
                     size="sm"
                     onClick={() => setSelectedWorkflow(workflow)}
+                    title="Visualiser et analyser"
                   >
                     <Eye className="w-4 h-4" />
                   </Button>
@@ -270,8 +306,18 @@ export const WorkflowListManager: React.FC<WorkflowListManagerProps> = ({
                   <Button
                     variant="outline"
                     size="sm"
+                    onClick={() => openWorkflowInN8n(workflow)}
+                    title="Ouvrir dans n8n"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                  </Button>
+                  
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => toggleWorkflowStatus(workflow)}
                     disabled={loading}
+                    title={workflow.active ? 'Désactiver' : 'Activer'}
                   >
                     {workflow.active ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                   </Button>
@@ -281,6 +327,7 @@ export const WorkflowListManager: React.FC<WorkflowListManagerProps> = ({
                     size="sm"
                     onClick={() => deleteWorkflow(workflow)}
                     disabled={loading}
+                    title="Supprimer"
                   >
                     <Trash2 className="w-4 h-4" />
                   </Button>
@@ -289,6 +336,17 @@ export const WorkflowListManager: React.FC<WorkflowListManagerProps> = ({
             ))
           )}
         </div>
+
+        {/* Statistiques */}
+        {workflows.length > 0 && (
+          <div className="mt-6 p-4 bg-slate-50 rounded-lg">
+            <div className="flex items-center justify-between text-sm">
+              <span>Total: {workflows.length} workflow(s)</span>
+              <span>Actifs: {workflows.filter(w => w.active).length}</span>
+              <span>Inactifs: {workflows.filter(w => !w.active).length}</span>
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
