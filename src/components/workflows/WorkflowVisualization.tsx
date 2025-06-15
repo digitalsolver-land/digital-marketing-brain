@@ -21,7 +21,7 @@ import {
 
 import { WorkflowCanvas } from './WorkflowCanvas';
 import { WorkflowAnalysisPanel } from './WorkflowAnalysisPanel';
-import { unifiedN8nService } from '@/services/unifiedN8nService';
+import { n8nApiService } from '@/services/n8nApiService';
 
 interface WorkflowNode {
   id: string;
@@ -94,7 +94,7 @@ export const WorkflowVisualization: React.FC<WorkflowVisualizationProps> = ({
     try {
       if (workflow.id) {
         // Exécuter via n8n si possible
-        await unifiedN8nService.activateWorkflow(workflow.id);
+        await n8nApiService.activateWorkflow(workflow.id);
         toast({
           title: "Workflow exécuté",
           description: `Le workflow "${workflow.name}" a été activé et exécuté`,
@@ -164,7 +164,7 @@ export const WorkflowVisualization: React.FC<WorkflowVisualizationProps> = ({
 
   const handleOpenInN8n = () => {
     if (workflow.n8n_workflow_id) {
-      const n8nUrl = `https://n8n.srv860213.hstgr.cloud/workflow/${workflow.n8n_workflow_id}`;
+      const n8nUrl = n8nApiService.getWorkflowUrl(workflow.n8n_workflow_id);
       window.open(n8nUrl, '_blank');
     } else {
       toast({

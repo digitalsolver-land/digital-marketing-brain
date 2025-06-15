@@ -8,7 +8,7 @@ import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { Settings, RefreshCw, CheckCircle, XCircle, AlertTriangle, Info } from 'lucide-react';
 
-import { unifiedN8nService, ConnectionStatus } from '@/services/unifiedN8nService';
+import { n8nApiService } from '@/services/n8nApiService';
 import { n8nConfigManager } from '@/config/api';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -22,7 +22,7 @@ export const N8nConfigurationPanel: React.FC<N8nConfigurationPanelProps> = ({
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
+  const [connectionStatus, setConnectionStatus] = useState<'checking' | 'connected' | 'disconnected' | 'error'>('disconnected');
   const [connectionDetails, setConnectionDetails] = useState<any>(null);
   const [config, setConfig] = useState({
     apiKey: '',
@@ -37,18 +37,13 @@ export const N8nConfigurationPanel: React.FC<N8nConfigurationPanelProps> = ({
   const loadCurrentConfig = async () => {
     try {
       console.log('🔄 Chargement configuration actuelle...');
-      const currentConfig = await n8nConfigManager.getEffectiveConfig();
-      setConfig(prev => ({
-        ...prev,
-        apiKey: currentConfig.apiKey || '',
-        baseUrl: currentConfig.baseUrl || 'https://n8n.srv860213.hstgr.cloud/api/v1'
-      }));
+      await n8nApiService.loadConfig();
       
-      const status = unifiedN8nService.getConnectionStatus();
-      setConnectionStatus(status.status);
-      console.log('📊 Configuration chargée:', { hasApiKey: !!currentConfig.apiKey, status: status.status });
+      setConnectionStatus('connected');
+      console.log('📊 Configuration chargée');
     } catch (error) {
       console.error('❌ Erreur chargement config:', error);
+      setConnectionStatus('disconnected');
     }
   };
 
@@ -68,33 +63,29 @@ export const N8nConfigurationPanel: React.FC<N8nConfigurationPanelProps> = ({
     try {
       console.log('🧪 Test de connexion démarré...');
       
-      // Mettre à jour temporairement la config pour le test
-      await unifiedN8nService.updateConfig({
+      // Sauvegarder temporairement la config
+      await n8nApiService.saveConfig({
         apiKey: config.apiKey,
         baseUrl: config.baseUrl
       });
 
-      // Tester avec la fonction edge robuste
-      const { data, error } = await supabase.functions.invoke('test-n8n-connection');
+      // Tester la connexion
+      const result = await n8nApiService.testConnection();
       
-      if (error) {
-        throw new Error(`Erreur fonction de test: ${error.message}`);
-      }
-
-      if (data?.success) {
+      if (result.success) {
         setConnectionStatus('connected');
-        setConnectionDetails(data.details);
+        setConnectionDetails(result.details);
         toast({
           title: "Connexion réussie ✅",
-          description: `n8n est accessible. ${data.details?.workflowCount || 0} workflows trouvés.`,
+          description: "n8n est accessible",
         });
       } else {
         setConnectionStatus('error');
-        setConnectionDetails(data);
+        setConnectionDetails(result);
         toast({
           variant: "destructive",
           title: "Échec de la connexion ❌",
-          description: data?.error || "Test de connexion échoué",
+          description: result.error || "Test de connexion échoué",
         });
       }
     } catch (error) {
@@ -125,7 +116,7 @@ export const N8nConfigurationPanel: React.FC<N8nConfigurationPanelProps> = ({
     try {
       console.log('💾 Sauvegarde configuration...');
       
-      await n8nConfigManager.saveConfig({
+      await n8nApiService.saveConfig({
         apiKey: config.apiKey,
         baseUrl: config.baseUrl
       });
