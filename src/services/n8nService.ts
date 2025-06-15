@@ -1,4 +1,3 @@
-
 import { supabase } from '@/integrations/supabase/client';
 
 // Types pour l'API n8n (basés sur la documentation officielle)
@@ -144,6 +143,30 @@ class N8nService {
       N8nService.instance = new N8nService();
     }
     return N8nService.instance;
+  }
+
+  // === GESTION DE LA CONFIGURATION ===
+  async updateConfig(config: { apiKey: string; baseUrl: string }): Promise<void> {
+    try {
+      console.log('🔄 Mise à jour configuration n8n...');
+      
+      // Sauvegarder dans Supabase via la fonction edge
+      const { error } = await supabase.functions.invoke('save-n8n-config', {
+        body: {
+          apiKey: config.apiKey,
+          baseUrl: config.baseUrl
+        }
+      });
+
+      if (error) {
+        throw new Error(`Erreur sauvegarde config: ${error.message}`);
+      }
+
+      console.log('✅ Configuration n8n mise à jour avec succès');
+    } catch (error) {
+      console.error('❌ Erreur mise à jour config n8n:', error);
+      throw error;
+    }
   }
 
   // === GESTION DE LA CONNEXION ===
