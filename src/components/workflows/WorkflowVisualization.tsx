@@ -53,48 +53,28 @@ export const WorkflowVisualization: React.FC<WorkflowVisualizationProps> = ({
   const [analysis, setAnalysis] = useState<string>('');
   const { toast } = useToast();
 
-  // Debug complet des connexions
+  // Debug des données
   useEffect(() => {
-    console.log('=== ANALYSE COMPLÈTE DES CONNEXIONS ===');
-    console.log('Nombre de nœuds:', nodes.length);
-    console.log('Nombre de connexions:', connections.length);
+    console.log('=== WORKFLOW VISUALIZATION DEBUG ===');
+    console.log('Workflow:', workflow);
+    console.log('Nodes:', nodes);
+    console.log('Connections:', connections);
+    console.log('Nodes count:', nodes.length);
+    console.log('Connections count:', connections.length);
     
-    // Vérifier chaque nœud
-    nodes.forEach((node, index) => {
-      console.log(`Nœud ${index}:`, {
-        id: node.id,
-        node_id: node.node_id,
-        name: node.name,
-        type: node.node_type,
-        position: { x: node.position_x, y: node.position_y }
-      });
-    });
-    
-    // Vérifier chaque connexion
-    connections.forEach((conn, index) => {
-      const sourceNode = nodes.find(n => n.node_id === conn.source_node_id);
-      const targetNode = nodes.find(n => n.node_id === conn.target_node_id);
-      
-      console.log(`Connexion ${index}:`, {
-        id: conn.id,
-        source_node_id: conn.source_node_id,
-        target_node_id: conn.target_node_id,
-        source_found: !!sourceNode,
-        target_found: !!targetNode,
-        connection_type: conn.connection_type
-      });
-      
-      if (sourceNode && targetNode) {
-        console.log(`  -> Connexion VALIDE: ${sourceNode.name} → ${targetNode.name}`);
-      } else {
-        console.log(`  -> Connexion INVALIDE: nœud source ou cible introuvable`);
-      }
-    });
-  }, [nodes, connections]);
+    if (nodes.length > 0) {
+      const bounds = getCanvasBounds();
+      console.log('Canvas bounds:', bounds);
+    }
+  }, [workflow, nodes, connections]);
 
   const handleZoomIn = () => setZoom(prev => Math.min(prev * 1.2, 3));
   const handleZoomOut = () => setZoom(prev => Math.max(prev / 1.2, 0.3));
-  const handleResetView = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
+  const handleResetView = () => { 
+    setZoom(1); 
+    setPan({ x: 0, y: 0 }); 
+    console.log('Vue réinitialisée');
+  };
 
   const handleMouseDown = (e: React.MouseEvent) => {
     setIsDragging(true);
@@ -212,14 +192,46 @@ Réponds en français de manière professionnelle et accessible.`;
     return '⚡';
   };
 
-  // Fonction pour créer les connexions - VERSION SIMPLIFIÉE ET GARANTIE
+  // Calcul des dimensions du canvas - VERSION CORRIGÉE
+  const getCanvasBounds = () => {
+    if (nodes.length === 0) {
+      return { 
+        width: 1200, 
+        height: 800, 
+        minX: 0, 
+        minY: 0, 
+        maxX: 1200, 
+        maxY: 800 
+      };
+    }
+
+    const positions = nodes.map(n => ({
+      x: n.position_x || 0,
+      y: n.position_y || 0
+    }));
+
+    const minX = Math.min(...positions.map(p => p.x)) - 200;
+    const maxX = Math.max(...positions.map(p => p.x)) + 400;
+    const minY = Math.min(...positions.map(p => p.y)) - 200;
+    const maxY = Math.max(...positions.map(p => p.y)) + 300;
+    
+    const width = Math.max(1200, maxX - minX);
+    const height = Math.max(800, maxY - minY);
+    
+    console.log('Canvas bounds calculés:', { width, height, minX, minY, maxX, maxY });
+    
+    return { width, height, minX, minY, maxX, maxY };
+  };
+
+  // Fonction pour créer les connexions - VERSION SIMPLE ET FIABLE
   const createConnectionElements = () => {
     const connectionElements: JSX.Element[] = [];
     
     console.log('=== CRÉATION DES CONNEXIONS ===');
+    console.log('Nombre de connexions à traiter:', connections.length);
     
     connections.forEach((connection, index) => {
-      // Recherche des nœuds avec plusieurs critères
+      // Recherche des nœuds
       const sourceNode = nodes.find(n => 
         n.node_id === connection.source_node_id || 
         n.id === connection.source_node_id
@@ -231,106 +243,61 @@ Réponds en français de manière professionnelle et accessible.`;
       );
 
       if (!sourceNode || !targetNode) {
-        console.warn(`Connexion ${index} ignorée - nœuds manquants:`, {
-          source_id: connection.source_node_id,
-          target_id: connection.target_node_id,
-          source_found: !!sourceNode,
-          target_found: !!targetNode
-        });
+        console.warn(`Connexion ${index} ignorée - nœuds manquants`);
         return;
       }
 
-      // Calcul des positions SIMPLES
-      const x1 = sourceNode.position_x + 140; // Sortie du nœud source
-      const y1 = sourceNode.position_y + 40;  // Centre vertical
-      const x2 = targetNode.position_x;       // Entrée du nœud cible  
-      const y2 = targetNode.position_y + 40;  // Centre vertical
+      // Positions SIMPLES et GARANTIES
+      const x1 = (sourceNode.position_x || 0) + 120; // Sortie du nœud source
+      const y1 = (sourceNode.position_y || 0) + 40;  // Centre vertical
+      const x2 = (targetNode.position_x || 0);       // Entrée du nœud cible  
+      const y2 = (targetNode.position_y || 0) + 40;  // Centre vertical
 
-      console.log(`Connexion ${index} créée:`, {
-        from: `${sourceNode.name} (${x1}, ${y1})`,
-        to: `${targetNode.name} (${x2}, ${y2})`
-      });
+      console.log(`Connexion ${index}: ${sourceNode.name} (${x1},${y1}) → ${targetNode.name} (${x2},${y2})`);
 
-      // Couleur selon le type
-      const isMainConnection = !connection.connection_type || connection.connection_type === 'main';
-      const strokeColor = isMainConnection ? '#ff0000' : '#0000ff'; // Rouge vif ou bleu vif
-      
-      // Élément de connexion
+      // Ligne de connexion SIMPLE et VISIBLE
       connectionElements.push(
         <g key={`connection-${connection.id}-${index}`}>
-          {/* Ligne de fond noire pour contraste */}
+          {/* Ligne principale ROUGE VIVE */}
           <line
             x1={x1}
             y1={y1}
             x2={x2}
             y2={y2}
-            stroke="#000000"
-            strokeWidth="8"
-            opacity="0.3"
-          />
-          
-          {/* Ligne principale colorée */}
-          <line
-            x1={x1}
-            y1={y1}
-            x2={x2}
-            y2={y2}
-            stroke={strokeColor}
+            stroke="#ff0000"
             strokeWidth="4"
-            strokeDasharray={isMainConnection ? "none" : "10,5"}
             markerEnd="url(#arrowhead)"
           />
-          
-          {/* Ligne d'animation blanche */}
-          <line
-            x1={x1}
-            y1={y1}
-            x2={x2}
-            y2={y2}
-            stroke="#ffffff"
-            strokeWidth="2"
-            strokeDasharray="8,12"
-            opacity="0.8"
-          >
-            <animate
-              attributeName="stroke-dashoffset"
-              values="20;0"
-              dur="2s"
-              repeatCount="indefinite"
-            />
-          </line>
         </g>
       );
     });
     
-    console.log(`${connectionElements.length} connexion(s) créée(s)`);
+    console.log(`${connectionElements.length} connexion(s) créée(s) avec succès`);
     return connectionElements;
   };
 
-  // Calcul des dimensions du canvas
-  const getCanvasBounds = () => {
-    if (nodes.length === 0) {
-      return { width: 1200, height: 800 };
-    }
-
-    const minX = Math.min(...nodes.map(n => n.position_x)) - 100;
-    const maxX = Math.max(...nodes.map(n => n.position_x)) + 300;
-    const minY = Math.min(...nodes.map(n => n.position_y)) - 100;
-    const maxY = Math.max(...nodes.map(n => n.position_y)) + 200;
-    
-    return {
-      width: maxX - minX,
-      height: maxY - minY
-    };
-  };
-
-  const canvasBounds = getCanvasBounds();
-
-  const transformStyle = {
-    transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-    transformOrigin: 'center center',
-    transition: isDragging ? 'none' : 'transform 0.1s ease-out'
-  };
+  // Affichage de débogage si pas de données
+  if (!workflow || nodes.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>⚠️ Aucune donnée de workflow</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-8">
+            <p className="text-gray-600 mb-4">
+              Workflow: {workflow ? '✅ Présent' : '❌ Manquant'}<br/>
+              Nœuds: {nodes.length}<br/>
+              Connexions: {connections.length}
+            </p>
+            <Button onClick={() => window.location.reload()}>
+              Recharger la page
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -408,7 +375,7 @@ Réponds en français de manière professionnelle et accessible.`;
         </Card>
       )}
 
-      {/* Visualisation du workflow */}
+      {/* Visualisation du workflow - VERSION CORRIGÉE */}
       <Card className={isFullscreen ? 'fixed inset-0 z-50 rounded-none' : ''}>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -437,10 +404,6 @@ Réponds en français de manière professionnelle et accessible.`;
                 <RotateCcw className="w-4 h-4" />
               </Button>
               <Badge variant="secondary" className="text-xs">
-                <Move className="w-3 h-3 mr-1" />
-                Glisser pour naviguer
-              </Badge>
-              <Badge variant="secondary" className="text-xs">
                 Zoom: {Math.round(zoom * 100)}%
               </Badge>
             </div>
@@ -449,25 +412,42 @@ Réponds en français de manière professionnelle et accessible.`;
         <CardContent>
           <div 
             ref={containerRef}
-            className={`bg-gray-50 rounded-lg p-4 overflow-hidden cursor-grab active:cursor-grabbing relative border-2 border-slate-300 ${
-              isFullscreen ? 'h-screen' : 'min-h-[700px]'
+            className={`bg-gray-100 rounded-lg overflow-hidden relative border-2 border-gray-300 ${
+              isFullscreen ? 'h-screen' : 'h-[600px]'
             }`}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
             onWheel={handleWheel}
-            style={{ userSelect: 'none' }}
+            style={{ 
+              cursor: isDragging ? 'grabbing' : 'grab',
+              userSelect: 'none' 
+            }}
           >
-            <div style={transformStyle}>
+            {/* Conteneur avec transformation */}
+            <div 
+              style={{
+                transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                transformOrigin: 'center center',
+                transition: isDragging ? 'none' : 'transform 0.1s ease-out',
+                width: '100%',
+                height: '100%'
+              }}
+            >
+              {/* SVG CANVAS FIXE */}
               <svg
                 ref={svgRef}
-                width={canvasBounds.width}
-                height={canvasBounds.height}
-                className="w-full h-full bg-white border border-gray-300"
-                style={{ minWidth: '100%', minHeight: '100%' }}
+                width="100%"
+                height="100%"
+                viewBox={`0 0 ${canvasBounds.width} ${canvasBounds.height}`}
+                className="bg-white"
+                style={{ 
+                  minWidth: canvasBounds.width, 
+                  minHeight: canvasBounds.height 
+                }}
               >
-                {/* Définition des marqueurs de flèches */}
+                {/* Définitions des marqueurs */}
                 <defs>
                   <marker
                     id="arrowhead"
@@ -476,6 +456,7 @@ Réponds en français de manière professionnelle et accessible.`;
                     refX="9"
                     refY="3.5"
                     orient="auto"
+                    markerUnits="strokeWidth"
                   >
                     <polygon
                       points="0 0, 10 3.5, 0 7"
@@ -486,43 +467,51 @@ Réponds en français de manière professionnelle et accessible.`;
                   </marker>
                 </defs>
 
-                {/* RENDU DES CONNEXIONS */}
+                {/* Grille de fond pour aide visuelle */}
+                <defs>
+                  <pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse">
+                    <path d="M 50 0 L 0 0 0 50" fill="none" stroke="#e5e7eb" strokeWidth="1"/>
+                  </pattern>
+                </defs>
+                <rect width="100%" height="100%" fill="url(#grid)" />
+
+                {/* CONNEXIONS EN PREMIER */}
                 <g id="connections-layer">
                   {createConnectionElements()}
                 </g>
 
-                {/* RENDU DES NŒUDS */}
+                {/* NŒUDS EN SECOND */}
                 <g id="nodes-layer">
                   {nodes.map((node, index) => (
                     <g key={`node-${node.id || node.node_id}-${index}`}>
                       {/* Rectangle du nœud */}
                       <rect
-                        x={node.position_x}
-                        y={node.position_y}
-                        width="140"
+                        x={node.position_x || 0}
+                        y={node.position_y || 0}
+                        width="120"
                         height="80"
-                        rx="12"
+                        rx="8"
                         fill={getNodeColor(node.node_type)}
                         stroke="#ffffff"
                         strokeWidth="3"
                         filter="drop-shadow(2px 4px 8px rgba(0,0,0,0.3))"
                       />
                       
-                      {/* Point de connexion d'entrée (gauche) */}
+                      {/* Point de connexion d'entrée */}
                       <circle
-                        cx={node.position_x}
-                        cy={node.position_y + 40}
-                        r="6"
+                        cx={(node.position_x || 0)}
+                        cy={(node.position_y || 0) + 40}
+                        r="5"
                         fill="#0000ff"
                         stroke="#ffffff"
                         strokeWidth="2"
                       />
                       
-                      {/* Point de connexion de sortie (droite) */}
+                      {/* Point de connexion de sortie */}
                       <circle
-                        cx={node.position_x + 140}
-                        cy={node.position_y + 40}
-                        r="6"
+                        cx={(node.position_x || 0) + 120}
+                        cy={(node.position_y || 0) + 40}
+                        r="5"
                         fill="#ff0000"
                         stroke="#ffffff"
                         strokeWidth="2"
@@ -530,9 +519,9 @@ Réponds en français de manière professionnelle et accessible.`;
                       
                       {/* Icône du nœud */}
                       <text
-                        x={node.position_x + 25}
-                        y={node.position_y + 50}
-                        fontSize="18"
+                        x={(node.position_x || 0) + 20}
+                        y={(node.position_y || 0) + 45}
+                        fontSize="16"
                         fill="white"
                         textAnchor="middle"
                         dominantBaseline="middle"
@@ -542,27 +531,27 @@ Réponds en français de manière professionnelle et accessible.`;
                       
                       {/* Nom du nœud */}
                       <text
-                        x={node.position_x + 85}
-                        y={node.position_y + 35}
-                        fontSize="12"
+                        x={(node.position_x || 0) + 70}
+                        y={(node.position_y || 0) + 35}
+                        fontSize="11"
                         fill="white"
                         textAnchor="middle"
                         fontWeight="bold"
                         dominantBaseline="middle"
                       >
-                        {node.name.length > 12 ? `${node.name.substring(0, 12)}...` : node.name}
+                        {node.name.length > 10 ? `${node.name.substring(0, 10)}...` : node.name}
                       </text>
                       
                       {/* Type du nœud */}
                       <text
-                        x={node.position_x + 85}
-                        y={node.position_y + 52}
-                        fontSize="9"
+                        x={(node.position_x || 0) + 70}
+                        y={(node.position_y || 0) + 55}
+                        fontSize="8"
                         fill="rgba(255,255,255,0.8)"
                         textAnchor="middle"
                         dominantBaseline="middle"
                       >
-                        {node.node_type.split('.').pop()?.replace(/([A-Z])/g, ' $1').trim().substring(0, 15)}
+                        {node.node_type.split('.').pop()?.substring(0, 12)}
                       </text>
                     </g>
                   ))}
@@ -571,51 +560,20 @@ Réponds en français de manière professionnelle et accessible.`;
             </div>
             
             {/* Instructions d'utilisation */}
-            <div className="absolute top-4 left-4 bg-white/95 backdrop-blur-sm p-4 rounded-lg shadow-lg text-xs space-y-2 border">
+            <div className="absolute top-4 left-4 bg-white/95 backdrop-blur-sm p-3 rounded-lg shadow-lg text-xs space-y-1 border">
               <div className="font-semibold text-gray-800">🎛️ Navigation:</div>
-              <div className="text-gray-600">• 🖱️ Clic + glisser pour déplacer</div>
-              <div className="text-gray-600">• 🔍 Molette pour zoomer/dézoomer</div>
-              <div className="text-gray-600">• 🎯 Boutons pour contrôles précis</div>
-              <div className="text-gray-600">• 📺 Plein écran disponible</div>
+              <div className="text-gray-600">• Glisser pour déplacer</div>
+              <div className="text-gray-600">• Molette pour zoomer</div>
+              <div className="text-gray-600">• Boutons pour contrôles</div>
             </div>
             
-            {/* Légende des connexions */}
-            <div className="absolute bottom-4 left-4 bg-white/95 backdrop-blur-sm p-4 rounded-lg shadow-lg text-xs space-y-3 border">
-              <div className="font-semibold text-gray-800">🔗 Connexions:</div>
-              <div className="flex items-center space-x-3">
-                <div className="w-6 h-0.5 bg-red-600 rounded"></div>
-                <span className="text-gray-600">Flux principal</span>
-              </div>
-              <div className="flex items-center space-x-3">
-                <div className="w-6 h-0.5 bg-blue-600 rounded border-dashed"></div>
-                <span className="text-gray-600">Flux conditionnel</span>
-              </div>
-            </div>
-          </div>
-          
-          {/* Statistiques */}
-          <div className="grid grid-cols-4 gap-4 mt-6 p-4 bg-gradient-to-r from-slate-50 to-slate-100 rounded-lg border">
-            <div className="text-center">
-              <div className="text-3xl font-bold text-blue-600 mb-1">{nodes.length}</div>
-              <div className="text-sm text-gray-600">Nœuds</div>
-            </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold text-green-600 mb-1">{connections.length}</div>
-              <div className="text-sm text-gray-600">Connexions</div>
-            </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold text-purple-600 mb-1">
-                {workflow.status === 'active' ? '✅' : '⏸️'}
-              </div>
-              <div className="text-sm text-gray-600">
-                {workflow.status === 'active' ? 'Actif' : 'Inactif'}
-              </div>
-            </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold text-orange-600 mb-1">
-                {Math.round(zoom * 100)}%
-              </div>
-              <div className="text-sm text-gray-600">Zoom</div>
+            {/* Infos de debug */}
+            <div className="absolute bottom-4 right-4 bg-white/95 backdrop-blur-sm p-3 rounded-lg shadow-lg text-xs border">
+              <div className="font-semibold text-gray-800">🔍 Debug:</div>
+              <div className="text-gray-600">Nœuds: {nodes.length}</div>
+              <div className="text-gray-600">Connexions: {connections.length}</div>
+              <div className="text-gray-600">Zoom: {Math.round(zoom * 100)}%</div>
+              <div className="text-gray-600">Canvas: {canvasBounds.width}x{canvasBounds.height}</div>
             </div>
           </div>
         </CardContent>
