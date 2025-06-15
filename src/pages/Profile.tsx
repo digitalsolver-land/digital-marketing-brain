@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -42,41 +41,27 @@ const Profile = () => {
     try {
       console.log('Updating profile with data:', formData);
       
-      // Mettre à jour directement dans Supabase
-      const { error } = await supabase
-        .from('profiles')
-        .update(formData)
-        .eq('id', user?.id);
+      // Utiliser la fonction updateProfile du contexte
+      const { error } = await updateProfile(formData);
 
       if (error) {
-        console.error('Supabase update error:', error);
+        console.error('Profile update error:', error);
         throw error;
       }
 
-      // Forcer le rechargement du profil
-      if (user) {
-        const { data: updatedProfile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single();
-        
-        console.log('Profile updated successfully:', updatedProfile);
-      }
+      console.log('Profile updated successfully');
       
       toast({
         title: "Profil mis à jour",
         description: "Vos informations ont été sauvegardées avec succès.",
       });
 
-      // Recharger la page pour voir les changements
-      window.location.reload();
     } catch (error: any) {
       console.error('Error updating profile:', error);
       toast({
         variant: "destructive",
         title: "Erreur",
-        description: error.message,
+        description: error.message || "Une erreur est survenue lors de la sauvegarde.",
       });
     } finally {
       setSubmitting(false);
@@ -161,7 +146,7 @@ const Profile = () => {
                 <h3 className="font-semibold text-lg">
                   {formData.first_name} {formData.last_name}
                 </h3>
-                <p className="text-slate-600 text-sm mb-3">{user.email}</p>
+                <p className="text-slate-600 text-sm mb-3">{user?.email}</p>
                 <div className="flex flex-wrap gap-1 justify-center">
                   {userRoles.map((role) => (
                     <Badge key={role} className={`${getRoleBadgeColor(role)} text-white`}>
@@ -242,7 +227,7 @@ const Profile = () => {
                     <Input
                       id="email"
                       className="pl-10"
-                      value={user.email}
+                      value={user?.email || ''}
                       disabled
                       placeholder="Votre email"
                     />
