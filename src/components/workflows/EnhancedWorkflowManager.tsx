@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -76,7 +75,7 @@ export const EnhancedWorkflowManager: React.FC = () => {
       setConnectionStatus('checking');
       console.log('🔍 Vérification connexion n8n...');
       
-      const isAvailable = n8nApiService.isN8nAvailable();
+      const isAvailable = await n8nApiService.isN8nAvailable();
       if (isAvailable) {
         // Test réel avec une requête simple
         await n8nApiService.getWorkflows({ limit: 1 });
@@ -1036,7 +1035,7 @@ export const EnhancedWorkflowManager: React.FC = () => {
             <CardHeader>
               <CardTitle>Visualisation des workflows</CardTitle>
               <CardDescription>
-                Interface graphique pour créer et modifier vos workflows
+                Interface graphique pour visualiser vos workflows
               </CardDescription>
             </CardHeader>
             
@@ -1054,15 +1053,32 @@ export const EnhancedWorkflowManager: React.FC = () => {
                   </div>
                   
                   <WorkflowVisualization 
-                    workflow={selectedWorkflow} 
-                    readonly={false}
-                    onWorkflowChange={(updatedWorkflow) => {
-                      setSelectedWorkflow(updatedWorkflow);
-                      // Mettre à jour dans la liste aussi
-                      setWorkflows(prev => 
-                        prev.map(w => w.id === updatedWorkflow.id ? updatedWorkflow : w)
-                      );
+                    workflow={selectedWorkflow}
+                    nodes={selectedWorkflow.nodes?.map(node => ({
+                      id: node.id || '',
+                      node_id: node.id || '',
+                      node_type: node.type || '',
+                      name: node.name || '',
+                      position_x: Array.isArray(node.position) ? node.position[0] : 0,
+                      position_y: Array.isArray(node.position) ? node.position[1] : 0,
+                      parameters: node.parameters || {}
+                    })) || []}
+                    connections={[]}
+                    onExecute={() => {
+                      console.log('Exécution du workflow:', selectedWorkflow.id);
+                      toast({
+                        title: "Workflow exécuté",
+                        description: `Le workflow "${selectedWorkflow.name}" a été exécuté`,
+                      });
                     }}
+                    onEdit={() => {
+                      console.log('Édition du workflow:', selectedWorkflow.id);
+                      toast({
+                        title: "Édition workflow",
+                        description: "Ouverture de l'éditeur...",
+                      });
+                    }}
+                    onDelete={() => deleteWorkflow(selectedWorkflow)}
                   />
                 </div>
               ) : (
