@@ -1,3 +1,4 @@
+
 import { supabase } from '@/integrations/supabase/client';
 
 // Types pour l'API n8n (basés sur la documentation officielle)
@@ -23,16 +24,7 @@ export interface N8nWorkflow {
       }>>;
     };
   };
-  settings?: {
-    saveExecutionProgress?: boolean;
-    saveManualExecutions?: boolean;
-    saveDataErrorExecution?: string;
-    saveDataSuccessExecution?: string;
-    executionTimeout?: number;
-    errorWorkflow?: string;
-    timezone?: string;
-    executionOrder?: string;
-  };
+  settings?: any;
   staticData?: any;
   tags?: Array<{ id: string; name: string }>;
   createdAt?: string;
@@ -47,66 +39,6 @@ export interface N8nExecution {
   startedAt: string;
   stoppedAt?: string;
   data?: any;
-  retryOf?: number;
-  retrySuccessId?: string;
-  waitTill?: string;
-  customData?: any;
-}
-
-export interface N8nUser {
-  id: string;
-  email: string;
-  firstName?: string;
-  lastName?: string;
-  role: string;
-  isPending: boolean;
-  createdAt: string;
-  updatedAt?: string;
-}
-
-export interface N8nProject {
-  id: string;
-  name: string;
-  type: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-export interface N8nCredential {
-  id: string;
-  name: string;
-  type: string;
-  createdAt?: string;
-  updatedAt?: string;
-  data?: any;
-}
-
-export interface N8nTag {
-  id: string;
-  name: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-export interface N8nVariable {
-  id: string;
-  key: string;
-  value: string;
-  type?: string;
-}
-
-export interface N8nAuditReport {
-  risk: 'low' | 'medium' | 'high';
-  sections: Array<{
-    title: string;
-    description: string;
-    recommendation: string;
-    location?: Array<{
-      workflowName?: string;
-      nodeName?: string;
-      nodeType?: string;
-    }>;
-  }>;
 }
 
 export interface PaginatedResponse<T> {
@@ -118,13 +50,10 @@ export interface RequestOptions {
   limit?: number;
   cursor?: string;
   includeData?: boolean;
-  includeRole?: boolean;
   active?: boolean;
   tags?: string;
   name?: string;
   projectId?: string;
-  excludePinnedData?: boolean;
-  status?: 'error' | 'success' | 'waiting';
   workflowId?: string;
 }
 
@@ -135,7 +64,7 @@ class N8nService {
   private static instance: N8nService;
   private connectionStatus: ConnectionStatus = 'disconnected';
   private lastError: string | null = null;
-  private readonly REQUEST_TIMEOUT = 30000; // 30 secondes
+  private readonly REQUEST_TIMEOUT = 30000;
   private readonly MAX_RETRIES = 3;
 
   public static getInstance(): N8nService {
@@ -150,7 +79,6 @@ class N8nService {
     try {
       console.log('🔄 Mise à jour configuration n8n...');
       
-      // Sauvegarder dans Supabase via la fonction edge
       const { error } = await supabase.functions.invoke('save-n8n-config', {
         body: {
           apiKey: config.apiKey,
@@ -177,7 +105,6 @@ class N8nService {
       
       console.log('🔍 Vérification connexion n8n...');
       
-      // Utiliser la fonction edge pour un test plus robuste
       const { data, error } = await supabase.functions.invoke('test-n8n-connection');
       
       if (error) {
@@ -236,10 +163,6 @@ class N8nService {
       const apiKey = secrets.n8n_api_key;
       const baseUrl = secrets.n8n_base_url || 'https://n8n.srv860213.hstgr.cloud/api/v1';
       
-      if (!apiKey) {
-        throw new Error('Clé API n8n manquante. Configurez votre clé API dans les paramètres.');
-      }
-
       const url = `${baseUrl}${endpoint}`;
       console.log(`🔗 URL finale: ${url}`);
 
@@ -316,13 +239,10 @@ class N8nService {
     if (options.limit) params.append('limit', options.limit.toString());
     if (options.cursor) params.append('cursor', options.cursor);
     if (options.includeData !== undefined) params.append('includeData', options.includeData.toString());
-    if (options.includeRole !== undefined) params.append('includeRole', options.includeRole.toString());
     if (options.active !== undefined) params.append('active', options.active.toString());
     if (options.tags) params.append('tags', options.tags);
     if (options.name) params.append('name', options.name);
     if (options.projectId) params.append('projectId', options.projectId);
-    if (options.excludePinnedData !== undefined) params.append('excludePinnedData', options.excludePinnedData.toString());
-    if (options.status) params.append('status', options.status);
     if (options.workflowId) params.append('workflowId', options.workflowId);
     
     return params.toString();
@@ -335,15 +255,15 @@ class N8nService {
       const endpoint = `/workflows${queryString ? `?${queryString}` : ''}`;
       
       console.log('📥 Récupération workflows n8n...');
-      const result = await this.makeRequest<PaginatedResponse<N8nWorkflow>>(endpoint);
+      const result = await this.makeRequest<any>(endpoint);
       
-      // Validation du format de retour
+      // Validation et normalisation du format de retour
       if (!result) {
-        console.warn('⚠️ Aucune donnée reçue, retour format par défaut');
+        console.warn('⚠️ Aucune donnée reçue');
         return { data: [], nextCursor: undefined };
       }
       
-      // Si l'API retourne directement un tableau (pas encapsulé)
+      // Si l'API retourne directement un tableau
       if (Array.isArray(result)) {
         console.log(`✅ ${result.length} workflows récupérés (format tableau)`);
         return { data: result, nextCursor: undefined };
@@ -351,7 +271,7 @@ class N8nService {
       
       // Si l'API retourne un objet avec data
       if (result.data && Array.isArray(result.data)) {
-        console.log(`✅ ${result.data.length} workflows récupérés (format encapsulé)`);
+        console.log(`✅ ${result.data.length} workflows récupérés`);
         return result;
       }
       
@@ -364,10 +284,9 @@ class N8nService {
     }
   }
 
-  async getWorkflow(id: string, options: RequestOptions = {}): Promise<N8nWorkflow> {
-    const queryString = this.buildQueryParams(options);
-    const endpoint = `/workflows/${id}${queryString ? `?${queryString}` : ''}`;
-    return this.makeRequest<N8nWorkflow>(endpoint);
+  async getWorkflow(id: string): Promise<N8nWorkflow> {
+    if (!id) throw new Error('ID du workflow requis');
+    return this.makeRequest<N8nWorkflow>(`/workflows/${id}`);
   }
 
   async createWorkflow(workflow: Partial<N8nWorkflow>): Promise<N8nWorkflow> {
@@ -425,31 +344,6 @@ class N8nService {
     });
   }
 
-  async transferWorkflow(id: string, destinationProjectId: string): Promise<void> {
-    if (!id) throw new Error('ID du workflow requis');
-    if (!destinationProjectId) throw new Error('ID du projet de destination requis');
-    
-    await this.makeRequest<void>(`/workflows/${id}/transfer`, {
-      method: 'PUT',
-      body: JSON.stringify({ destinationProjectId }),
-    });
-  }
-
-  async getWorkflowTags(id: string): Promise<N8nTag[]> {
-    if (!id) throw new Error('ID du workflow requis');
-    
-    return this.makeRequest<N8nTag[]>(`/workflows/${id}/tags`);
-  }
-
-  async updateWorkflowTags(id: string, tags: Array<{ id: string }>): Promise<N8nTag[]> {
-    if (!id) throw new Error('ID du workflow requis');
-    
-    return this.makeRequest<N8nTag[]>(`/workflows/${id}/tags`, {
-      method: 'PUT',
-      body: JSON.stringify(tags),
-    });
-  }
-
   // === EXECUTIONS ===
   async getExecutions(options: RequestOptions = {}): Promise<PaginatedResponse<N8nExecution>> {
     const queryString = this.buildQueryParams(options);
@@ -457,12 +351,9 @@ class N8nService {
     return this.makeRequest<PaginatedResponse<N8nExecution>>(endpoint);
   }
 
-  async getExecution(id: string, options: RequestOptions = {}): Promise<N8nExecution> {
+  async getExecution(id: string): Promise<N8nExecution> {
     if (!id) throw new Error('ID de l\'exécution requis');
-    
-    const queryString = this.buildQueryParams(options);
-    const endpoint = `/executions/${id}${queryString ? `?${queryString}` : ''}`;
-    return this.makeRequest<N8nExecution>(endpoint);
+    return this.makeRequest<N8nExecution>(`/executions/${id}`);
   }
 
   async deleteExecution(id: string): Promise<N8nExecution> {
@@ -473,248 +364,11 @@ class N8nService {
     });
   }
 
-  // === USERS ===
-  async getUsers(options: RequestOptions = {}): Promise<PaginatedResponse<N8nUser>> {
-    const queryString = this.buildQueryParams(options);
-    const endpoint = `/users${queryString ? `?${queryString}` : ''}`;
-    return this.makeRequest<PaginatedResponse<N8nUser>>(endpoint);
-  }
-
-  async getUser(id: string, options: RequestOptions = {}): Promise<N8nUser> {
-    if (!id) throw new Error('ID de l\'utilisateur requis');
-    
-    const queryString = this.buildQueryParams(options);
-    const endpoint = `/users/${id}${queryString ? `?${queryString}` : ''}`;
-    return this.makeRequest<N8nUser>(endpoint);
-  }
-
-  async createUsers(users: Array<{ email: string; role?: string }>): Promise<any> {
-    if (!users || users.length === 0) {
-      throw new Error('Au moins un utilisateur est requis');
-    }
-
-    return this.makeRequest<any>('/users', {
-      method: 'POST',
-      body: JSON.stringify(users),
-    });
-  }
-
-  async deleteUser(id: string): Promise<void> {
-    if (!id) throw new Error('ID de l\'utilisateur requis');
-    
-    await this.makeRequest<void>(`/users/${id}`, {
-      method: 'DELETE',
-    });
-  }
-
-  async updateUserRole(id: string, newRoleName: string): Promise<void> {
-    if (!id) throw new Error('ID de l\'utilisateur requis');
-    if (!newRoleName) throw new Error('Nouveau rôle requis');
-    
-    await this.makeRequest<void>(`/users/${id}/role`, {
-      method: 'PATCH',
-      body: JSON.stringify({ newRoleName }),
-    });
-  }
-
-  // === PROJECTS ===
-  async getProjects(options: RequestOptions = {}): Promise<PaginatedResponse<N8nProject>> {
-    const queryString = this.buildQueryParams(options);
-    const endpoint = `/projects${queryString ? `?${queryString}` : ''}`;
-    return this.makeRequest<PaginatedResponse<N8nProject>>(endpoint);
-  }
-
-  async createProject(name: string): Promise<N8nProject> {
-    if (!name?.trim()) throw new Error('Nom du projet requis');
-    
-    return this.makeRequest<N8nProject>('/projects', {
-      method: 'POST',
-      body: JSON.stringify({ name: name.trim() }),
-    });
-  }
-
-  async updateProject(projectId: string, name: string): Promise<void> {
-    if (!projectId) throw new Error('ID du projet requis');
-    if (!name?.trim()) throw new Error('Nom du projet requis');
-    
-    await this.makeRequest<void>(`/projects/${projectId}`, {
-      method: 'PUT',
-      body: JSON.stringify({ name: name.trim() }),
-    });
-  }
-
-  async deleteProject(projectId: string): Promise<void> {
-    if (!projectId) throw new Error('ID du projet requis');
-    
-    await this.makeRequest<void>(`/projects/${projectId}`, {
-      method: 'DELETE',
-    });
-  }
-
-  async addUsersToProject(projectId: string, relations: Array<{ userId: string; role: string }>): Promise<void> {
-    if (!projectId) throw new Error('ID du projet requis');
-    if (!relations || relations.length === 0) throw new Error('Relations utilisateur requises');
-    
-    await this.makeRequest<void>(`/projects/${projectId}/users`, {
-      method: 'POST',
-      body: JSON.stringify({ relations }),
-    });
-  }
-
-  async removeUserFromProject(projectId: string, userId: string): Promise<void> {
-    if (!projectId) throw new Error('ID du projet requis');
-    if (!userId) throw new Error('ID de l\'utilisateur requis');
-    
-    await this.makeRequest<void>(`/projects/${projectId}/users/${userId}`, {
-      method: 'DELETE',
-    });
-  }
-
-  async updateUserRoleInProject(projectId: string, userId: string, role: string): Promise<void> {
-    if (!projectId) throw new Error('ID du projet requis');
-    if (!userId) throw new Error('ID de l\'utilisateur requis');
-    if (!role) throw new Error('Rôle requis');
-    
-    await this.makeRequest<void>(`/projects/${projectId}/users/${userId}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ role }),
-    });
-  }
-
-  // === CREDENTIALS ===
-  async createCredential(credential: { name: string; type: string; data: any }): Promise<N8nCredential> {
-    if (!credential.name?.trim()) throw new Error('Nom du credential requis');
-    if (!credential.type?.trim()) throw new Error('Type du credential requis');
-    if (!credential.data) throw new Error('Données du credential requises');
-    
-    return this.makeRequest<N8nCredential>('/credentials', {
-      method: 'POST',
-      body: JSON.stringify(credential),
-    });
-  }
-
-  async deleteCredential(id: string): Promise<N8nCredential> {
-    if (!id) throw new Error('ID du credential requis');
-    
-    return this.makeRequest<N8nCredential>(`/credentials/${id}`, {
-      method: 'DELETE',
-    });
-  }
-
-  async getCredentialSchema(credentialTypeName: string): Promise<any> {
-    if (!credentialTypeName) throw new Error('Nom du type de credential requis');
-    
-    return this.makeRequest<any>(`/credentials/schema/${credentialTypeName}`);
-  }
-
-  async transferCredential(id: string, destinationProjectId: string): Promise<void> {
-    if (!id) throw new Error('ID du credential requis');
-    if (!destinationProjectId) throw new Error('ID du projet de destination requis');
-    
-    await this.makeRequest<void>(`/credentials/${id}/transfer`, {
-      method: 'PUT',
-      body: JSON.stringify({ destinationProjectId }),
-    });
-  }
-
-  // === TAGS ===
-  async getTags(options: RequestOptions = {}): Promise<PaginatedResponse<N8nTag>> {
-    const queryString = this.buildQueryParams(options);
-    const endpoint = `/tags${queryString ? `?${queryString}` : ''}`;
-    return this.makeRequest<PaginatedResponse<N8nTag>>(endpoint);
-  }
-
-  async getTag(id: string): Promise<N8nTag> {
-    if (!id) throw new Error('ID du tag requis');
-    
-    return this.makeRequest<N8nTag>(`/tags/${id}`);
-  }
-
-  async createTag(name: string): Promise<N8nTag> {
-    if (!name?.trim()) throw new Error('Nom du tag requis');
-    
-    return this.makeRequest<N8nTag>('/tags', {
-      method: 'POST',
-      body: JSON.stringify({ name: name.trim() }),
-    });
-  }
-
-  async updateTag(id: string, name: string): Promise<N8nTag> {
-    if (!id) throw new Error('ID du tag requis');
-    if (!name?.trim()) throw new Error('Nom du tag requis');
-    
-    return this.makeRequest<N8nTag>(`/tags/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify({ name: name.trim() }),
-    });
-  }
-
-  async deleteTag(id: string): Promise<N8nTag> {
-    if (!id) throw new Error('ID du tag requis');
-    
-    return this.makeRequest<N8nTag>(`/tags/${id}`, {
-      method: 'DELETE',
-    });
-  }
-
-  // === VARIABLES ===
-  async getVariables(options: RequestOptions = {}): Promise<PaginatedResponse<N8nVariable>> {
-    const queryString = this.buildQueryParams(options);
-    const endpoint = `/variables${queryString ? `?${queryString}` : ''}`;
-    return this.makeRequest<PaginatedResponse<N8nVariable>>(endpoint);
-  }
-
-  async createVariable(key: string, value: string): Promise<void> {
-    if (!key?.trim()) throw new Error('Clé de la variable requise');
-    if (value === undefined || value === null) throw new Error('Valeur de la variable requise');
-    
-    await this.makeRequest<void>('/variables', {
-      method: 'POST',
-      body: JSON.stringify({ key: key.trim(), value }),
-    });
-  }
-
-  async updateVariable(id: string, key: string, value: string): Promise<void> {
-    if (!id) throw new Error('ID de la variable requis');
-    if (!key?.trim()) throw new Error('Clé de la variable requise');
-    if (value === undefined || value === null) throw new Error('Valeur de la variable requise');
-    
-    await this.makeRequest<void>(`/variables/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify({ key: key.trim(), value }),
-    });
-  }
-
-  async deleteVariable(id: string): Promise<void> {
-    if (!id) throw new Error('ID de la variable requis');
-    
-    await this.makeRequest<void>(`/variables/${id}`, {
-      method: 'DELETE',
-    });
-  }
-
-  // === AUDIT ===
-  async generateAudit(additionalOptions?: { daysAbandonedWorkflow?: number; categories?: string[] }): Promise<any> {
-    return this.makeRequest<any>('/audit', {
-      method: 'POST',
-      body: JSON.stringify({ additionalOptions: additionalOptions || {} }),
-    });
-  }
-
-  // === SOURCE CONTROL ===
-  async pullFromRemoteRepository(options: { force?: boolean; variables?: Record<string, any> }): Promise<any> {
-    return this.makeRequest<any>('/source-control/pull', {
-      method: 'POST',
-      body: JSON.stringify(options),
-    });
-  }
-
   // === MÉTHODES UTILITAIRES ===
   async executeWorkflow(workflowId: string, inputData: any = {}): Promise<any> {
     try {
       console.log(`🚀 Demande d'exécution du workflow: ${workflowId}`);
       
-      // D'abord, s'assurer que le workflow est actif
       const workflow = await this.getWorkflow(workflowId);
       if (!workflow) {
         throw new Error('Workflow non trouvé');
@@ -725,8 +379,7 @@ class N8nService {
         await this.activateWorkflow(workflowId);
       }
 
-      console.log('⚠️ L\'exécution directe via API n\'est pas supportée par n8n');
-      console.log('💡 Le workflow doit être déclenché par son trigger configuré');
+      console.log('💡 Le workflow est maintenant actif et prêt à être déclenché');
       
       return {
         success: true,
@@ -734,7 +387,6 @@ class N8nService {
         workflowId: workflowId,
         workflowName: workflow.name,
         isActive: true,
-        triggerInfo: 'Le workflow sera déclenché selon sa configuration de trigger',
         timestamp: new Date().toISOString()
       };
     } catch (error) {
@@ -754,11 +406,6 @@ class N8nService {
     } catch (error) {
       return false;
     }
-  }
-
-  // === MÉTHODES DE COMPATIBILITÉ ===
-  async getWorkflowExecutions(workflowId: string, options: RequestOptions = {}): Promise<PaginatedResponse<N8nExecution>> {
-    return this.getExecutions({ ...options, workflowId });
   }
 
   async importAllWorkflows(): Promise<N8nWorkflow[]> {

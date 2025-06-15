@@ -25,22 +25,33 @@ export const OptimizedWorkflowManager: React.FC = () => {
   const checkN8nConnection = async () => {
     setLoading(true);
     try {
+      console.log('🔄 Vérification connexion n8n...');
       const result = await unifiedN8nService.checkConnection();
       setConnectionStatus(result.status);
       setN8nConnected(result.status === 'connected');
       
       if (result.status === 'connected') {
         toast({
-          title: "n8n connecté",
+          title: "n8n connecté ✅",
           description: "La connexion avec n8n a été établie avec succès.",
         });
       } else if (result.status === 'error') {
-        console.warn('n8n non disponible:', result.error);
+        console.warn('⚠️ n8n non disponible:', result.error);
+        toast({
+          variant: "destructive",
+          title: "Erreur connexion n8n ❌",
+          description: result.error || "Impossible de se connecter à n8n",
+        });
       }
     } catch (error) {
-      console.error('Erreur connexion n8n:', error);
+      console.error('❌ Erreur connexion n8n:', error);
       setN8nConnected(false);
       setConnectionStatus('error');
+      toast({
+        variant: "destructive",
+        title: "Erreur de connexion",
+        description: error instanceof Error ? error.message : "Erreur inconnue",
+      });
     } finally {
       setLoading(false);
     }
@@ -64,6 +75,15 @@ export const OptimizedWorkflowManager: React.FC = () => {
     }
   };
 
+  const getStatusColor = (status: ConnectionStatus) => {
+    switch (status) {
+      case 'checking': return 'text-blue-600';
+      case 'connected': return 'text-green-600';
+      case 'disconnected': return 'text-yellow-600';
+      case 'error': return 'text-red-600';
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* En-tête */}
@@ -74,7 +94,7 @@ export const OptimizedWorkflowManager: React.FC = () => {
         </div>
         
         <div className="flex items-center space-x-4">
-          <span className="text-sm font-medium text-slate-600">
+          <span className={`text-sm font-medium ${getStatusColor(connectionStatus)}`}>
             {getStatusText(connectionStatus)}
           </span>
           
@@ -125,7 +145,7 @@ export const OptimizedWorkflowManager: React.FC = () => {
               onWorkflowCreated={() => {
                 setActiveTab('workflows');
                 toast({
-                  title: "Workflow créé",
+                  title: "Workflow créé ✅",
                   description: "Le workflow a été créé avec succès",
                 });
               }}
