@@ -1,1163 +1,1078 @@
+
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Switch } from '@/components/ui/switch';
+import { Separator } from '@/components/ui/separator';
+import { useToast } from '@/hooks/use-toast';
 import { 
   Play, 
   Pause, 
-  Edit, 
-  Trash2, 
-  Plus, 
-  Upload, 
   Download, 
-  Tag,
-  Users,
+  Upload, 
+  RefreshCw, 
+  Settings, 
+  Users, 
+  Shield, 
   Database,
-  Settings,
-  RefreshCw,
-  Search,
-  Filter,
-  Activity,
-  Clock,
+  Plus,
+  Edit,
+  Trash2,
   CheckCircle,
   XCircle,
-  AlertCircle,
+  AlertTriangle,
+  Activity,
+  FileJson,
   Eye,
   Copy,
-  Shield,
-  GitBranch,
-  Folder,
-  UserPlus,
-  Key,
-  BarChart3,
-  Monitor,
-  AlertTriangle,
-  WifiOff,
-  CheckCircle2
+  Search
 } from 'lucide-react';
-import { n8nApiService, N8nWorkflow, N8nExecution, N8nTag, N8nVariable, N8nUser, N8nProject, N8nCredential, N8nAuditReport } from '@/services/n8nApiService';
+
+import { n8nApiService, N8nWorkflow, N8nExecution, N8nUser, N8nProject, N8nCredential, N8nTag, N8nVariable, N8nAuditReport } from '@/services/n8nApiService';
 import { workflowService } from '@/services/workflowService';
-import { useToast } from '@/hooks/use-toast';
 import { WorkflowVisualization } from './WorkflowVisualization';
 
 export const EnhancedWorkflowManager: React.FC = () => {
-  // États principaux
+  const { toast } = useToast();
+  const [activeTab, setActiveTab] = useState('workflows');
+  const [loading, setLoading] = useState(false);
+  const [n8nConnected, setN8nConnected] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'checking' | 'connected' | 'disconnected' | 'error'>('checking');
+
+  // États pour les données
   const [workflows, setWorkflows] = useState<N8nWorkflow[]>([]);
   const [executions, setExecutions] = useState<N8nExecution[]>([]);
-  const [tags, setTags] = useState<N8nTag[]>([]);
-  const [variables, setVariables] = useState<N8nVariable[]>([]);
   const [users, setUsers] = useState<N8nUser[]>([]);
   const [projects, setProjects] = useState<N8nProject[]>([]);
   const [credentials, setCredentials] = useState<N8nCredential[]>([]);
+  const [tags, setTags] = useState<N8nTag[]>([]);
+  const [variables, setVariables] = useState<N8nVariable[]>([]);
   const [auditReports, setAuditReports] = useState<N8nAuditReport[]>([]);
-  
-  const [isLoading, setIsLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState('workflows');
-  const [n8nAvailable, setN8nAvailable] = useState(false);
-  
-  // Filtres et recherche
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedTag, setSelectedTag] = useState<string>('all');
-  const [selectedProject, setSelectedProject] = useState<string>('all');
-  
-  // Formulaires
-  const [newWorkflow, setNewWorkflow] = useState({ name: '', description: '' });
-  const [newUser, setNewUser] = useState({ email: '', role: 'global:member' as const });
-  const [newProject, setNewProject] = useState({ name: '', type: 'team' });
-  const [newCredential, setNewCredential] = useState({ name: '', type: '', data: {} });
-  const [newTag, setNewTag] = useState('');
-  const [newVariable, setNewVariable] = useState({ key: '', value: '', type: 'string' });
-  
-  // États d'édition
-  const [editingVariable, setEditingVariable] = useState<N8nVariable | null>(null);
-  const [editingTag, setEditingTag] = useState<N8nTag | null>(null);
-  const [editingUser, setEditingUser] = useState<N8nUser | null>(null);
-  
-  // Workflow sélectionné pour visualisation
-  const [selectedWorkflow, setSelectedWorkflow] = useState<N8nWorkflow | null>(null);
-  
-  const { toast } = useToast();
 
+  // États pour les formulaires
+  const [selectedWorkflow, setSelectedWorkflow] = useState<N8nWorkflow | null>(null);
+  const [newWorkflowData, setNewWorkflowData] = useState({
+    name: '',
+    description: '',
+    active: false
+  });
+
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
+
+  // Vérification de la connexion n8n au chargement
   useEffect(() => {
-    checkN8nAvailability();
-    loadAllData();
+    checkN8nConnection();
   }, []);
 
-  const checkN8nAvailability = () => {
-    setN8nAvailable(n8nApiService.isN8nAvailable());
-  };
-
-  const loadAllData = async () => {
-    setIsLoading(true);
+  const checkN8nConnection = async () => {
     try {
-      if (n8nApiService.isN8nAvailable()) {
-        // Charger depuis n8n si disponible
-        await Promise.allSettled([
-          loadN8nWorkflows(),
-          loadN8nExecutions(),
-          loadN8nTags(),
-          loadN8nVariables(),
-          loadN8nUsers(),
-          loadN8nProjects(),
-          loadN8nAuditReports()
-        ]);
+      setConnectionStatus('checking');
+      console.log('🔍 Vérification connexion n8n...');
+      
+      const isAvailable = n8nApiService.isN8nAvailable();
+      if (isAvailable) {
+        // Test réel avec une requête simple
+        await n8nApiService.getWorkflows({ limit: 1 });
+        setN8nConnected(true);
+        setConnectionStatus('connected');
+        console.log('✅ n8n connecté avec succès');
+        
+        toast({
+          title: "n8n connecté",
+          description: "La connexion avec n8n a été établie avec succès.",
+        });
+        
+        // Charger les données initiales
+        loadInitialData();
       } else {
-        // Charger depuis la base locale
-        await loadLocalWorkflows();
+        setN8nConnected(false);
+        setConnectionStatus('disconnected');
+        console.warn('⚠️ n8n non disponible, mode local activé');
+        
+        toast({
+          variant: "destructive",
+          title: "n8n non disponible",
+          description: "Fonctionnement en mode local. Vérifiez votre clé API et l'URL n8n.",
+        });
       }
     } catch (error) {
-      console.error('Erreur chargement données:', error);
+      console.error('❌ Erreur connexion n8n:', error);
+      setN8nConnected(false);
+      setConnectionStatus('error');
+      
       toast({
-        title: "Erreur",
-        description: "Impossible de charger certaines données",
-        variant: "destructive"
+        variant: "destructive",
+        title: "Erreur de connexion n8n",
+        description: error instanceof Error ? error.message : "Impossible de se connecter à n8n",
+      });
+    }
+  };
+
+  const loadInitialData = async () => {
+    if (!n8nConnected) return;
+    
+    setLoading(true);
+    try {
+      console.log('📊 Chargement des données n8n...');
+      
+      const [workflowsResult, executionsResult, usersResult, projectsResult, tagsResult] = await Promise.allSettled([
+        n8nApiService.getWorkflows({ limit: 50 }),
+        n8nApiService.getExecutions({ limit: 20 }),
+        n8nApiService.getUsers({ limit: 50 }),
+        n8nApiService.getProjects({ limit: 50 }),
+        n8nApiService.getTags({ limit: 100 })
+      ]);
+
+      if (workflowsResult.status === 'fulfilled') {
+        setWorkflows(workflowsResult.value.data);
+        console.log(`✅ ${workflowsResult.value.data.length} workflows chargés`);
+      }
+
+      if (executionsResult.status === 'fulfilled') {
+        setExecutions(executionsResult.value.data);
+        console.log(`✅ ${executionsResult.value.data.length} exécutions chargées`);
+      }
+
+      if (usersResult.status === 'fulfilled') {
+        setUsers(usersResult.value.data);
+        console.log(`✅ ${usersResult.value.data.length} utilisateurs chargés`);
+      }
+
+      if (projectsResult.status === 'fulfilled') {
+        setProjects(projectsResult.value.data);
+        console.log(`✅ ${projectsResult.value.data.length} projets chargés`);
+      }
+
+      if (tagsResult.status === 'fulfilled') {
+        setTags(tagsResult.value.data);
+        console.log(`✅ ${tagsResult.value.data.length} tags chargés`);
+      }
+
+    } catch (error) {
+      console.error('❌ Erreur chargement données:', error);
+      toast({
+        variant: "destructive",
+        title: "Erreur de chargement",
+        description: "Impossible de charger certaines données depuis n8n",
       });
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  const loadN8nWorkflows = async () => {
-    try {
-      const result = await n8nApiService.getWorkflows({
-        active: statusFilter === 'all' ? undefined : statusFilter === 'active',
-        name: searchTerm || undefined,
-        projectId: selectedProject === 'all' ? undefined : selectedProject,
-        limit: 100
-      });
-      setWorkflows(result.data || []);
-    } catch (error) {
-      console.error('Erreur chargement workflows n8n:', error);
-      // Fallback vers local
-      await loadLocalWorkflows();
-    }
-  };
-
-  const loadLocalWorkflows = async () => {
-    try {
-      const localWorkflows = await workflowService.getWorkflows();
-      // Convertir au format n8n pour l'affichage
-      const n8nFormat = localWorkflows.map(w => ({
-        id: w.id,
-        name: w.name,
-        active: w.status === 'active',
-        nodes: [],
-        connections: {},
-        tags: w.tags?.map(tagName => ({ id: tagName, name: tagName })) || [],
-        createdAt: w.createdAt,
-        updatedAt: w.updatedAt
-      } as N8nWorkflow));
-      setWorkflows(n8nFormat);
-    } catch (error) {
-      console.error('Erreur chargement workflows locaux:', error);
-    }
-  };
-
-  const loadN8nExecutions = async () => {
-    try {
-      const result = await n8nApiService.getExecutions({ limit: 50 });
-      setExecutions(result.data || []);
-    } catch (error) {
-      console.error('Erreur chargement exécutions:', error);
-    }
-  };
-
-  const loadN8nTags = async () => {
-    try {
-      const result = await n8nApiService.getTags({ limit: 100 });
-      setTags(result.data || []);
-    } catch (error) {
-      console.error('Erreur chargement tags:', error);
-    }
-  };
-
-  const loadN8nVariables = async () => {
-    try {
-      const result = await n8nApiService.getVariables({ limit: 100 });
-      setVariables(result.data || []);
-    } catch (error) {
-      console.error('Erreur chargement variables:', error);
-    }
-  };
-
-  const loadN8nUsers = async () => {
-    try {
-      const result = await n8nApiService.getUsers({ limit: 100, includeRole: true });
-      setUsers(result.data || []);
-    } catch (error) {
-      console.error('Erreur chargement utilisateurs:', error);
-    }
-  };
-
-  const loadN8nProjects = async () => {
-    try {
-      const result = await n8nApiService.getProjects({ limit: 100 });
-      setProjects(result.data || []);
-    } catch (error) {
-      console.error('Erreur chargement projets:', error);
-    }
-  };
-
-  const loadN8nAuditReports = async () => {
-    try {
-      const reports = await n8nApiService.generateAudit();
-      setAuditReports(reports || []);
-    } catch (error) {
-      console.error('Erreur génération audit:', error);
-    }
-  };
-
-  // Actions workflows
+  // === GESTION DES WORKFLOWS ===
   const createWorkflow = async () => {
-    console.log('Création workflow avec:', newWorkflow);
-    
-    if (!newWorkflow.name.trim()) {
+    if (!newWorkflowData.name.trim()) {
       toast({
+        variant: "destructive",
         title: "Erreur",
         description: "Le nom du workflow est requis",
-        variant: "destructive"
       });
       return;
     }
 
+    setLoading(true);
     try {
-      setIsLoading(true);
+      console.log('🚀 Création workflow:', newWorkflowData.name);
 
-      // Créer un nœud de départ valide
-      const startNode = {
-        id: 'start-' + Date.now(),
-        name: 'Start',
-        type: 'n8n-nodes-base.start',
-        position: [250, 300] as [number, number],
-        parameters: {},
-        typeVersion: 1
-      };
-
-      if (n8nApiService.isN8nAvailable()) {
-        // Créer dans n8n
-        console.log('Création dans n8n...');
-        const n8nWorkflow = await n8nApiService.createWorkflow({
-          name: newWorkflow.name,
-          nodes: [startNode],
+      if (n8nConnected) {
+        // Créer via l'API n8n
+        const workflowData = {
+          name: newWorkflowData.name,
+          nodes: [
+            {
+              id: 'start',
+              name: 'Start',
+              type: 'n8n-nodes-base.start',
+              position: [250, 300] as [number, number],
+              parameters: {}
+            }
+          ],
           connections: {},
+          active: newWorkflowData.active,
           settings: {
             saveExecutionProgress: true,
             saveManualExecutions: true,
-            executionTimeout: 3600
+            saveDataErrorExecution: 'all' as const,
+            saveDataSuccessExecution: 'all' as const,
+            executionTimeout: 3600,
+            timezone: 'Europe/Paris'
           }
-        });
+        };
+
+        const newWorkflow = await n8nApiService.createWorkflow(workflowData);
+        setWorkflows(prev => [newWorkflow, ...prev]);
         
-        console.log('Workflow n8n créé:', n8nWorkflow);
-        
-        // Synchroniser avec la base locale
-        await workflowService.createWorkflowFromJSON({
-          id: n8nWorkflow.id,
-          name: n8nWorkflow.name,
-          nodes: n8nWorkflow.nodes,
-          connections: n8nWorkflow.connections,
-          active: n8nWorkflow.active,
-          settings: n8nWorkflow.settings,
-          tags: n8nWorkflow.tags
+        toast({
+          title: "Workflow créé",
+          description: `Le workflow "${newWorkflow.name}" a été créé avec succès sur n8n`,
         });
       } else {
-        // Créer uniquement en local
-        console.log('Création en local...');
-        await workflowService.createWorkflowFromJSON({
-          name: newWorkflow.name,
-          nodes: [startNode],
+        // Créer en local via Supabase
+        const jsonData = {
+          name: newWorkflowData.name,
+          nodes: [
+            {
+              id: 'start',
+              name: 'Start',
+              type: 'n8n-nodes-base.start',
+              position: [250, 300] as [number, number],
+              parameters: {}
+            }
+          ],
           connections: {},
-          active: false,
-          settings: {
-            saveExecutionProgress: true,
-            saveManualExecutions: true,
-            executionTimeout: 3600
-          }
+          active: newWorkflowData.active
+        };
+
+        await workflowService.createWorkflowFromJSON(jsonData);
+        
+        toast({
+          title: "Workflow créé",
+          description: `Le workflow "${newWorkflowData.name}" a été créé localement`,
         });
       }
 
-      toast({
-        title: "Succès",
-        description: "Workflow créé avec succès"
-      });
+      // Reset du formulaire
+      setNewWorkflowData({ name: '', description: '', active: false });
       
-      setNewWorkflow({ name: '', description: '' });
-      await loadAllData();
     } catch (error) {
-      console.error('Erreur création workflow:', error);
+      console.error('❌ Erreur création workflow:', error);
       toast({
-        title: "Erreur",
-        description: `Échec de la création du workflow: ${error instanceof Error ? error.message : 'Erreur inconnue'}`,
-        variant: "destructive"
+        variant: "destructive",
+        title: "Erreur de création",
+        description: error instanceof Error ? error.message : "Impossible de créer le workflow",
       });
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  const toggleWorkflow = async (id: string, isActive: boolean) => {
+  const toggleWorkflowStatus = async (workflow: N8nWorkflow) => {
+    if (!n8nConnected || !workflow.id) return;
+
+    setLoading(true);
     try {
-      if (n8nApiService.isN8nAvailable()) {
-        if (isActive) {
-          await n8nApiService.deactivateWorkflow(id);
-        } else {
-          await n8nApiService.activateWorkflow(id);
-        }
+      console.log('🔄 Toggle workflow status:', workflow.id, !workflow.active);
+      
+      if (workflow.active) {
+        await n8nApiService.deactivateWorkflow(workflow.id);
       } else {
-        // Mise à jour locale
-        await workflowService.updateWorkflowStatus(id, isActive ? 'inactive' : 'active');
+        await n8nApiService.activateWorkflow(workflow.id);
       }
-      
-      await loadAllData();
-      toast({
-        title: "Succès",
-        description: `Workflow ${isActive ? 'désactivé' : 'activé'} avec succès`
-      });
-    } catch (error) {
-      toast({
-        title: "Erreur",
-        description: "Échec de la modification du statut",
-        variant: "destructive"
-      });
-    }
-  };
 
-  const deleteWorkflow = async (id: string) => {
-    try {
-      if (n8nApiService.isN8nAvailable()) {
-        await n8nApiService.deleteWorkflow(id);
-      }
-      
-      // Supprimer aussi en local
-      await workflowService.deleteWorkflow(id);
-      
+      // Mettre à jour l'état local
+      setWorkflows(prev => 
+        prev.map(w => w.id === workflow.id ? { ...w, active: !w.active } : w)
+      );
+
       toast({
-        title: "Succès",
-        description: "Workflow supprimé avec succès"
+        title: workflow.active ? "Workflow désactivé" : "Workflow activé",
+        description: `Le workflow "${workflow.name}" a été ${workflow.active ? 'désactivé' : 'activé'}`,
       });
       
-      await loadAllData();
     } catch (error) {
+      console.error('❌ Erreur toggle workflow:', error);
       toast({
+        variant: "destructive",
         title: "Erreur",
-        description: "Échec de la suppression du workflow",
-        variant: "destructive"
+        description: "Impossible de modifier le statut du workflow",
       });
+    } finally {
+      setLoading(false);
     }
   };
 
-  const viewWorkflowDetails = async (workflowId: string) => {
+  const deleteWorkflow = async (workflow: N8nWorkflow) => {
+    if (!workflow.id) return;
+
+    setLoading(true);
     try {
-      let workflow: N8nWorkflow;
+      console.log('🗑️ Suppression workflow:', workflow.id);
       
-      if (n8nApiService.isN8nAvailable()) {
-        workflow = await n8nApiService.getWorkflow(workflowId);
+      if (n8nConnected) {
+        await n8nApiService.deleteWorkflow(workflow.id);
       } else {
-        // Récupérer depuis la base locale
-        const details = await workflowService.getWorkflowWithDetails(workflowId);
-        if (!details) throw new Error('Workflow non trouvé');
-        
-        workflow = {
-          id: details.workflow.id,
-          name: details.workflow.name,
-          active: details.workflow.status === 'active',
-          nodes: details.nodes.map(n => ({
-            id: n.node_id,
-            name: n.name,
-            type: n.node_type,
-            position: [n.position_x, n.position_y],
-            parameters: n.parameters
-          })),
-          connections: {},
-          tags: details.workflow.tags?.map((t: string) => ({ id: t, name: t })) || []
-        };
+        await workflowService.deleteWorkflow(workflow.id);
       }
+
+      setWorkflows(prev => prev.filter(w => w.id !== workflow.id));
       
-      setSelectedWorkflow(workflow);
-      setActiveTab('visualization');
-    } catch (error) {
       toast({
-        title: "Erreur",
-        description: "Impossible de charger les détails du workflow",
-        variant: "destructive"
+        title: "Workflow supprimé",
+        description: `Le workflow "${workflow.name}" a été supprimé`,
       });
+      
+    } catch (error) {
+      console.error('❌ Erreur suppression workflow:', error);
+      toast({
+        variant: "destructive",
+        title: "Erreur de suppression",
+        description: "Impossible de supprimer le workflow",
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Actions projets
-  const createProject = async () => {
-    if (!newProject.name.trim()) {
-      toast({
-        title: "Erreur",
-        description: "Le nom du projet est requis",
-        variant: "destructive"
-      });
-      return;
-    }
+  // === GESTION DES EXÉCUTIONS ===
+  const loadExecutions = async () => {
+    if (!n8nConnected) return;
 
+    setLoading(true);
     try {
-      if (n8nApiService.isN8nAvailable()) {
-        await n8nApiService.createProject(newProject.name, newProject.type);
-        toast({
-          title: "Succès",
-          description: "Projet créé avec succès"
-        });
-        setNewProject({ name: '', type: 'team' });
-        await loadN8nProjects();
-      } else {
-        toast({
-          title: "Information",
-          description: "Les projets nécessitent une connexion n8n active",
-          variant: "default"
-        });
-      }
-    } catch (error) {
-      toast({
-        title: "Erreur",
-        description: "Échec de la création du projet",
-        variant: "destructive"
+      console.log('📊 Chargement exécutions...');
+      const result = await n8nApiService.getExecutions({ 
+        limit: 50,
+        includeData: false 
       });
+      setExecutions(result.data);
+      console.log(`✅ ${result.data.length} exécutions chargées`);
+    } catch (error) {
+      console.error('❌ Erreur chargement exécutions:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Actions utilisateurs
-  const createUser = async () => {
-    if (!newUser.email.trim()) {
-      toast({
-        title: "Erreur",
-        description: "L'email est requis",
-        variant: "destructive"
-      });
-      return;
-    }
+  const deleteExecution = async (execution: N8nExecution) => {
+    if (!n8nConnected) return;
 
+    setLoading(true);
     try {
-      if (n8nApiService.isN8nAvailable()) {
-        await n8nApiService.createUsers([newUser]);
-        toast({
-          title: "Succès",
-          description: "Utilisateur créé avec succès"
-        });
-        setNewUser({ email: '', role: 'global:member' });
-        await loadN8nUsers();
-      } else {
-        toast({
-          title: "Information",
-          description: "La gestion d'utilisateurs nécessite une connexion n8n active",
-          variant: "default"
-        });
-      }
-    } catch (error) {
+      console.log('🗑️ Suppression exécution:', execution.id);
+      await n8nApiService.deleteExecution(execution.id);
+      setExecutions(prev => prev.filter(e => e.id !== execution.id));
+      
       toast({
-        title: "Erreur",
-        description: "Échec de la création de l'utilisateur",
-        variant: "destructive"
+        title: "Exécution supprimée",
+        description: "L'exécution a été supprimée avec succès",
       });
+    } catch (error) {
+      console.error('❌ Erreur suppression exécution:', error);
+      toast({
+        variant: "destructive",
+        title: "Erreur",
+        description: "Impossible de supprimer l'exécution",
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Actions tags
-  const createTag = async () => {
-    if (!newTag.trim()) return;
-    
+  // === GESTION DES UTILISATEURS ===
+  const loadUsers = async () => {
+    if (!n8nConnected) return;
+
+    setLoading(true);
     try {
-      if (n8nApiService.isN8nAvailable()) {
-        await n8nApiService.createTag(newTag);
-        toast({
-          title: "Succès",
-          description: "Tag créé avec succès"
-        });
-        setNewTag('');
-        await loadN8nTags();
-      } else {
-        toast({
-          title: "Information",
-          description: "La gestion de tags nécessite une connexion n8n active",
-          variant: "default"
-        });
-      }
+      console.log('👥 Chargement utilisateurs...');
+      const result = await n8nApiService.getUsers({ limit: 100 });
+      setUsers(result.data);
+      console.log(`✅ ${result.data.length} utilisateurs chargés`);
     } catch (error) {
-      toast({
-        title: "Erreur",
-        description: "Échec de la création du tag",
-        variant: "destructive"
-      });
+      console.error('❌ Erreur chargement utilisateurs:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Actions variables
-  const createVariable = async () => {
-    if (!newVariable.key.trim() || !newVariable.value.trim()) {
-      toast({
-        title: "Erreur",
-        description: "Clé et valeur sont requises",
-        variant: "destructive"
-      });
-      return;
-    }
-    
+  // === GESTION DES PROJETS ===
+  const loadProjects = async () => {
+    if (!n8nConnected) return;
+
+    setLoading(true);
     try {
-      if (n8nApiService.isN8nAvailable()) {
-        await n8nApiService.createVariable(newVariable);
-        toast({
-          title: "Succès",
-          description: "Variable créée avec succès"
-        });
-        setNewVariable({ key: '', value: '', type: 'string' });
-        await loadN8nVariables();
-      } else {
-        toast({
-          title: "Information",
-          description: "La gestion de variables nécessite une connexion n8n active",
-          variant: "default"
-        });
-      }
+      console.log('📁 Chargement projets...');
+      const result = await n8nApiService.getProjects({ limit: 100 });
+      setProjects(result.data);
+      console.log(`✅ ${result.data.length} projets chargés`);
     } catch (error) {
+      console.error('❌ Erreur chargement projets:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const createProject = async (name: string) => {
+    if (!n8nConnected || !name.trim()) return;
+
+    setLoading(true);
+    try {
+      console.log('🚀 Création projet:', name);
+      const newProject = await n8nApiService.createProject(name);
+      setProjects(prev => [newProject, ...prev]);
+      
       toast({
-        title: "Erreur",
-        description: "Échec de la création de la variable",
-        variant: "destructive"
+        title: "Projet créé",
+        description: `Le projet "${newProject.name}" a été créé`,
       });
+    } catch (error) {
+      console.error('❌ Erreur création projet:', error);
+      toast({
+        variant: "destructive",
+        title: "Erreur",
+        description: "Impossible de créer le projet",
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
-  const getExecutionStatusIcon = (execution: N8nExecution) => {
-    if (!execution.finished) return <Clock className="w-4 h-4 text-yellow-500" />;
-    return execution.data?.success !== false ? 
-      <CheckCircle className="w-4 h-4 text-green-500" /> : 
-      <XCircle className="w-4 h-4 text-red-500" />;
-  };
+  // === GESTION DES CREDENTIALS ===
+  const loadCredentials = async () => {
+    if (!n8nConnected) return;
 
-  const getRiskSeverityColor = (risk: string) => {
-    switch (risk) {
-      case 'credentials': return 'text-red-600 bg-red-50';
-      case 'database': return 'text-orange-600 bg-orange-50';
-      case 'filesystem': return 'text-yellow-600 bg-yellow-50';
-      case 'nodes': return 'text-blue-600 bg-blue-50';
-      case 'execution': return 'text-purple-600 bg-purple-50';
-      default: return 'text-gray-600 bg-gray-50';
+    setLoading(true);
+    try {
+      console.log('🔑 Chargement credentials...');
+      // Note: L'API n8n ne permet pas de lister tous les credentials pour des raisons de sécurité
+      console.log('ℹ️ Les credentials ne peuvent pas être listés via l\'API pour des raisons de sécurité');
+    } catch (error) {
+      console.error('❌ Erreur chargement credentials:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
+  // === AUDIT ET SÉCURITÉ ===
+  const loadN8nAuditReports = async () => {
+    if (!n8nConnected) return;
+
+    setLoading(true);
+    try {
+      console.log('🔍 Génération rapport audit...');
+      const reports = await n8nApiService.generateAudit();
+      setAuditReports(reports);
+      console.log(`✅ ${reports.length} rapports d'audit générés`);
+      
+      toast({
+        title: "Audit généré",
+        description: `${reports.length} rapport(s) d'audit généré(s)`,
+      });
+    } catch (error) {
+      console.error('❌ Erreur génération audit:', error);
+      toast({
+        variant: "destructive",
+        title: "Erreur",
+        description: "Impossible de générer le rapport d'audit",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // === GESTION DES VARIABLES ===
+  const loadVariables = async () => {
+    if (!n8nConnected) return;
+
+    setLoading(true);
+    try {
+      console.log('🔧 Chargement variables...');
+      const result = await n8nApiService.getVariables({ limit: 100 });
+      setVariables(result.data);
+      console.log(`✅ ${result.data.length} variables chargées`);
+    } catch (error) {
+      console.error('❌ Erreur chargement variables:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // === FILTRAGE ET RECHERCHE ===
   const filteredWorkflows = workflows.filter(workflow => {
-    const matchesStatus = statusFilter === 'all' || (workflow.active ? 'active' : 'inactive') === statusFilter;
     const matchesSearch = workflow.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesTag = selectedTag === 'all' || workflow.tags?.some(tag => tag.name === selectedTag);
-    return matchesStatus && matchesSearch && matchesTag;
+    const matchesStatus = filterStatus === 'all' || 
+      (filterStatus === 'active' && workflow.active) ||
+      (filterStatus === 'inactive' && !workflow.active);
+    
+    return matchesSearch && matchesStatus;
   });
+
+  const getStatusIcon = (status: typeof connectionStatus) => {
+    switch (status) {
+      case 'checking': return <RefreshCw className="w-4 h-4 animate-spin" />;
+      case 'connected': return <CheckCircle className="w-4 h-4 text-green-500" />;
+      case 'disconnected': return <XCircle className="w-4 h-4 text-yellow-500" />;
+      case 'error': return <AlertTriangle className="w-4 h-4 text-red-500" />;
+    }
+  };
+
+  const getStatusText = (status: typeof connectionStatus) => {
+    switch (status) {
+      case 'checking': return 'Vérification...';
+      case 'connected': return 'n8n Connecté';
+      case 'disconnected': return 'Mode Local';
+      case 'error': return 'Erreur Connexion';
+    }
+  };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-wrap gap-4 justify-between items-center">
-        <div className="flex items-center space-x-4">
-          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
-            Gestionnaire n8n Avancé
-          </h2>
-          
-          {/* Statut de connexion n8n */}
-          <div className="flex items-center space-x-2">
-            {n8nAvailable ? (
-              <div className="flex items-center text-green-600">
-                <CheckCircle2 className="w-4 h-4 mr-1" />
-                <span className="text-sm">n8n Connecté</span>
-              </div>
-            ) : (
-              <div className="flex items-center text-orange-600">
-                <WifiOff className="w-4 h-4 mr-1" />
-                <span className="text-sm">Mode Local</span>
-              </div>
-            )}
-          </div>
+      {/* En-tête avec statut de connexion */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold">Gestionnaire n8n</h2>
+          <p className="text-slate-600">Gérez vos workflows et automatisations</p>
         </div>
         
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-2">
+            {getStatusIcon(connectionStatus)}
+            <span className="text-sm font-medium">{getStatusText(connectionStatus)}</span>
+          </div>
+          
           <Button 
             variant="outline" 
             size="sm" 
-            onClick={() => {
-              checkN8nAvailability();
-              loadAllData();
-            }}
-            disabled={isLoading}
+            onClick={checkN8nConnection}
+            disabled={loading}
           >
-            <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
             Actualiser
           </Button>
         </div>
       </div>
 
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-8">
           <TabsTrigger value="workflows">Workflows</TabsTrigger>
-          <TabsTrigger value="visualization">Visualisation</TabsTrigger>
           <TabsTrigger value="executions">Exécutions</TabsTrigger>
-          <TabsTrigger value="projects">Projets</TabsTrigger>
           <TabsTrigger value="users">Utilisateurs</TabsTrigger>
+          <TabsTrigger value="projects">Projets</TabsTrigger>
           <TabsTrigger value="credentials">Credentials</TabsTrigger>
+          <TabsTrigger value="variables">Variables</TabsTrigger>
           <TabsTrigger value="audit">Audit</TabsTrigger>
-          <TabsTrigger value="system">Système</TabsTrigger>
+          <TabsTrigger value="visualization">Visualisation</TabsTrigger>
         </TabsList>
 
-        {/* WORKFLOWS TAB */}
+        {/* === ONGLET WORKFLOWS === */}
         <TabsContent value="workflows" className="space-y-6">
-          {/* Filters */}
-          <div className="flex flex-wrap gap-4 justify-between items-center">
-            <div className="flex flex-wrap gap-2">
-              <div className="relative">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                <Input
-                  placeholder="Rechercher workflows..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 w-64"
-                />
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Workflows n8n</CardTitle>
+                  <CardDescription>
+                    Gérez vos workflows d'automatisation
+                  </CardDescription>
+                </div>
+                
+                <Button onClick={loadInitialData} disabled={loading}>
+                  <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                  Actualiser
+                </Button>
               </div>
-              
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-40">
-                  <SelectValue placeholder="Statut" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Tous</SelectItem>
-                  <SelectItem value="active">Actifs</SelectItem>
-                  <SelectItem value="inactive">Inactifs</SelectItem>
-                </SelectContent>
-              </Select>
+            </CardHeader>
+            
+            <CardContent className="space-y-6">
+              {/* Formulaire de création */}
+              <div className="grid gap-4 p-4 border rounded-lg bg-slate-50">
+                <h3 className="font-semibold">Créer un nouveau workflow</h3>
+                
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="workflow-name">Nom du workflow</Label>
+                    <Input
+                      id="workflow-name"
+                      value={newWorkflowData.name}
+                      onChange={(e) => setNewWorkflowData(prev => ({ ...prev, name: e.target.value }))}
+                      placeholder="Mon workflow automatisé"
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="workflow-description">Description</Label>
+                    <Input
+                      id="workflow-description"
+                      value={newWorkflowData.description}
+                      onChange={(e) => setNewWorkflowData(prev => ({ ...prev, description: e.target.value }))}
+                      placeholder="Description du workflow"
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="workflow-active">Actif</Label>
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        id="workflow-active"
+                        checked={newWorkflowData.active}
+                        onCheckedChange={(checked) => setNewWorkflowData(prev => ({ ...prev, active: checked }))}
+                      />
+                      <span className="text-sm">{newWorkflowData.active ? 'Actif' : 'Inactif'}</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <Button onClick={createWorkflow} disabled={loading || !newWorkflowData.name.trim()}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Créer le workflow
+                </Button>
+              </div>
 
-              {n8nAvailable && (
-                <Select value={selectedProject} onValueChange={setSelectedProject}>
+              {/* Filtres et recherche */}
+              <div className="flex items-center space-x-4">
+                <div className="flex-1">
+                  <div className="relative">
+                    <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+                    <Input
+                      placeholder="Rechercher un workflow..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+                
+                <Select value={filterStatus} onValueChange={(value: any) => setFilterStatus(value)}>
                   <SelectTrigger className="w-40">
-                    <SelectValue placeholder="Projet" />
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Tous les projets</SelectItem>
-                    {projects.map((project) => (
-                      <SelectItem key={project.id} value={project.id}>
-                        {project.name}
-                      </SelectItem>
-                    ))}
+                    <SelectItem value="all">Tous</SelectItem>
+                    <SelectItem value="active">Actifs</SelectItem>
+                    <SelectItem value="inactive">Inactifs</SelectItem>
                   </SelectContent>
                 </Select>
-              )}
-            </div>
+              </div>
 
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button className="flex items-center space-x-2">
-                  <Plus className="w-4 h-4" />
-                  <span>Créer Workflow</span>
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Créer un Nouveau Workflow</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <Input
-                    placeholder="Nom du workflow"
-                    value={newWorkflow.name}
-                    onChange={(e) => setNewWorkflow({...newWorkflow, name: e.target.value})}
-                  />
-                  <Textarea
-                    placeholder="Description (optionnelle)"
-                    value={newWorkflow.description}
-                    onChange={(e) => setNewWorkflow({...newWorkflow, description: e.target.value})}
-                  />
-                  <Button 
-                    onClick={createWorkflow} 
-                    className="w-full"
-                    disabled={isLoading}
-                  >
-                    {isLoading ? 'Création...' : 'Créer Workflow'}
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
-          </div>
-
-          {/* Workflows Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredWorkflows.map((workflow) => (
-              <Card key={workflow.id} className="hover:shadow-lg transition-shadow">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg truncate">{workflow.name}</CardTitle>
-                    <Badge variant={workflow.active ? 'default' : 'secondary'}>
-                      {workflow.active ? 'Actif' : 'Inactif'}
-                    </Badge>
+              {/* Liste des workflows */}
+              <div className="space-y-3">
+                {loading ? (
+                  <div className="text-center py-8">
+                    <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />
+                    <p className="text-slate-600">Chargement des workflows...</p>
                   </div>
-                  {workflow.tags && workflow.tags.length > 0 && (
-                    <div className="flex flex-wrap gap-1">
-                      {workflow.tags.map((tag) => (
-                        <Badge key={tag.id} variant="outline" className="text-xs">
-                          {tag.name}
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2 mb-4">
-                    <div className="flex justify-between text-sm">
-                      <span>Nœuds:</span>
-                      <span className="font-medium">{workflow.nodes?.length || 0}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span>Créé:</span>
-                      <span className="font-medium">
-                        {workflow.createdAt ? new Date(workflow.createdAt).toLocaleDateString() : 'N/A'}
-                      </span>
-                    </div>
+                ) : filteredWorkflows.length === 0 ? (
+                  <div className="text-center py-8 text-slate-600">
+                    <FileJson className="w-12 h-12 mx-auto mb-4 text-slate-400" />
+                    <p>Aucun workflow trouvé</p>
+                    {searchTerm && (
+                      <p className="text-sm">Essayez de modifier votre recherche</p>
+                    )}
                   </div>
-
-                  <div className="space-y-2">
-                    <div className="flex space-x-1">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => viewWorkflowDetails(workflow.id!)}
-                        className="flex-1"
-                      >
-                        <Eye className="w-3 h-3 mr-1" />
-                        Voir
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => toggleWorkflow(workflow.id!, workflow.active || false)}
-                        className="flex-1"
-                      >
-                        {workflow.active ? <Pause className="w-3 h-3 mr-1" /> : <Play className="w-3 h-3 mr-1" />}
-                        {workflow.active ? 'Stop' : 'Start'}
-                      </Button>
-                    </div>
-                    
-                    <div className="flex space-x-1">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {/* TODO: Duplicate */}}
-                        className="flex-1"
-                      >
-                        <Copy className="w-3 h-3 mr-1" />
-                        Dupliquer
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => deleteWorkflow(workflow.id!)}
-                        className="flex-1"
-                      >
-                        <Trash2 className="w-3 h-3 mr-1" />
-                        Suppr
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </TabsContent>
-
-        {/* VISUALIZATION TAB */}
-        <TabsContent value="visualization" className="space-y-6">
-          {selectedWorkflow ? (
-            <WorkflowVisualization
-              workflow={selectedWorkflow}
-              nodes={selectedWorkflow.nodes?.map(node => ({
-                id: node.id,
-                workflow_id: selectedWorkflow.id || '',
-                node_id: node.id,
-                node_type: node.type,
-                name: node.name,
-                position_x: node.position[0],
-                position_y: node.position[1],
-                parameters: node.parameters || {}
-              })) || []}
-              connections={Object.entries(selectedWorkflow.connections || {}).flatMap(([sourceId, conns]) =>
-                (conns.main || []).flatMap((connGroup, sourceIndex) =>
-                  connGroup.map((conn, targetIndex) => ({
-                    id: `${sourceId}-${conn.node}-${sourceIndex}-${targetIndex}`,
-                    workflow_id: selectedWorkflow.id || '',
-                    source_node_id: sourceId,
-                    target_node_id: conn.node,
-                    source_index: sourceIndex,
-                    target_index: conn.index,
-                    connection_type: conn.type
-                  }))
-                )
-              )}
-              onExecute={() => {/* TODO */}}
-              onDelete={() => deleteWorkflow(selectedWorkflow.id!)}
-            />
-          ) : (
-            <div className="text-center py-12">
-              <Monitor className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-slate-600 mb-2">
-                Aucun workflow sélectionné
-              </h3>
-              <p className="text-slate-500">
-                Sélectionnez un workflow dans l'onglet "Workflows" pour le visualiser
-              </p>
-            </div>
-          )}
-        </TabsContent>
-
-        {/* EXECUTIONS TAB */}
-        <TabsContent value="executions" className="space-y-6">
-          {!n8nAvailable ? (
-            <div className="text-center py-12">
-              <WifiOff className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-slate-600 mb-2">
-                Connexion n8n requise
-              </h3>
-              <p className="text-slate-500">
-                Les exécutions nécessitent une connexion active à n8n
-              </p>
-            </div>
-          ) : (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <Activity className="w-5 h-5" />
-                  <span>Historique des Exécutions</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {executions.map((execution) => (
-                    <div key={execution.id} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div className="flex items-center space-x-4">
-                        {getExecutionStatusIcon(execution)}
-                        <div>
-                          <p className="font-medium">Exécution #{execution.id}</p>
-                          <p className="text-sm text-gray-600">Workflow: {execution.workflowId}</p>
-                          <p className="text-xs text-gray-500">
-                            {new Date(execution.startedAt).toLocaleString()}
-                          </p>
+                ) : (
+                  filteredWorkflows.map((workflow) => (
+                    <div key={workflow.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-slate-50">
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-3">
+                          <div className="flex-1">
+                            <h4 className="font-medium">{workflow.name}</h4>
+                            <div className="flex items-center space-x-2 mt-1">
+                              <Badge variant={workflow.active ? "default" : "secondary"}>
+                                {workflow.active ? 'Actif' : 'Inactif'}
+                              </Badge>
+                              <span className="text-sm text-slate-600">
+                                {workflow.nodes?.length || 0} nœud(s)
+                              </span>
+                              {workflow.updatedAt && (
+                                <span className="text-sm text-slate-500">
+                                  Modifié: {new Date(workflow.updatedAt).toLocaleDateString()}
+                                </span>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       </div>
+                      
                       <div className="flex items-center space-x-2">
-                        <Badge variant={execution.finished ? 'default' : 'secondary'}>
-                          {execution.finished ? 'Terminé' : 'En cours'}
-                        </Badge>
-                        <Button size="sm" variant="outline">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSelectedWorkflow(workflow)}
+                        >
                           <Eye className="w-4 h-4" />
                         </Button>
+                        
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => toggleWorkflowStatus(workflow)}
+                          disabled={!n8nConnected}
+                        >
+                          {workflow.active ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                        </Button>
+                        
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => deleteWorkflow(workflow)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
                       </div>
                     </div>
-                  ))}
+                  ))
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* === ONGLET EXÉCUTIONS === */}
+        <TabsContent value="executions" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Exécutions</CardTitle>
+                  <CardDescription>
+                    Historique des exécutions de workflows
+                  </CardDescription>
                 </div>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-
-        {/* PROJECTS TAB */}
-        <TabsContent value="projects" className="space-y-6">
-          {!n8nAvailable ? (
-            <div className="text-center py-12">
-              <WifiOff className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-slate-600 mb-2">
-                Connexion n8n requise
-              </h3>
-            </div>
-          ) : (
-            <div className="flex justify-between items-center">
-              <h3 className="text-lg font-semibold">Gestion des Projets</h3>
-              <Dialog>
-                <DialogTrigger asChild>
-                  <Button>
-                    <Plus className="w-4 h-4 mr-2" />
-                    Nouveau Projet
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Créer un Projet</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <Input
-                      placeholder="Nom du projet"
-                      value={newProject.name}
-                      onChange={(e) => setNewProject({...newProject, name: e.target.value})}
-                    />
-                    <Select value={newProject.type} onValueChange={(value) => setNewProject({...newProject, type: value})}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="team">Équipe</SelectItem>
-                        <SelectItem value="personal">Personnel</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Button onClick={createProject} className="w-full">
-                      Créer Projet
-                    </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {projects.map((project) => (
-              <Card key={project.id}>
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <Folder className="w-4 h-4" />
-                      <span>{project.name}</span>
-                    </div>
-                    <Badge variant="outline">{project.type}</Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex justify-end space-x-2">
-                    <Button size="sm" variant="outline">
-                      <Edit className="w-4 h-4" />
-                    </Button>
-                    <Button size="sm" variant="destructive">
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </TabsContent>
-
-        {/* USERS TAB */}
-        <TabsContent value="users" className="space-y-6">
-          {!n8nAvailable ? (
-            <div className="text-center py-12">
-              <WifiOff className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-slate-600 mb-2">
-                Connexion n8n requise
-              </h3>
-            </div>
-          ) : (
-            <div className="flex justify-between items-center">
-              <h3 className="text-lg font-semibold">Gestion des Utilisateurs</h3>
-              <Dialog>
-                <DialogTrigger asChild>
-                  <Button>
-                    <UserPlus className="w-4 h-4 mr-2" />
-                    Nouvel Utilisateur
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Créer un Utilisateur</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <Input
-                      placeholder="Email"
-                      value={newUser.email}
-                      onChange={(e) => setNewUser({...newUser, email: e.target.value})}
-                    />
-                    <Select value={newUser.role} onValueChange={(value: any) => setNewUser({...newUser, role: value})}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="global:admin">Admin</SelectItem>
-                        <SelectItem value="global:member">Membre</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Button onClick={createUser} className="w-full">
-                      Créer Utilisateur
-                    </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
-            </div>
-          )}
-
-          <div className="space-y-4">
-            {users.map((user) => (
-              <Card key={user.id}>
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-4">
-                      <div className="w-10 h-10 bg-slate-200 rounded-full flex items-center justify-center">
-                        <Users className="w-5 h-5 text-slate-600" />
-                      </div>
-                      <div>
-                        <p className="font-medium">{user.firstName} {user.lastName}</p>
-                        <p className="text-sm text-gray-600">{user.email}</p>
-                        <div className="flex items-center space-x-2 mt-1">
-                          <Badge variant={user.role === 'global:admin' ? 'default' : 'secondary'}>
-                            {user.role === 'global:admin' ? 'Admin' : 'Membre'}
+                
+                <Button onClick={loadExecutions} disabled={loading || !n8nConnected}>
+                  <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                  Actualiser
+                </Button>
+              </div>
+            </CardHeader>
+            
+            <CardContent>
+              {!n8nConnected ? (
+                <div className="text-center py-8 text-slate-600">
+                  <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-yellow-500" />
+                  <p>Connexion n8n requise pour afficher les exécutions</p>
+                </div>
+              ) : executions.length === 0 ? (
+                <div className="text-center py-8 text-slate-600">
+                  <Activity className="w-12 h-12 mx-auto mb-4 text-slate-400" />
+                  <p>Aucune exécution trouvée</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {executions.map((execution) => (
+                    <div key={execution.id} className="flex items-center justify-between p-4 border rounded-lg">
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-3">
+                          <Badge variant={execution.finished ? "default" : "secondary"}>
+                            {execution.finished ? 'Terminé' : 'En cours'}
                           </Badge>
-                          {user.isPending && <Badge variant="outline">En attente</Badge>}
+                          <span className="font-medium">Workflow ID: {execution.workflowId}</span>
+                          <span className="text-sm text-slate-600">Mode: {execution.mode}</span>
+                        </div>
+                        <div className="mt-1 text-sm text-slate-500">
+                          Démarré: {new Date(execution.startedAt).toLocaleString()}
+                          {execution.stoppedAt && (
+                            <span> - Terminé: {new Date(execution.stoppedAt).toLocaleString()}</span>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center space-x-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => deleteExecution(execution)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* === ONGLET UTILISATEURS === */}
+        <TabsContent value="users" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Utilisateurs n8n</CardTitle>
+                  <CardDescription>
+                    Gestion des utilisateurs de l'instance n8n
+                  </CardDescription>
+                </div>
+                
+                <Button onClick={loadUsers} disabled={loading || !n8nConnected}>
+                  <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                  Actualiser
+                </Button>
+              </div>
+            </CardHeader>
+            
+            <CardContent>
+              {!n8nConnected ? (
+                <div className="text-center py-8 text-slate-600">
+                  <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-yellow-500" />
+                  <p>Connexion n8n requise pour gérer les utilisateurs</p>
+                </div>
+              ) : users.length === 0 ? (
+                <div className="text-center py-8 text-slate-600">
+                  <Users className="w-12 h-12 mx-auto mb-4 text-slate-400" />
+                  <p>Aucun utilisateur trouvé</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {users.map((user) => (
+                    <div key={user.id} className="flex items-center justify-between p-4 border rounded-lg">
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-3">
+                          <div>
+                            <h4 className="font-medium">
+                              {user.firstName && user.lastName 
+                                ? `${user.firstName} ${user.lastName}` 
+                                : user.email}
+                            </h4>
+                            <p className="text-sm text-slate-600">{user.email}</p>
+                          </div>
+                        </div>
+                        <div className="mt-2 flex items-center space-x-2">
+                          <Badge variant={user.isPending ? "secondary" : "default"}>
+                            {user.isPending ? 'En attente' : 'Actif'}
+                          </Badge>
+                          <Badge variant="outline">{user.role}</Badge>
+                          <span className="text-sm text-slate-500">
+                            Créé: {new Date(user.createdAt).toLocaleDateString()}
+                          </span>
                         </div>
                       </div>
                     </div>
-                    <div className="flex space-x-2">
-                      <Button size="sm" variant="outline">
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button size="sm" variant="destructive">
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
-        {/* AUDIT TAB */}
-        <TabsContent value="audit" className="space-y-6">
-          <div className="flex justify-between items-center">
-            <h3 className="text-lg font-semibold">Rapport d'Audit de Sécurité</h3>
-            <Button onClick={loadAuditReports}>
-              <Shield className="w-4 h-4 mr-2" />
-              Générer Audit
-            </Button>
-          </div>
-
-          <div className="space-y-4">
-            {auditReports.map((report, index) => (
-              <Card key={index} className={getRiskSeverityColor(report.risk)}>
-                <CardHeader>
-                  <CardTitle className="flex items-center space-x-2">
-                    <AlertTriangle className="w-5 h-5" />
-                    <span className="capitalize">{report.risk} Security Report</span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {report.sections.map((section, sectionIndex) => (
-                    <div key={sectionIndex} className="mb-4">
-                      <h4 className="font-semibold mb-2">{section.title}</h4>
-                      <p className="text-sm mb-2">{section.description}</p>
-                      <p className="text-sm font-medium mb-2">Recommandation: {section.recommendation}</p>
-                      {section.location.length > 0 && (
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium">Localisations:</p>
-                          {section.location.map((loc, locIndex) => (
-                            <div key={locIndex} className="text-xs bg-white/50 p-2 rounded">
-                              {loc.workflowName && <span>Workflow: {loc.workflowName} | </span>}
-                              {loc.nodeName && <span>Nœud: {loc.nodeName} | </span>}
-                              {loc.nodeType && <span>Type: {loc.nodeType}</span>}
-                            </div>
-                          ))}
+        {/* === ONGLET PROJETS === */}
+        <TabsContent value="projects" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Projets</CardTitle>
+                  <CardDescription>
+                    Organisation des workflows par projets
+                  </CardDescription>
+                </div>
+                
+                <Button onClick={loadProjects} disabled={loading || !n8nConnected}>
+                  <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                  Actualiser
+                </Button>
+              </div>
+            </CardHeader>
+            
+            <CardContent>
+              {!n8nConnected ? (
+                <div className="text-center py-8 text-slate-600">
+                  <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-yellow-500" />
+                  <p>Connexion n8n requise pour gérer les projets</p>
+                </div>
+              ) : projects.length === 0 ? (
+                <div className="text-center py-8 text-slate-600">
+                  <Database className="w-12 h-12 mx-auto mb-4 text-slate-400" />
+                  <p>Aucun projet trouvé</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {projects.map((project) => (
+                    <div key={project.id} className="flex items-center justify-between p-4 border rounded-lg">
+                      <div className="flex-1">
+                        <h4 className="font-medium">{project.name}</h4>
+                        <div className="mt-1">
+                          <Badge variant="outline">{project.type}</Badge>
                         </div>
-                      )}
+                      </div>
                     </div>
                   ))}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
-        {/* SYSTEM TAB */}
-        <TabsContent value="system" className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Tags */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <Tag className="w-5 h-5" />
-                    <span>Tags</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Input
-                      placeholder="Nom du tag"
-                      value={newTag}
-                      onChange={(e) => setNewTag(e.target.value)}
-                      className="w-32"
-                    />
-                    <Button size="sm" onClick={createTag}>
-                      <Plus className="w-4 h-4" />
+        {/* === ONGLET CREDENTIALS === */}
+        <TabsContent value="credentials" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Credentials</CardTitle>
+              <CardDescription>
+                Gestion des identifiants et connexions
+              </CardDescription>
+            </CardHeader>
+            
+            <CardContent>
+              <div className="text-center py-8 text-slate-600">
+                <Shield className="w-12 h-12 mx-auto mb-4 text-slate-400" />
+                <p>Les credentials ne peuvent pas être affichés pour des raisons de sécurité</p>
+                <p className="text-sm">Utilisez l'interface n8n pour gérer vos credentials</p>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* === ONGLET VARIABLES === */}
+        <TabsContent value="variables" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Variables d'environnement</CardTitle>
+                  <CardDescription>
+                    Variables globales de l'instance n8n
+                  </CardDescription>
+                </div>
+                
+                <Button onClick={loadVariables} disabled={loading || !n8nConnected}>
+                  <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                  Actualiser
+                </Button>
+              </div>
+            </CardHeader>
+            
+            <CardContent>
+              {!n8nConnected ? (
+                <div className="text-center py-8 text-slate-600">
+                  <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-yellow-500" />
+                  <p>Connexion n8n requise pour gérer les variables</p>
+                </div>
+              ) : variables.length === 0 ? (
+                <div className="text-center py-8 text-slate-600">
+                  <Settings className="w-12 h-12 mx-auto mb-4 text-slate-400" />
+                  <p>Aucune variable trouvée</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {variables.map((variable) => (
+                    <div key={variable.id} className="flex items-center justify-between p-4 border rounded-lg">
+                      <div className="flex-1">
+                        <h4 className="font-medium">{variable.key}</h4>
+                        <p className="text-sm text-slate-600">Type: {variable.type || 'string'}</p>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Badge variant="outline">Configuré</Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* === ONGLET AUDIT === */}
+        <TabsContent value="audit" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Audit de sécurité</CardTitle>
+                  <CardDescription>
+                    Rapports de sécurité et recommandations
+                  </CardDescription>
+                </div>
+                
+                <Button onClick={loadN8nAuditReports} disabled={loading || !n8nConnected}>
+                  <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                  Générer un audit
+                </Button>
+              </div>
+            </CardHeader>
+            
+            <CardContent>
+              {!n8nConnected ? (
+                <div className="text-center py-8 text-slate-600">
+                  <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-yellow-500" />
+                  <p>Connexion n8n requise pour l'audit de sécurité</p>
+                </div>
+              ) : auditReports.length === 0 ? (
+                <div className="text-center py-8 text-slate-600">
+                  <Shield className="w-12 h-12 mx-auto mb-4 text-slate-400" />
+                  <p>Aucun rapport d'audit disponible</p>
+                  <p className="text-sm">Cliquez sur "Générer un audit" pour commencer</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {auditReports.map((report, index) => (
+                    <div key={index} className="border rounded-lg p-4">
+                      <div className="flex items-center space-x-2 mb-3">
+                        <Badge variant={report.risk === 'high' ? "destructive" : report.risk === 'medium' ? "default" : "secondary"}>
+                          Risque: {report.risk}
+                        </Badge>
+                      </div>
+                      
+                      {report.sections.map((section, sectionIndex) => (
+                        <div key={sectionIndex} className="mb-4 last:mb-0">
+                          <h4 className="font-medium text-sm">{section.title}</h4>
+                          <p className="text-sm text-slate-600 mb-2">{section.description}</p>
+                          <p className="text-sm text-blue-600">{section.recommendation}</p>
+                          
+                          {section.location && section.location.length > 0 && (
+                            <div className="mt-2 space-y-1">
+                              {section.location.map((loc, locIndex) => (
+                                <div key={locIndex} className="text-xs text-slate-500 bg-slate-50 p-2 rounded">
+                                  {loc.workflowName && <span>Workflow: {loc.workflowName} | </span>}
+                                  {loc.nodeName && <span>Node: {loc.nodeName} | </span>}
+                                  {loc.nodeType && <span>Type: {loc.nodeType}</span>}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* === ONGLET VISUALISATION === */}
+        <TabsContent value="visualization" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Visualisation des workflows</CardTitle>
+              <CardDescription>
+                Interface graphique pour créer et modifier vos workflows
+              </CardDescription>
+            </CardHeader>
+            
+            <CardContent>
+              {selectedWorkflow ? (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-medium">Workflow: {selectedWorkflow.name}</h3>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setSelectedWorkflow(null)}
+                    >
+                      Fermer
                     </Button>
                   </div>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {tags.map((tag) => (
-                    <div key={tag.id} className="flex items-center justify-between p-2 border rounded">
-                      <span>{tag.name}</span>
-                      <Button size="sm" variant="destructive">
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  ))}
+                  
+                  <WorkflowVisualization 
+                    workflow={selectedWorkflow} 
+                    readonly={false}
+                    onWorkflowChange={(updatedWorkflow) => {
+                      setSelectedWorkflow(updatedWorkflow);
+                      // Mettre à jour dans la liste aussi
+                      setWorkflows(prev => 
+                        prev.map(w => w.id === updatedWorkflow.id ? updatedWorkflow : w)
+                      );
+                    }}
+                  />
                 </div>
-              </CardContent>
-            </Card>
-
-            {/* Variables */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <Database className="w-5 h-5" />
-                    <span>Variables</span>
-                  </div>
-                  <Dialog>
-                    <DialogTrigger asChild>
-                      <Button size="sm">
-                        <Plus className="w-4 h-4 mr-1" />
-                        Variable
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>Nouvelle Variable</DialogTitle>
-                      </DialogHeader>
-                      <div className="space-y-4">
-                        <Input
-                          placeholder="Clé"
-                          value={newVariable.key}
-                          onChange={(e) => setNewVariable({...newVariable, key: e.target.value})}
-                        />
-                        <Input
-                          placeholder="Valeur"
-                          value={newVariable.value}
-                          onChange={(e) => setNewVariable({...newVariable, value: e.target.value})}
-                        />
-                        <Button onClick={createVariable} className="w-full">
-                          Créer Variable
-                        </Button>
-                      </div>
-                    </DialogContent>
-                  </Dialog>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {variables.map((variable) => (
-                    <div key={variable.id} className="flex items-center justify-between p-2 border rounded">
-                      <div>
-                        <span className="font-medium">{variable.key}</span>
-                        <p className="text-xs text-gray-500 truncate">{variable.value}</p>
-                      </div>
-                      <div className="flex space-x-1">
-                        <Button size="sm" variant="outline">
-                          <Edit className="w-3 h-3" />
-                        </Button>
-                        <Button size="sm" variant="destructive">
-                          <Trash2 className="w-3 h-3" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+              ) : (
+                <div className="text-center py-8 text-slate-600">
+                  <FileJson className="w-12 h-12 mx-auto mb-4 text-slate-400" />
+                  <p>Sélectionnez un workflow dans l'onglet "Workflows" pour le visualiser</p>
                 </div>
-              </CardContent>
-            </Card>
-          </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

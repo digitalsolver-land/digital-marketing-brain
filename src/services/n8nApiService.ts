@@ -1,4 +1,4 @@
-import { API_CONFIG } from '@/config/api';
+import { getEffectiveN8nConfig } from '@/config/api';
 
 // Types complets basés sur l'API n8n
 export interface N8nWorkflow {
@@ -141,8 +141,6 @@ export interface N8nCredentialType {
 
 export class N8nApiService {
   private static instance: N8nApiService;
-  private apiKey = API_CONFIG.N8N.API_KEY;
-  private baseUrl = API_CONFIG.N8N.BASE_URL;
   private isAvailable = false;
 
   public static getInstance(): N8nApiService {
@@ -156,24 +154,46 @@ export class N8nApiService {
     this.checkAvailability();
   }
 
+  private getConfig() {
+    return getEffectiveN8nConfig();
+  }
+
   private async checkAvailability(): Promise<void> {
     try {
-      // Test de connexion simple
-      const response = await fetch(`${this.baseUrl}/workflows?limit=1`, {
+      const config = this.getConfig();
+      console.log('🔍 Test connexion n8n...', { baseUrl: config.baseUrl, hasApiKey: !!config.apiKey });
+      
+      if (!config.apiKey) {
+        console.warn('⚠️ Clé API n8n manquante');
+        this.isAvailable = false;
+        return;
+      }
+
+      // Test de connexion simple avec timeout court
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+      const response = await fetch(`${config.baseUrl}/workflows?limit=1`, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
+          'Authorization': `Bearer ${config.apiKey}`,
           'Content-Type': 'application/json'
         },
-        signal: AbortSignal.timeout(5000) // Timeout de 5 secondes
+        signal: controller.signal
       });
       
+      clearTimeout(timeoutId);
+      
       this.isAvailable = response.ok;
-      if (!this.isAvailable) {
-        console.warn('n8n API non accessible, mode local activé');
+      
+      if (this.isAvailable) {
+        console.log('✅ n8n connecté avec succès');
+      } else {
+        console.warn(`⚠️ n8n réponse invalide: ${response.status} ${response.statusText}`);
       }
+      
     } catch (error) {
-      console.warn('n8n API non disponible:', error);
+      console.warn('⚠️ n8n non disponible:', error instanceof Error ? error.message : error);
       this.isAvailable = false;
     }
   }
@@ -182,33 +202,69 @@ export class N8nApiService {
     return this.isAvailable;
   }
 
+  // Forcer une nouvelle vérification de disponibilité
+  public async recheckAvailability(): Promise<boolean> {
+    await this.checkAvailability();
+    return this.isAvailable;
+  }
+
   private async makeRequest(endpoint: string, options: RequestInit = {}): Promise<any> {
-    if (!this.isAvailable) {
-      throw new Error('Service n8n non disponible');
+    const config = this.getConfig();
+    
+    if (!config.apiKey) {
+      throw new Error('Clé API n8n manquante. Configurez votre clé API dans les paramètres.');
     }
 
-    const url = `${this.baseUrl}${endpoint}`;
+    const url = `${config.baseUrl}${endpoint}`;
     
     try {
+      console.log(`🔗 n8n API Request: ${options.method || 'GET'} ${endpoint}`);
+      
+      // Timeout plus long pour les opérations
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+
       const response = await fetch(url, {
         ...options,
         headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
+          'Authorization': `Bearer ${config.apiKey}`,
           'Content-Type': 'application/json',
           ...options.headers
         },
-        signal: AbortSignal.timeout(10000) // Timeout de 10 secondes
+        signal: controller.signal
       });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`n8n API Error (${response.status}): ${errorText}`);
+        console.error(`❌ n8n API Error (${response.status}):`, errorText);
+        
+        // Messages d'erreur plus informatifs
+        if (response.status === 401) {
+          throw new Error('Clé API n8n invalide. Vérifiez votre configuration.');
+        } else if (response.status === 403) {
+          throw new Error('Accès refusé. Vérifiez les permissions de votre clé API n8n.');
+        } else if (response.status === 404) {
+          throw new Error('Endpoint n8n non trouvé. Vérifiez l\'URL de votre instance n8n.');
+        } else {
+          throw new Error(`Erreur n8n (${response.status}): ${errorText}`);
+        }
       }
 
-      return await response.json();
+      const result = await response.json();
+      console.log(`✅ n8n API Success: ${options.method || 'GET'} ${endpoint}`);
+      return result;
+      
     } catch (error) {
-      console.error('n8n API Request failed:', error);
-      // Marquer comme non disponible en cas d'erreur
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.error('❌ n8n API Timeout:', endpoint);
+        throw new Error('Timeout de connexion n8n. Vérifiez votre réseau et l\'URL n8n.');
+      }
+      
+      console.error('❌ n8n API Request failed:', error);
+      
+      // Marquer comme non disponible en cas d'erreur réseau
       this.isAvailable = false;
       throw error;
     }

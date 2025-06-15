@@ -1,46 +1,62 @@
 
-// Configuration des APIs et clés
 export const API_CONFIG = {
   N8N: {
-    BASE_URL: 'https://n8n.io/api/v1',
-    API_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI5YzUxM2U4Yi1lZmVjLTQyZWEtOGE2NS05ZGNkMjA3NDBhMTQiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwiaWF0IjoxNzQ5NTE2MzEzLCJleHAiOjE3NTcyODI0MDB9.u8uPwxckTxV6RqE66YcSUYFY4WZtHIYTQpC_vQiPk0Y'
+    BASE_URL: process.env.VITE_N8N_BASE_URL || 'http://localhost:5678/api/v1',
+    API_KEY: process.env.VITE_N8N_API_KEY || '',
+    // Fallback pour les clés stockées dans les paramètres utilisateur
+    get EFFECTIVE_API_KEY() {
+      // Récupérer depuis les paramètres utilisateur si disponible
+      const userSettings = localStorage.getItem('n8n_user_settings');
+      if (userSettings) {
+        try {
+          const settings = JSON.parse(userSettings);
+          return settings.n8n_api_key || this.API_KEY;
+        } catch (error) {
+          console.warn('Erreur lecture paramètres n8n:', error);
+        }
+      }
+      return this.API_KEY;
+    }
   },
   OPENROUTER: {
-    BASE_URL: 'https://openrouter.ai/api/v1',
-    API_KEY: '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'
+    API_KEY: process.env.VITE_OPENROUTER_API_KEY || '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',
+    BASE_URL: 'https://openrouter.ai/api/v1'
   },
-  WHATSAPP: {
-    BASE_URL: 'https://graph.facebook.com/v18.0',
-    API_TOKEN: import.meta.env.VITE_WHATSAPP_API_TOKEN || '',
-    PHONE_NUMBER_ID: import.meta.env.VITE_WHATSAPP_PHONE_NUMBER_ID || '',
-    VERIFY_TOKEN: import.meta.env.VITE_WHATSAPP_VERIFY_TOKEN || ''
-  },
-  GOOGLE: {
-    ANALYTICS_API: import.meta.env.VITE_GOOGLE_ANALYTICS_API || '',
-    SEARCH_CONSOLE_API: import.meta.env.VITE_GOOGLE_SEARCH_CONSOLE_API || '',
-    ADS_API: import.meta.env.VITE_GOOGLE_ADS_API || ''
-  },
-  SOCIAL: {
-    FACEBOOK_API: import.meta.env.VITE_FACEBOOK_API || '',
-    TWITTER_API: import.meta.env.VITE_TWITTER_API || '',
-    LINKEDIN_API: import.meta.env.VITE_LINKEDIN_API || '',
-    INSTAGRAM_API: import.meta.env.VITE_INSTAGRAM_API || ''
+  POSTIZ: {
+    API_URL: process.env.VITE_POSTIZ_API_URL || 'https://api.postiz.com/public/v1',
+    API_KEY: process.env.VITE_POSTIZ_API_KEY || ''
   }
 };
 
-export const ENDPOINTS = {
-  N8N: {
-    WORKFLOWS: '/workflows',
-    EXECUTIONS: '/executions',
-    ACTIVE_WORKFLOWS: '/active-workflows'
-  },
-  AI: {
-    CHAT: '/chat/completions',
-    CONTENT_GENERATION: '/generate/content',
-    ANALYSIS: '/analyze'
-  },
-  WHATSAPP: {
-    SEND_MESSAGE: '/messages',
-    WEBHOOK: '/webhook'
+// Fonction pour mettre à jour les clés API depuis les paramètres utilisateur
+export const updateN8nConfig = (apiKey: string, baseUrl?: string) => {
+  const settings = {
+    n8n_api_key: apiKey,
+    n8n_base_url: baseUrl || API_CONFIG.N8N.BASE_URL
+  };
+  
+  localStorage.setItem('n8n_user_settings', JSON.stringify(settings));
+  console.log('✅ Configuration n8n mise à jour');
+};
+
+// Fonction pour récupérer la configuration effective
+export const getEffectiveN8nConfig = () => {
+  const userSettings = localStorage.getItem('n8n_user_settings');
+  
+  if (userSettings) {
+    try {
+      const settings = JSON.parse(userSettings);
+      return {
+        apiKey: settings.n8n_api_key || API_CONFIG.N8N.API_KEY,
+        baseUrl: settings.n8n_base_url || API_CONFIG.N8N.BASE_URL
+      };
+    } catch (error) {
+      console.warn('Erreur lecture paramètres n8n:', error);
+    }
   }
+  
+  return {
+    apiKey: API_CONFIG.N8N.API_KEY,
+    baseUrl: API_CONFIG.N8N.BASE_URL
+  };
 };
