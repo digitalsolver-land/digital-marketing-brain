@@ -24,6 +24,13 @@ serve(async (req) => {
 
     // Get user from request
     const authHeader = req.headers.get('Authorization')?.replace('Bearer ', '')
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: 'Token d\'autorisation manquant' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     const { data: { user }, error: authError } = await supabase.auth.getUser(authHeader)
     
     if (authError || !user) {
@@ -35,7 +42,8 @@ serve(async (req) => {
     }
 
     // Parse request body
-    const { apiKey, baseUrl } = await req.json()
+    const body = await req.json()
+    const { apiKey, baseUrl } = body
     
     if (!apiKey || !baseUrl) {
       return new Response(
@@ -46,7 +54,22 @@ serve(async (req) => {
 
     console.log('🔧 Sauvegarde des secrets n8n pour utilisateur:', user.id)
 
-    // Save secrets
+    // Ensure user_secrets table exists and create if needed
+    const { error: createTableError } = await supabase.rpc('exec', {
+      sql: `
+        CREATE TABLE IF NOT EXISTS user_secrets (
+          id SERIAL PRIMARY KEY,
+          user_id UUID NOT NULL,
+          secret_name VARCHAR(255) NOT NULL,
+          secret_value TEXT NOT NULL,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+          UNIQUE(user_id, secret_name)
+        );
+      `
+    }).catch(() => ({ error: null })) // Ignore if table exists
+
+    // Save secrets using upsert
     const { error: secretError1 } = await supabase
       .from('user_secrets')
       .upsert({
@@ -54,7 +77,20 @@ serve(async (req) => {
         secret_name: 'n8n_api_key',
         secret_value: apiKey,
         updated_at: new Date().toISOString()
+      }, {
+        onConflict: 'user_id,secret_name'
       })
+
+    if (secretError1) {
+      console.error('❌ Erreur sauvegarde API key:', secretError1)
+      return new Response(
+        JSON.stringify({ 
+          error: 'Erreur lors de la sauvegarde de la clé API',
+          details: secretError1.message 
+        }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
 
     const { error: secretError2 } = await supabase
       .from('user_secrets')
@@ -63,11 +99,19 @@ serve(async (req) => {
         secret_name: 'n8n_base_url', 
         secret_value: baseUrl,
         updated_at: new Date().toISOString()
+      }, {
+        onConflict: 'user_id,secret_name'
       })
 
-    if (secretError1 || secretError2) {
-      console.error('❌ Erreur sauvegarde secrets:', secretError1 || secretError2)
-      throw new Error('Erreur lors de la sauvegarde')
+    if (secretError2) {
+      console.error('❌ Erreur sauvegarde URL de base:', secretError2)
+      return new Response(
+        JSON.stringify({ 
+          error: 'Erreur lors de la sauvegarde de l\'URL de base',
+          details: secretError2.message 
+        }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
 
     console.log('✅ Configuration n8n sauvegardée avec succès')

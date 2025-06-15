@@ -24,6 +24,13 @@ serve(async (req) => {
 
     // Get user from request
     const authHeader = req.headers.get('Authorization')?.replace('Bearer ', '')
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: 'Token d\'autorisation manquant' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     const { data: { user }, error: authError } = await supabase.auth.getUser(authHeader)
     
     if (authError || !user) {
@@ -41,14 +48,24 @@ serve(async (req) => {
       .eq('user_id', user.id)
       .in('secret_name', ['n8n_api_key', 'n8n_base_url'])
 
-    if (secretsError) {
-      console.error('❌ Erreur récupération secrets:', secretsError)
-      throw new Error('Erreur lors de la récupération des secrets')
+    // If table doesn't exist or no secrets found, return defaults
+    if (secretsError || !secrets) {
+      console.log('📋 Aucun secret trouvé, utilisation des valeurs par défaut')
+      return new Response(
+        JSON.stringify({
+          n8n_api_key: null,
+          n8n_base_url: 'https://n8n.srv860213.hstgr.cloud/api/v1'
+        }),
+        { 
+          status: 200, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      )
     }
 
     // Format secrets for response
     const secretsMap: Record<string, string> = {}
-    secrets?.forEach(secret => {
+    secrets.forEach(secret => {
       secretsMap[secret.secret_name] = secret.secret_value
     })
 

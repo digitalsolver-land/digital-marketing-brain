@@ -1,5 +1,6 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.50.0'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -15,9 +16,58 @@ serve(async (req) => {
   try {
     console.log('🔍 Test de connexion n8n démarré');
     
-    // Récupérer les secrets depuis Supabase
-    const n8nApiKey = Deno.env.get('N8N_API_KEY');
-    const n8nBaseUrl = Deno.env.get('N8N_BASE_URL') || 'https://n8n.srv860213.hstgr.cloud/api/v1';
+    // Create Supabase client
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    )
+
+    // Get user from request
+    const authHeader = req.headers.get('Authorization')?.replace('Bearer ', '')
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: 'Token d\'autorisation manquant' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser(authHeader)
+    
+    if (authError || !user) {
+      console.error('❌ Erreur auth:', authError)
+      return new Response(
+        JSON.stringify({ error: 'Non autorisé' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Get user secrets
+    const { data: secrets, error: secretsError } = await supabase
+      .from('user_secrets')
+      .select('secret_name, secret_value')
+      .eq('user_id', user.id)
+      .in('secret_name', ['n8n_api_key', 'n8n_base_url'])
+
+    if (secretsError) {
+      console.error('❌ Erreur récupération secrets:', secretsError)
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Erreur lors de la récupération des secrets',
+        details: secretsError.message
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Format secrets
+    const secretsMap: Record<string, string> = {}
+    secrets?.forEach(secret => {
+      secretsMap[secret.secret_name] = secret.secret_value
+    })
+
+    const n8nApiKey = secretsMap.n8n_api_key
+    const n8nBaseUrl = secretsMap.n8n_base_url || 'https://n8n.srv860213.hstgr.cloud/api/v1'
     
     console.log('📋 Configuration détectée:', {
       hasApiKey: !!n8nApiKey,
@@ -29,8 +79,8 @@ serve(async (req) => {
       console.error('❌ Clé API n8n manquante');
       return new Response(JSON.stringify({
         success: false,
-        error: 'N8N_API_KEY secret manquant dans Supabase',
-        details: 'Vérifiez que la clé API est bien configurée dans les secrets Supabase'
+        error: 'Clé API n8n manquante',
+        details: 'Veuillez configurer votre clé API n8n'
       }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
