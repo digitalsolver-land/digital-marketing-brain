@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -30,7 +29,7 @@ import {
   AlertCircle,
   Eye,
   Copy,
-  sync,
+  RefreshCw as Sync,
   BarChart3,
   Layers
 } from 'lucide-react';
