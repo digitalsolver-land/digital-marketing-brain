@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -14,10 +13,9 @@ import { useToast } from '@/hooks/use-toast';
 import { User, Mail, Building2, Calendar, Shield, Save, Upload } from 'lucide-react';
 
 const Profile = () => {
-  const { user, profile, updateProfile } = useAuth();
+  const { user, profile, updateProfile, userRoles, loading } = useAuth();
   const { toast } = useToast();
-  const [loading, setLoading] = useState(false);
-  const [userRoles, setUserRoles] = useState<string[]>([]);
+  const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     first_name: '',
     last_name: '',
@@ -34,28 +32,11 @@ const Profile = () => {
         avatar_url: profile.avatar_url || ''
       });
     }
-    fetchUserRoles();
   }, [profile]);
-
-  const fetchUserRoles = async () => {
-    if (!user) return;
-    
-    try {
-      const { data, error } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', user.id);
-
-      if (error) throw error;
-      setUserRoles(data.map(r => r.role));
-    } catch (error) {
-      console.error('Error fetching user roles:', error);
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    setSubmitting(true);
 
     try {
       const { error } = await updateProfile(formData);
@@ -72,7 +53,7 @@ const Profile = () => {
         description: error.message,
       });
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
@@ -86,8 +67,34 @@ const Profile = () => {
     }
   };
 
-  if (!user || !profile) {
-    return <div>Chargement...</div>;
+  // Si en cours de chargement
+  if (loading) {
+    return (
+      <div className="container mx-auto p-6 max-w-4xl">
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+            <p className="text-slate-600">Chargement du profil...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Si pas d'utilisateur connecté
+  if (!user) {
+    return (
+      <div className="container mx-auto p-6 max-w-4xl">
+        <div className="text-center py-12">
+          <h2 className="text-2xl font-bold text-slate-900 mb-4">
+            Accès non autorisé
+          </h2>
+          <p className="text-slate-600">
+            Vous devez être connecté pour accéder à cette page.
+          </p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -133,7 +140,7 @@ const Profile = () => {
                 <Calendar className="w-4 h-4 text-slate-500" />
                 <span className="text-slate-600">Membre depuis</span>
                 <span className="font-medium">
-                  {new Date(profile.created_at).toLocaleDateString('fr-FR')}
+                  {profile ? new Date(profile.created_at).toLocaleDateString('fr-FR') : 'N/A'}
                 </span>
               </div>
               <div className="flex items-center gap-2 text-sm">
@@ -234,9 +241,9 @@ const Profile = () => {
                 <Separator />
 
                 <div className="flex justify-end">
-                  <Button type="submit" disabled={loading}>
+                  <Button type="submit" disabled={submitting}>
                     <Save className="w-4 h-4 mr-2" />
-                    {loading ? 'Sauvegarde...' : 'Sauvegarder'}
+                    {submitting ? 'Sauvegarde...' : 'Sauvegarder'}
                   </Button>
                 </div>
               </form>

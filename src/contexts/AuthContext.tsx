@@ -67,12 +67,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setTimeout(() => {
             fetchUserProfile(session.user.id);
             fetchUserRoles(session.user.id);
-          }, 0);
+          }, 100);
         } else {
           setProfile(null);
           setUserRoles([]);
+          setLoading(false);
         }
-        setLoading(false);
       }
     );
 
@@ -83,8 +83,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (session?.user) {
         fetchUserProfile(session.user.id);
         fetchUserRoles(session.user.id);
+      } else {
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => subscription.unsubscribe();
@@ -92,6 +93,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const createProfile = async (userId: string, email: string, firstName?: string, lastName?: string) => {
     try {
+      console.log('Creating profile for user:', userId);
       const { data, error } = await supabase
         .from('profiles')
         .insert({
@@ -104,16 +106,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error creating profile:', error);
+        throw error;
+      }
+      
+      console.log('Profile created successfully:', data);
       return data;
     } catch (error) {
-      console.error('Error creating profile:', error);
+      console.error('Error in createProfile:', error);
       throw error;
     }
   };
 
   const fetchUserProfile = async (userId: string) => {
     try {
+      console.log('Fetching profile for user:', userId);
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -122,6 +130,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (error) {
         console.error('Error fetching profile:', error);
+        setLoading(false);
         return;
       }
 
@@ -139,16 +148,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } catch (createError) {
           console.error('Error creating profile:', createError);
         }
-      } else {
+      } else if (data) {
+        console.log('Profile found:', data);
         setProfile(data);
       }
+      
+      setLoading(false);
     } catch (error) {
-      console.error('Error fetching profile:', error);
+      console.error('Error in fetchUserProfile:', error);
+      setLoading(false);
     }
   };
 
   const fetchUserRoles = async (userId: string) => {
     try {
+      console.log('Fetching roles for user:', userId);
       const { data, error } = await supabase
         .from('user_roles')
         .select('role')
@@ -159,7 +173,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
-      const roles = data.map(r => r.role);
+      const roles = data?.map(r => r.role) || [];
+      console.log('User roles:', roles);
       setUserRoles(roles);
     } catch (error) {
       console.error('Error fetching roles:', error);
