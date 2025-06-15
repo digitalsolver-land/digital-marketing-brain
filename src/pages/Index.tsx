@@ -8,6 +8,7 @@ import { WorkflowManager } from '@/components/workflows/WorkflowManager';
 import { AIChat } from '@/components/ai/AIChat';
 import { ContentGenerator } from '@/components/content/ContentGenerator';
 import { AnalyticsDashboard } from '@/components/analytics/AnalyticsDashboard';
+import { WhatsAppManager } from '@/components/whatsapp/WhatsAppManager';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -48,6 +49,9 @@ const Index = () => {
 
       case 'analytics':
         return <AnalyticsDashboard />;
+
+      case 'whatsapp':
+        return <WhatsAppManager />;
 
       case 'campaigns':
         return (
