@@ -1,75 +1,43 @@
+import { supabase } from '@/integrations/supabase/client';
 import { getEffectiveN8nConfig } from '@/config/api';
 
-// Types complets basés sur l'API n8n
 export interface N8nWorkflow {
   id?: string;
   name: string;
-  active?: boolean;
-  nodes: N8nNode[];
-  connections: N8nConnections;
-  settings?: N8nWorkflowSettings;
-  staticData?: any;
-  createdAt?: string;
-  updatedAt?: string;
-  tags?: N8nTag[];
-}
-
-export interface N8nNode {
-  id: string;
-  name: string;
-  webhookId?: string;
-  disabled?: boolean;
-  notesInFlow?: boolean;
-  notes?: string;
-  type: string;
-  typeVersion?: number;
-  executeOnce?: boolean;
-  alwaysOutputData?: boolean;
-  retryOnFail?: boolean;
-  maxTries?: number;
-  waitBetweenTries?: number;
-  continueOnFail?: boolean;
-  onError?: string;
-  position: [number, number];
-  parameters?: any;
-  credentials?: { [key: string]: { id: string; name: string } };
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-export interface N8nConnections {
-  [nodeId: string]: {
-    main?: Array<Array<{
-      node: string;
-      type: string;
-      index: number;
-    }>>;
+  active: boolean;
+  nodes?: Array<{
+    id?: string;
+    name?: string;
+    type?: string;
+    typeVersion?: number;
+    position?: [number, number];
+    parameters?: any;
+    credentials?: any;
+  }>;
+  connections?: {
+    [key: string]: {
+      main?: Array<Array<{
+        node: string;
+        type: string;
+        index: number;
+      }>>;
+    };
   };
-}
-
-export interface N8nWorkflowSettings {
-  saveExecutionProgress?: boolean;
-  saveManualExecutions?: boolean;
-  saveDataErrorExecution?: 'all' | 'none';
-  saveDataSuccessExecution?: 'all' | 'none';
-  executionTimeout?: number;
-  errorWorkflow?: string;
-  timezone?: string;
-  executionOrder?: 'v0' | 'v1';
+  settings?: any;
+  staticData?: any;
+  tags?: Array<{ id: string; name: string }>;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface N8nExecution {
-  id: number;
-  data?: any;
-  finished: boolean;
+  id: string;
+  workflowId: string;
   mode: string;
-  retryOf?: number;
-  retrySuccessId?: string;
+  finished: boolean;
   startedAt: string;
   stoppedAt?: string;
-  workflowId: string;
-  waitTill?: string;
-  customData?: any;
+  data?: any;
 }
 
 export interface N8nUser {
@@ -77,33 +45,9 @@ export interface N8nUser {
   email: string;
   firstName?: string;
   lastName?: string;
+  role: string;
   isPending: boolean;
   createdAt: string;
-  updatedAt: string;
-  role: string;
-}
-
-export interface N8nCredential {
-  id: string;
-  name: string;
-  type: string;
-  data: any;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface N8nTag {
-  id: string;
-  name: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface N8nVariable {
-  id: string;
-  key: string;
-  value: string;
-  type?: string;
 }
 
 export interface N8nProject {
@@ -112,36 +56,53 @@ export interface N8nProject {
   type: string;
 }
 
+export interface N8nCredential {
+  id: string;
+  name: string;
+  type: string;
+}
+
+export interface N8nTag {
+  id: string;
+  name: string;
+}
+
+export interface N8nVariable {
+  id: string;
+  key: string;
+  type?: string;
+  value?: string;
+}
+
 export interface N8nAuditReport {
-  risk: string;
+  risk: 'low' | 'medium' | 'high';
   sections: Array<{
     title: string;
     description: string;
     recommendation: string;
-    location: Array<{
-      kind: string;
-      id?: string;
-      name?: string;
-      workflowId?: string;
+    location?: Array<{
       workflowName?: string;
-      nodeId?: string;
       nodeName?: string;
       nodeType?: string;
-      packageUrl?: string;
     }>;
   }>;
 }
 
-export interface N8nCredentialType {
-  displayName: string;
-  name: string;
-  type: string;
-  default: boolean;
+export interface PaginatedResponse<T> {
+  data: T[];
+  nextCursor?: string;
 }
 
-export class N8nApiService {
+export interface RequestOptions {
+  limit?: number;
+  cursor?: string;
+  includeData?: boolean;
+}
+
+class N8nApiService {
   private static instance: N8nApiService;
-  private isAvailable = false;
+  private readonly REQUEST_TIMEOUT = 10000; // 10 secondes
+  private readonly MAX_RETRIES = 3;
 
   public static getInstance(): N8nApiService {
     if (!N8nApiService.instance) {
@@ -150,164 +111,142 @@ export class N8nApiService {
     return N8nApiService.instance;
   }
 
-  constructor() {
-    this.checkAvailability();
-  }
-
-  private getConfig() {
-    return getEffectiveN8nConfig();
-  }
-
-  private async checkAvailability(): Promise<void> {
+  private async getApiConfig() {
     try {
-      const config = this.getConfig();
-      console.log('🔍 Test connexion n8n...', { baseUrl: config.baseUrl, hasApiKey: !!config.apiKey });
-      
-      if (!config.apiKey) {
-        console.warn('⚠️ Clé API n8n manquante');
-        this.isAvailable = false;
-        return;
+      // Essayer d'abord de récupérer depuis Supabase
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: settings } = await supabase
+          .from('app_settings')
+          .select('n8n_api_key')
+          .eq('user_id', user.id)
+          .single();
+        
+        if (settings?.n8n_api_key) {
+          console.log('✅ Clé API n8n récupérée depuis Supabase');
+          return {
+            baseUrl: 'http://localhost:5678/api/v1',
+            apiKey: settings.n8n_api_key
+          };
+        }
       }
-
-      // Test de connexion simple avec timeout court
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
-
-      const response = await fetch(`${config.baseUrl}/workflows?limit=1`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${config.apiKey}`,
-          'Content-Type': 'application/json'
-        },
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeoutId);
-      
-      this.isAvailable = response.ok;
-      
-      if (this.isAvailable) {
-        console.log('✅ n8n connecté avec succès');
-      } else {
-        console.warn(`⚠️ n8n réponse invalide: ${response.status} ${response.statusText}`);
-      }
-      
     } catch (error) {
-      console.warn('⚠️ n8n non disponible:', error instanceof Error ? error.message : error);
-      this.isAvailable = false;
+      console.warn('⚠️ Impossible de récupérer la config depuis Supabase:', error);
     }
+
+    // Fallback sur la configuration locale
+    const config = getEffectiveN8nConfig();
+    console.log('📋 Utilisation configuration locale n8n');
+    return config;
   }
 
-  public isN8nAvailable(): boolean {
-    return this.isAvailable;
-  }
-
-  // Forcer une nouvelle vérification de disponibilité
-  public async recheckAvailability(): Promise<boolean> {
-    await this.checkAvailability();
-    return this.isAvailable;
-  }
-
-  private async makeRequest(endpoint: string, options: RequestInit = {}): Promise<any> {
-    const config = this.getConfig();
+  private async makeRequest<T>(
+    endpoint: string, 
+    options: RequestInit = {},
+    retryCount = 0
+  ): Promise<T> {
+    const { baseUrl, apiKey } = await this.getApiConfig();
     
-    if (!config.apiKey) {
+    if (!apiKey) {
       throw new Error('Clé API n8n manquante. Configurez votre clé API dans les paramètres.');
     }
 
-    const url = `${config.baseUrl}${endpoint}`;
-    
-    try {
-      console.log(`🔗 n8n API Request: ${options.method || 'GET'} ${endpoint}`);
-      
-      // Timeout plus long pour les opérations
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const url = `${baseUrl}${endpoint}`;
+    console.log(`🌐 Requête n8n: ${options.method || 'GET'} ${url}`);
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.REQUEST_TIMEOUT);
+
+    try {
       const response = await fetch(url, {
         ...options,
+        signal: controller.signal,
         headers: {
-          'Authorization': `Bearer ${config.apiKey}`,
           'Content-Type': 'application/json',
-          ...options.headers
+          'X-N8N-API-KEY': apiKey,
+          ...options.headers,
         },
-        signal: controller.signal
       });
 
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`❌ n8n API Error (${response.status}):`, errorText);
+        const errorText = await response.text().catch(() => 'Erreur inconnue');
         
-        // Messages d'erreur plus informatifs
+        // Gestion des erreurs spécifiques
         if (response.status === 401) {
-          throw new Error('Clé API n8n invalide. Vérifiez votre configuration.');
+          throw new Error('Clé API n8n invalide ou expirée');
         } else if (response.status === 403) {
-          throw new Error('Accès refusé. Vérifiez les permissions de votre clé API n8n.');
+          throw new Error('Accès refusé - vérifiez les permissions de la clé API');
         } else if (response.status === 404) {
-          throw new Error('Endpoint n8n non trouvé. Vérifiez l\'URL de votre instance n8n.');
+          throw new Error('Endpoint API n8n non trouvé');
+        } else if (response.status >= 500) {
+          throw new Error('Erreur serveur n8n');
         } else {
-          throw new Error(`Erreur n8n (${response.status}): ${errorText}`);
+          throw new Error(`Erreur API n8n (${response.status}): ${errorText}`);
         }
       }
 
-      const result = await response.json();
-      console.log(`✅ n8n API Success: ${options.method || 'GET'} ${endpoint}`);
-      return result;
-      
+      const data = await response.json();
+      console.log(`✅ Requête n8n réussie: ${options.method || 'GET'} ${url}`);
+      return data;
+
     } catch (error) {
+      clearTimeout(timeoutId);
+      
       if (error instanceof Error && error.name === 'AbortError') {
-        console.error('❌ n8n API Timeout:', endpoint);
-        throw new Error('Timeout de connexion n8n. Vérifiez votre réseau et l\'URL n8n.');
+        throw new Error('Timeout de la requête n8n (10s)');
       }
-      
-      console.error('❌ n8n API Request failed:', error);
-      
-      // Marquer comme non disponible en cas d'erreur réseau
-      this.isAvailable = false;
+
+      // Retry logic pour les erreurs réseau
+      if (retryCount < this.MAX_RETRIES && 
+          (error instanceof TypeError || 
+           (error instanceof Error && error.message.includes('fetch')))) {
+        console.warn(`⚠️ Tentative ${retryCount + 1}/${this.MAX_RETRIES} échouée, retry...`);
+        await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
+        return this.makeRequest(endpoint, options, retryCount + 1);
+      }
+
+      console.error(`❌ Erreur requête n8n: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
       throw error;
     }
   }
 
-  // ==================== WORKFLOWS ====================
-  
-  async getWorkflows(params?: {
-    active?: boolean;
-    tags?: string;
-    name?: string;
-    projectId?: string;
-    excludePinnedData?: boolean;
-    limit?: number;
-    cursor?: string;
-  }): Promise<{ data: N8nWorkflow[]; nextCursor?: string }> {
-    const searchParams = new URLSearchParams();
-    if (params?.active !== undefined) searchParams.append('active', params.active.toString());
-    if (params?.tags) searchParams.append('tags', params.tags);
-    if (params?.name) searchParams.append('name', params.name);
-    if (params?.projectId) searchParams.append('projectId', params.projectId);
-    if (params?.excludePinnedData) searchParams.append('excludePinnedData', params.excludePinnedData.toString());
-    if (params?.limit) searchParams.append('limit', params.limit.toString());
-    if (params?.cursor) searchParams.append('cursor', params.cursor);
-
-    const queryString = searchParams.toString();
-    const endpoint = `/workflows${queryString ? '?' + queryString : ''}`;
-    
-    return await this.makeRequest(endpoint);
+  async isN8nAvailable(): Promise<boolean> {
+    try {
+      console.log('🔍 Test de disponibilité n8n...');
+      await this.makeRequest('/workflows?limit=1');
+      console.log('✅ n8n disponible');
+      return true;
+    } catch (error) {
+      console.warn('⚠️ n8n non disponible:', error instanceof Error ? error.message : error);
+      return false;
+    }
   }
 
-  async getWorkflow(id: string, excludePinnedData?: boolean): Promise<N8nWorkflow> {
-    const searchParams = new URLSearchParams();
-    if (excludePinnedData) searchParams.append('excludePinnedData', 'true');
+  // === WORKFLOWS ===
+  async getWorkflows(options: RequestOptions = {}): Promise<PaginatedResponse<N8nWorkflow>> {
+    const params = new URLSearchParams();
+    if (options.limit) params.append('limit', options.limit.toString());
+    if (options.cursor) params.append('cursor', options.cursor);
     
-    const queryString = searchParams.toString();
-    const endpoint = `/workflows/${id}${queryString ? '?' + queryString : ''}`;
+    const queryString = params.toString();
+    const endpoint = `/workflows${queryString ? `?${queryString}` : ''}`;
     
-    return await this.makeRequest(endpoint);
+    const response = await this.makeRequest<{ data: N8nWorkflow[]; nextCursor?: string }>(endpoint);
+    
+    return {
+      data: response.data || [],
+      nextCursor: response.nextCursor
+    };
+  }
+
+  async getWorkflow(id: string): Promise<N8nWorkflow> {
+    return this.makeRequest<N8nWorkflow>(`/workflows/${id}`);
   }
 
   async createWorkflow(workflow: Partial<N8nWorkflow>): Promise<N8nWorkflow> {
-    // Validation des données obligatoires
+    // Validation des données avant envoi
     if (!workflow.name?.trim()) {
       throw new Error('Le nom du workflow est requis');
     }
@@ -316,309 +255,253 @@ export class N8nApiService {
       throw new Error('Au moins un nœud est requis');
     }
 
-    // Workflow valide par défaut
-    const validWorkflow = {
-      name: workflow.name,
-      nodes: workflow.nodes,
+    console.log('🚀 Création workflow n8n:', workflow.name);
+    
+    const workflowData = {
+      name: workflow.name.trim(),
+      nodes: workflow.nodes || [],
       connections: workflow.connections || {},
-      settings: workflow.settings || {
-        saveExecutionProgress: true,
-        saveManualExecutions: true,
-        saveDataErrorExecution: 'all' as const,
-        saveDataSuccessExecution: 'all' as const,
-        executionTimeout: 3600,
-        timezone: 'Europe/Paris'
-      },
-      active: false,
-      staticData: {},
+      active: workflow.active || false,
+      settings: workflow.settings || {},
+      staticData: workflow.staticData || {},
       tags: workflow.tags || []
     };
 
-    return await this.makeRequest('/workflows', {
+    return this.makeRequest<N8nWorkflow>('/workflows', {
       method: 'POST',
-      body: JSON.stringify(validWorkflow)
+      body: JSON.stringify(workflowData),
     });
   }
 
   async updateWorkflow(id: string, workflow: Partial<N8nWorkflow>): Promise<N8nWorkflow> {
-    return await this.makeRequest(`/workflows/${id}`, {
+    if (!id) throw new Error('ID du workflow requis');
+    
+    console.log('🔄 Mise à jour workflow n8n:', id);
+    return this.makeRequest<N8nWorkflow>(`/workflows/${id}`, {
       method: 'PUT',
-      body: JSON.stringify(workflow)
+      body: JSON.stringify(workflow),
     });
   }
 
-  async deleteWorkflow(id: string): Promise<N8nWorkflow> {
-    return await this.makeRequest(`/workflows/${id}`, {
-      method: 'DELETE'
+  async deleteWorkflow(id: string): Promise<void> {
+    if (!id) throw new Error('ID du workflow requis');
+    
+    console.log('🗑️ Suppression workflow n8n:', id);
+    await this.makeRequest<void>(`/workflows/${id}`, {
+      method: 'DELETE',
     });
   }
 
   async activateWorkflow(id: string): Promise<N8nWorkflow> {
-    return await this.makeRequest(`/workflows/${id}/activate`, {
-      method: 'POST'
+    if (!id) throw new Error('ID du workflow requis');
+    
+    console.log('▶️ Activation workflow n8n:', id);
+    return this.makeRequest<N8nWorkflow>(`/workflows/${id}/activate`, {
+      method: 'POST',
     });
   }
 
   async deactivateWorkflow(id: string): Promise<N8nWorkflow> {
-    return await this.makeRequest(`/workflows/${id}/deactivate`, {
-      method: 'POST'
-    });
-  }
-
-  async transferWorkflow(id: string, destinationProjectId: string): Promise<void> {
-    await this.makeRequest(`/workflows/${id}/transfer`, {
-      method: 'PUT',
-      body: JSON.stringify({ destinationProjectId })
-    });
-  }
-
-  async getWorkflowTags(workflowId: string): Promise<N8nTag[]> {
-    return await this.makeRequest(`/workflows/${workflowId}/tags`);
-  }
-
-  async updateWorkflowTags(workflowId: string, tagIds: string[]): Promise<N8nTag[]> {
-    const tags = tagIds.map(id => ({ id }));
-    return await this.makeRequest(`/workflows/${workflowId}/tags`, {
-      method: 'PUT',
-      body: JSON.stringify(tags)
-    });
-  }
-
-  // ==================== EXECUTIONS ====================
-  
-  async getExecutions(params?: {
-    includeData?: boolean;
-    status?: 'error' | 'success' | 'waiting';
-    workflowId?: string;
-    projectId?: string;
-    limit?: number;
-    cursor?: string;
-  }): Promise<{ data: N8nExecution[]; nextCursor?: string }> {
-    const searchParams = new URLSearchParams();
-    if (params?.includeData !== undefined) searchParams.append('includeData', params.includeData.toString());
-    if (params?.status) searchParams.append('status', params.status);
-    if (params?.workflowId) searchParams.append('workflowId', params.workflowId);
-    if (params?.projectId) searchParams.append('projectId', params.projectId);
-    if (params?.limit) searchParams.append('limit', params.limit.toString());
-    if (params?.cursor) searchParams.append('cursor', params.cursor);
-
-    const queryString = searchParams.toString();
-    const endpoint = `/executions${queryString ? '?' + queryString : ''}`;
+    if (!id) throw new Error('ID du workflow requis');
     
-    return await this.makeRequest(endpoint);
-  }
-
-  async getExecution(id: number, includeData?: boolean): Promise<N8nExecution> {
-    const searchParams = new URLSearchParams();
-    if (includeData) searchParams.append('includeData', 'true');
-    
-    const queryString = searchParams.toString();
-    const endpoint = `/executions/${id}${queryString ? '?' + queryString : ''}`;
-    
-    return await this.makeRequest(endpoint);
-  }
-
-  async deleteExecution(id: number): Promise<N8nExecution> {
-    return await this.makeRequest(`/executions/${id}`, {
-      method: 'DELETE'
-    });
-  }
-
-  // ==================== CREDENTIALS ====================
-  
-  async createCredential(credential: { name: string; type: string; data: any }): Promise<N8nCredential> {
-    return await this.makeRequest('/credentials', {
+    console.log('⏸️ Désactivation workflow n8n:', id);
+    return this.makeRequest<N8nWorkflow>(`/workflows/${id}/deactivate`, {
       method: 'POST',
-      body: JSON.stringify(credential)
     });
   }
 
-  async deleteCredential(id: string): Promise<N8nCredential> {
-    return await this.makeRequest(`/credentials/${id}`, {
-      method: 'DELETE'
-    });
-  }
-
-  async transferCredential(id: string, destinationProjectId: string): Promise<void> {
-    await this.makeRequest(`/credentials/${id}/transfer`, {
-      method: 'PUT',
-      body: JSON.stringify({ destinationProjectId })
-    });
-  }
-
-  async getCredentialSchema(credentialTypeName: string): Promise<N8nCredentialType> {
-    return await this.makeRequest(`/credentials/schema/${credentialTypeName}`);
-  }
-
-  // ==================== TAGS ====================
-  
-  async getTags(params?: { limit?: number; cursor?: string }): Promise<{ data: N8nTag[]; nextCursor?: string }> {
-    const searchParams = new URLSearchParams();
-    if (params?.limit) searchParams.append('limit', params.limit.toString());
-    if (params?.cursor) searchParams.append('cursor', params.cursor);
-
-    const queryString = searchParams.toString();
-    const endpoint = `/tags${queryString ? '?' + queryString : ''}`;
+  // === EXECUTIONS ===
+  async getExecutions(options: RequestOptions = {}): Promise<PaginatedResponse<N8nExecution>> {
+    const params = new URLSearchParams();
+    if (options.limit) params.append('limit', options.limit.toString());
+    if (options.cursor) params.append('cursor', options.cursor);
+    if (options.includeData !== undefined) params.append('includeData', options.includeData.toString());
     
-    return await this.makeRequest(endpoint);
-  }
-
-  async createTag(name: string): Promise<N8nTag> {
-    return await this.makeRequest('/tags', {
-      method: 'POST',
-      body: JSON.stringify({ name })
-    });
-  }
-
-  async getTag(id: string): Promise<N8nTag> {
-    return await this.makeRequest(`/tags/${id}`);
-  }
-
-  async updateTag(id: string, name: string): Promise<N8nTag> {
-    return await this.makeRequest(`/tags/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify({ name })
-    });
-  }
-
-  async deleteTag(id: string): Promise<N8nTag> {
-    return await this.makeRequest(`/tags/${id}`, {
-      method: 'DELETE'
-    });
-  }
-
-  // ==================== VARIABLES ====================
-  
-  async getVariables(params?: { limit?: number; cursor?: string }): Promise<{ data: N8nVariable[]; nextCursor?: string }> {
-    const searchParams = new URLSearchParams();
-    if (params?.limit) searchParams.append('limit', params.limit.toString());
-    if (params?.cursor) searchParams.append('cursor', params.cursor);
-
-    const queryString = searchParams.toString();
-    const endpoint = `/variables${queryString ? '?' + queryString : ''}`;
+    const queryString = params.toString();
+    const endpoint = `/executions${queryString ? `?${queryString}` : ''}`;
     
-    return await this.makeRequest(endpoint);
-  }
-
-  async createVariable(variable: { key: string; value: string; type?: string }): Promise<void> {
-    await this.makeRequest('/variables', {
-      method: 'POST',
-      body: JSON.stringify(variable)
-    });
-  }
-
-  async updateVariable(id: string, variable: { key: string; value: string; type?: string }): Promise<void> {
-    await this.makeRequest(`/variables/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(variable)
-    });
-  }
-
-  async deleteVariable(id: string): Promise<void> {
-    await this.makeRequest(`/variables/${id}`, {
-      method: 'DELETE'
-    });
-  }
-
-  // ==================== USERS ====================
-  
-  async getUsers(params?: {
-    limit?: number;
-    cursor?: string;
-    includeRole?: boolean;
-    projectId?: string;
-  }): Promise<{ data: N8nUser[]; nextCursor?: string }> {
-    const searchParams = new URLSearchParams();
-    if (params?.limit) searchParams.append('limit', params.limit.toString());
-    if (params?.cursor) searchParams.append('cursor', params.cursor);
-    if (params?.includeRole) searchParams.append('includeRole', params.includeRole.toString());
-    if (params?.projectId) searchParams.append('projectId', params.projectId);
-
-    const queryString = searchParams.toString();
-    const endpoint = `/users${queryString ? '?' + queryString : ''}`;
+    const response = await this.makeRequest<{ data: N8nExecution[]; nextCursor?: string }>(endpoint);
     
-    return await this.makeRequest(endpoint);
+    return {
+      data: response.data || [],
+      nextCursor: response.nextCursor
+    };
   }
 
-  async createUsers(users: Array<{ email: string; role?: 'global:admin' | 'global:member' }>): Promise<any> {
-    return await this.makeRequest('/users', {
-      method: 'POST',
-      body: JSON.stringify(users)
-    });
-  }
-
-  async getUser(id: string, includeRole?: boolean): Promise<N8nUser> {
-    const searchParams = new URLSearchParams();
-    if (includeRole) searchParams.append('includeRole', 'true');
+  async deleteExecution(id: string): Promise<void> {
+    if (!id) throw new Error('ID de l\'exécution requis');
     
-    const queryString = searchParams.toString();
-    const endpoint = `/users/${id}${queryString ? '?' + queryString : ''}`;
+    console.log('🗑️ Suppression exécution n8n:', id);
+    await this.makeRequest<void>(`/executions/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // === USERS ===
+  async getUsers(options: RequestOptions = {}): Promise<PaginatedResponse<N8nUser>> {
+    const params = new URLSearchParams();
+    if (options.limit) params.append('limit', options.limit.toString());
+    if (options.cursor) params.append('cursor', options.cursor);
     
-    return await this.makeRequest(endpoint);
-  }
-
-  async deleteUser(id: string): Promise<void> {
-    await this.makeRequest(`/users/${id}`, {
-      method: 'DELETE'
-    });
-  }
-
-  async updateUserRole(id: string, newRoleName: 'global:admin' | 'global:member'): Promise<void> {
-    await this.makeRequest(`/users/${id}/role`, {
-      method: 'PATCH',
-      body: JSON.stringify({ newRoleName })
-    });
-  }
-
-  // ==================== PROJECTS ====================
-  
-  async getProjects(params?: { limit?: number; cursor?: string }): Promise<{ data: N8nProject[]; nextCursor?: string }> {
-    const searchParams = new URLSearchParams();
-    if (params?.limit) searchParams.append('limit', params.limit.toString());
-    if (params?.cursor) searchParams.append('cursor', params.cursor);
-
-    const queryString = searchParams.toString();
-    const endpoint = `/projects${queryString ? '?' + queryString : ''}`;
+    const queryString = params.toString();
+    const endpoint = `/users${queryString ? `?${queryString}` : ''}`;
     
-    return await this.makeRequest(endpoint);
+    const response = await this.makeRequest<{ data: N8nUser[]; nextCursor?: string }>(endpoint);
+    
+    return {
+      data: response.data || [],
+      nextCursor: response.nextCursor
+    };
   }
 
-  async createProject(name: string, type?: string): Promise<N8nProject> {
-    return await this.makeRequest('/projects', {
+  // === PROJECTS ===
+  async getProjects(options: RequestOptions = {}): Promise<PaginatedResponse<N8nProject>> {
+    const params = new URLSearchParams();
+    if (options.limit) params.append('limit', options.limit.toString());
+    if (options.cursor) params.append('cursor', options.cursor);
+    
+    const queryString = params.toString();
+    const endpoint = `/projects${queryString ? `?${queryString}` : ''}`;
+    
+    try {
+      const response = await this.makeRequest<{ data: N8nProject[]; nextCursor?: string }>(endpoint);
+      return {
+        data: response.data || [],
+        nextCursor: response.nextCursor
+      };
+    } catch (error) {
+      // Les projets peuvent ne pas être disponibles dans toutes les versions de n8n
+      console.warn('⚠️ Projets non disponibles:', error);
+      return { data: [] };
+    }
+  }
+
+  async createProject(name: string): Promise<N8nProject> {
+    if (!name?.trim()) throw new Error('Nom du projet requis');
+    
+    console.log('🚀 Création projet n8n:', name);
+    return this.makeRequest<N8nProject>('/projects', {
       method: 'POST',
-      body: JSON.stringify({ name, type })
+      body: JSON.stringify({ name: name.trim() }),
     });
   }
 
-  async updateProject(projectId: string, name: string): Promise<N8nProject> {
-    return await this.makeRequest(`/projects/${projectId}`, {
-      method: 'PUT',
-      body: JSON.stringify({ name })
-    });
+  // === TAGS ===
+  async getTags(options: RequestOptions = {}): Promise<PaginatedResponse<N8nTag>> {
+    const params = new URLSearchParams();
+    if (options.limit) params.append('limit', options.limit.toString());
+    if (options.cursor) params.append('cursor', options.cursor);
+    
+    const queryString = params.toString();
+    const endpoint = `/tags${queryString ? `?${queryString}` : ''}`;
+    
+    try {
+      const response = await this.makeRequest<{ data: N8nTag[]; nextCursor?: string }>(endpoint);
+      return {
+        data: response.data || [],
+        nextCursor: response.nextCursor
+      };
+    } catch (error) {
+      console.warn('⚠️ Tags non disponibles:', error);
+      return { data: [] };
+    }
   }
 
-  async deleteProject(projectId: string): Promise<void> {
-    await this.makeRequest(`/projects/${projectId}`, {
-      method: 'DELETE'
-    });
+  // === VARIABLES ===
+  async getVariables(options: RequestOptions = {}): Promise<PaginatedResponse<N8nVariable>> {
+    const params = new URLSearchParams();
+    if (options.limit) params.append('limit', options.limit.toString());
+    if (options.cursor) params.append('cursor', options.cursor);
+    
+    const queryString = params.toString();
+    const endpoint = `/variables${queryString ? `?${queryString}` : ''}`;
+    
+    try {
+      const response = await this.makeRequest<{ data: N8nVariable[]; nextCursor?: string }>(endpoint);
+      return {
+        data: response.data || [],
+        nextCursor: response.nextCursor
+      };
+    } catch (error) {
+      console.warn('⚠️ Variables non disponibles:', error);
+      return { data: [] };
+    }
   }
 
-  // ==================== AUDIT ====================
-  
-  async generateAudit(additionalOptions?: any): Promise<N8nAuditReport[]> {
-    return await this.makeRequest('/audit', {
-      method: 'POST',
-      body: JSON.stringify({ additionalOptions })
-    });
-  }
+  // === AUDIT ===
+  async generateAudit(): Promise<N8nAuditReport[]> {
+    try {
+      console.log('🔍 Génération rapport audit n8n...');
+      
+      // Récupérer les workflows pour audit
+      const workflowsResponse = await this.getWorkflows({ limit: 100 });
+      const workflows = workflowsResponse.data;
+      
+      const reports: N8nAuditReport[] = [];
+      
+      // Audit de sécurité basique
+      const securityIssues = workflows.filter(w => {
+        return w.nodes?.some(node => 
+          node.type?.includes('webhook') && 
+          !node.parameters?.authentication
+        );
+      });
 
-  // ==================== SOURCE CONTROL ====================
-  
-  async pullFromRepository(options?: { force?: boolean; variables?: any }): Promise<any> {
-    return await this.makeRequest('/source-control/pull', {
-      method: 'POST',
-      body: JSON.stringify(options || {})
-    });
+      if (securityIssues.length > 0) {
+        reports.push({
+          risk: 'high',
+          sections: [{
+            title: 'Webhooks non sécurisés',
+            description: `${securityIssues.length} workflow(s) utilisent des webhooks sans authentification`,
+            recommendation: 'Activez l\'authentification sur tous les webhooks pour éviter les accès non autorisés',
+            location: securityIssues.flatMap(w => 
+              w.nodes?.filter(n => n.type?.includes('webhook')).map(n => ({
+                workflowName: w.name,
+                nodeName: n.name,
+                nodeType: n.type
+              })) || []
+            )
+          }]
+        });
+      }
+
+      // Audit de performance
+      const complexWorkflows = workflows.filter(w => (w.nodes?.length || 0) > 20);
+      if (complexWorkflows.length > 0) {
+        reports.push({
+          risk: 'medium',
+          sections: [{
+            title: 'Workflows complexes',
+            description: `${complexWorkflows.length} workflow(s) ont plus de 20 nœuds`,
+            recommendation: 'Considérez diviser les workflows complexes en sous-workflows pour améliorer les performances',
+            location: complexWorkflows.map(w => ({
+              workflowName: w.name,
+              nodeName: `${w.nodes?.length} nœuds`,
+              nodeType: 'workflow'
+            }))
+          }]
+        });
+      }
+
+      // Si aucun problème trouvé
+      if (reports.length === 0) {
+        reports.push({
+          risk: 'low',
+          sections: [{
+            title: 'Aucun problème détecté',
+            description: 'Votre configuration n8n semble correcte',
+            recommendation: 'Continuez à suivre les bonnes pratiques de sécurité et de performance'
+          }]
+        });
+      }
+
+      console.log(`✅ ${reports.length} rapport(s) d'audit généré(s)`);
+      return reports;
+      
+    } catch (error) {
+      console.error('❌ Erreur génération audit:', error);
+      throw new Error('Impossible de générer le rapport d\'audit');
+    }
   }
 }
 

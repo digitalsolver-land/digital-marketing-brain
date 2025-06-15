@@ -1,8 +1,8 @@
 
 export const API_CONFIG = {
   N8N: {
-    BASE_URL: process.env.VITE_N8N_BASE_URL || 'http://localhost:5678/api/v1',
-    API_KEY: process.env.VITE_N8N_API_KEY || '',
+    BASE_URL: import.meta.env.VITE_N8N_BASE_URL || 'http://localhost:5678/api/v1',
+    API_KEY: import.meta.env.VITE_N8N_API_KEY || '',
     // Fallback pour les clés stockées dans les paramètres utilisateur
     get EFFECTIVE_API_KEY() {
       // Récupérer depuis les paramètres utilisateur si disponible
@@ -19,12 +19,12 @@ export const API_CONFIG = {
     }
   },
   OPENROUTER: {
-    API_KEY: process.env.VITE_OPENROUTER_API_KEY || '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',
+    API_KEY: import.meta.env.VITE_OPENROUTER_API_KEY || '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',
     BASE_URL: 'https://openrouter.ai/api/v1'
   },
   POSTIZ: {
-    API_URL: process.env.VITE_POSTIZ_API_URL || 'https://api.postiz.com/public/v1',
-    API_KEY: process.env.VITE_POSTIZ_API_KEY || ''
+    API_URL: import.meta.env.VITE_POSTIZ_API_URL || 'https://api.postiz.com/public/v1',
+    API_KEY: import.meta.env.VITE_POSTIZ_API_KEY || ''
   }
 };
 

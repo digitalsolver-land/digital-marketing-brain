@@ -43,6 +43,7 @@ export const EnhancedWorkflowManager: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [n8nConnected, setN8nConnected] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'checking' | 'connected' | 'disconnected' | 'error'>('checking');
+  const [connectionError, setConnectionError] = useState<string>('');
 
   // États pour les données
   const [workflows, setWorkflows] = useState<N8nWorkflow[]>([]);
@@ -73,26 +74,41 @@ export const EnhancedWorkflowManager: React.FC = () => {
   const checkN8nConnection = async () => {
     try {
       setConnectionStatus('checking');
+      setConnectionError('');
       console.log('🔍 Vérification connexion n8n...');
       
       const isAvailable = await n8nApiService.isN8nAvailable();
       if (isAvailable) {
-        // Test réel avec une requête simple
-        await n8nApiService.getWorkflows({ limit: 1 });
-        setN8nConnected(true);
-        setConnectionStatus('connected');
-        console.log('✅ n8n connecté avec succès');
-        
-        toast({
-          title: "n8n connecté",
-          description: "La connexion avec n8n a été établie avec succès.",
-        });
-        
-        // Charger les données initiales
-        loadInitialData();
+        try {
+          // Test réel avec une requête simple
+          await n8nApiService.getWorkflows({ limit: 1 });
+          setN8nConnected(true);
+          setConnectionStatus('connected');
+          console.log('✅ n8n connecté avec succès');
+          
+          toast({
+            title: "n8n connecté",
+            description: "La connexion avec n8n a été établie avec succès.",
+          });
+          
+          // Charger les données initiales
+          await loadInitialData();
+        } catch (apiError) {
+          console.warn('⚠️ API n8n non accessible:', apiError);
+          setN8nConnected(false);
+          setConnectionStatus('error');
+          setConnectionError(apiError instanceof Error ? apiError.message : 'Erreur API inconnue');
+          
+          toast({
+            variant: "destructive",
+            title: "Erreur API n8n",
+            description: "L'API n8n n'est pas accessible. Vérifiez votre clé API.",
+          });
+        }
       } else {
         setN8nConnected(false);
         setConnectionStatus('disconnected');
+        setConnectionError('Service n8n non disponible');
         console.warn('⚠️ n8n non disponible, mode local activé');
         
         toast({
@@ -105,6 +121,7 @@ export const EnhancedWorkflowManager: React.FC = () => {
       console.error('❌ Erreur connexion n8n:', error);
       setN8nConnected(false);
       setConnectionStatus('error');
+      setConnectionError(error instanceof Error ? error.message : 'Erreur de connexion inconnue');
       
       toast({
         variant: "destructive",
@@ -121,7 +138,7 @@ export const EnhancedWorkflowManager: React.FC = () => {
     try {
       console.log('📊 Chargement des données n8n...');
       
-      const [workflowsResult, executionsResult, usersResult, projectsResult, tagsResult] = await Promise.allSettled([
+      const results = await Promise.allSettled([
         n8nApiService.getWorkflows({ limit: 50 }),
         n8nApiService.getExecutions({ limit: 20 }),
         n8nApiService.getUsers({ limit: 50 }),
@@ -129,29 +146,40 @@ export const EnhancedWorkflowManager: React.FC = () => {
         n8nApiService.getTags({ limit: 100 })
       ]);
 
-      if (workflowsResult.status === 'fulfilled') {
-        setWorkflows(workflowsResult.value.data);
-        console.log(`✅ ${workflowsResult.value.data.length} workflows chargés`);
+      // Traitement sécurisé des résultats
+      if (results[0].status === 'fulfilled') {
+        setWorkflows(results[0].value.data || []);
+        console.log(`✅ ${results[0].value.data?.length || 0} workflows chargés`);
+      } else {
+        console.warn('⚠️ Erreur chargement workflows:', results[0].reason);
       }
 
-      if (executionsResult.status === 'fulfilled') {
-        setExecutions(executionsResult.value.data);
-        console.log(`✅ ${executionsResult.value.data.length} exécutions chargées`);
+      if (results[1].status === 'fulfilled') {
+        setExecutions(results[1].value.data || []);
+        console.log(`✅ ${results[1].value.data?.length || 0} exécutions chargées`);
+      } else {
+        console.warn('⚠️ Erreur chargement exécutions:', results[1].reason);
       }
 
-      if (usersResult.status === 'fulfilled') {
-        setUsers(usersResult.value.data);
-        console.log(`✅ ${usersResult.value.data.length} utilisateurs chargés`);
+      if (results[2].status === 'fulfilled') {
+        setUsers(results[2].value.data || []);
+        console.log(`✅ ${results[2].value.data?.length || 0} utilisateurs chargés`);
+      } else {
+        console.warn('⚠️ Erreur chargement utilisateurs:', results[2].reason);
       }
 
-      if (projectsResult.status === 'fulfilled') {
-        setProjects(projectsResult.value.data);
-        console.log(`✅ ${projectsResult.value.data.length} projets chargés`);
+      if (results[3].status === 'fulfilled') {
+        setProjects(results[3].value.data || []);
+        console.log(`✅ ${results[3].value.data?.length || 0} projets chargés`);
+      } else {
+        console.warn('⚠️ Erreur chargement projets:', results[3].reason);
       }
 
-      if (tagsResult.status === 'fulfilled') {
-        setTags(tagsResult.value.data);
-        console.log(`✅ ${tagsResult.value.data.length} tags chargés`);
+      if (results[4].status === 'fulfilled') {
+        setTags(results[4].value.data || []);
+        console.log(`✅ ${results[4].value.data?.length || 0} tags chargés`);
+      } else {
+        console.warn('⚠️ Erreur chargement tags:', results[4].reason);
       }
 
     } catch (error) {
@@ -236,6 +264,9 @@ export const EnhancedWorkflowManager: React.FC = () => {
           title: "Workflow créé",
           description: `Le workflow "${newWorkflowData.name}" a été créé localement`,
         });
+
+        // Recharger les workflows locaux
+        await loadLocalWorkflows();
       }
 
       // Reset du formulaire
@@ -253,17 +284,50 @@ export const EnhancedWorkflowManager: React.FC = () => {
     }
   };
 
+  const loadLocalWorkflows = async () => {
+    try {
+      console.log('📊 Chargement workflows locaux...');
+      const localWorkflows = await workflowService.getWorkflows();
+      
+      // Convertir les workflows locaux au format N8nWorkflow pour compatibilité
+      const n8nFormattedWorkflows: N8nWorkflow[] = localWorkflows.map(workflow => ({
+        id: workflow.id,
+        name: workflow.name,
+        active: workflow.status === 'active',
+        nodes: [],
+        connections: {},
+        settings: {},
+        staticData: {},
+        tags: workflow.tags?.map((tag, index) => ({ id: index.toString(), name: tag })) || [],
+        createdAt: workflow.createdAt || new Date().toISOString(),
+        updatedAt: workflow.updatedAt || new Date().toISOString()
+      }));
+      
+      setWorkflows(n8nFormattedWorkflows);
+      console.log(`✅ ${n8nFormattedWorkflows.length} workflows locaux chargés`);
+    } catch (error) {
+      console.error('❌ Erreur chargement workflows locaux:', error);
+    }
+  };
+
   const toggleWorkflowStatus = async (workflow: N8nWorkflow) => {
-    if (!n8nConnected || !workflow.id) return;
+    if (!workflow.id) return;
 
     setLoading(true);
     try {
       console.log('🔄 Toggle workflow status:', workflow.id, !workflow.active);
       
-      if (workflow.active) {
-        await n8nApiService.deactivateWorkflow(workflow.id);
+      if (n8nConnected) {
+        // Utiliser l'API n8n
+        if (workflow.active) {
+          await n8nApiService.deactivateWorkflow(workflow.id);
+        } else {
+          await n8nApiService.activateWorkflow(workflow.id);
+        }
       } else {
-        await n8nApiService.activateWorkflow(workflow.id);
+        // Utiliser le service local
+        const newStatus = workflow.active ? 'inactive' : 'active';
+        await workflowService.updateWorkflowStatus(workflow.id, newStatus);
       }
 
       // Mettre à jour l'état local
@@ -307,6 +371,11 @@ export const EnhancedWorkflowManager: React.FC = () => {
         title: "Workflow supprimé",
         description: `Le workflow "${workflow.name}" a été supprimé`,
       });
+      
+      // Fermer la visualisation si c'était le workflow sélectionné
+      if (selectedWorkflow?.id === workflow.id) {
+        setSelectedWorkflow(null);
+      }
       
     } catch (error) {
       console.error('❌ Erreur suppression workflow:', error);
@@ -519,6 +588,11 @@ export const EnhancedWorkflowManager: React.FC = () => {
         <div>
           <h2 className="text-2xl font-bold">Gestionnaire n8n</h2>
           <p className="text-slate-600">Gérez vos workflows et automatisations</p>
+          {connectionError && (
+            <p className="text-sm text-red-600 mt-1">
+              Erreur: {connectionError}
+            </p>
+          )}
         </div>
         
         <div className="flex items-center space-x-4">
@@ -563,7 +637,7 @@ export const EnhancedWorkflowManager: React.FC = () => {
                   </CardDescription>
                 </div>
                 
-                <Button onClick={loadInitialData} disabled={loading}>
+                <Button onClick={n8nConnected ? loadInitialData : loadLocalWorkflows} disabled={loading}>
                   <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
                   Actualiser
                 </Button>
@@ -693,7 +767,7 @@ export const EnhancedWorkflowManager: React.FC = () => {
                           variant="outline"
                           size="sm"
                           onClick={() => toggleWorkflowStatus(workflow)}
-                          disabled={!n8nConnected}
+                          disabled={loading}
                         >
                           {workflow.active ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                         </Button>
@@ -702,6 +776,7 @@ export const EnhancedWorkflowManager: React.FC = () => {
                           variant="outline"
                           size="sm"
                           onClick={() => deleteWorkflow(workflow)}
+                          disabled={loading}
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
