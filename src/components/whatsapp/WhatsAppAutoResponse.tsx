@@ -255,7 +255,7 @@ export const WhatsAppAutoResponse = ({ aiEnabled }: WhatsAppAutoResponseProps) =
                   </Button>
                 </div>
               </div>
-            </div>
+            </CardContent>
           </Card>
         ))}
       </div>
