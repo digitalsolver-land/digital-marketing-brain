@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Settings, Plus, Calendar, FileText, Users, AlertCircle, Sparkles, BarChart3 } from 'lucide-react';
+import { Settings, Plus, Calendar, FileText, Users, AlertCircle, Sparkles, BarChart3, TestTube } from 'lucide-react';
 import { postizService, PostizIntegration, PostizPost } from '@/services/postizService';
 import { PostizCreatePost } from './PostizCreatePost';
 import { PostizPostsList } from './PostizPostsList';
@@ -17,6 +17,7 @@ import { useAuth } from '@/contexts/AuthContext';
 export const PostizDashboard = () => {
   const { user } = useAuth();
   const [isConfigured, setIsConfigured] = useState(false);
+  const [isDemo, setIsDemo] = useState(false);
   const [integrations, setIntegrations] = useState<PostizIntegration[]>([]);
   const [posts, setPosts] = useState<PostizPost[]>([]);
   const [loading, setLoading] = useState(false);
@@ -36,8 +37,18 @@ export const PostizDashboard = () => {
     setLoading(true);
     try {
       await postizService.initialize(user.id);
-      await loadData();
+      const demoStatus = postizService.getDemoStatus();
+      setIsDemo(demoStatus);
       setIsConfigured(true);
+      
+      if (demoStatus) {
+        toast({
+          title: "Mode démonstration",
+          description: "Vous utilisez des données de démonstration. Configurez Postiz dans les paramètres pour utiliser vos vrais comptes.",
+        });
+      }
+      
+      await loadData();
     } catch (error) {
       console.error('Error initializing Postiz:', error);
       setIsConfigured(false);
@@ -61,12 +72,14 @@ export const PostizDashboard = () => {
       setIntegrations(integrationsData);
       setPosts(postsData.posts);
     } catch (error) {
-      toast({
-        title: "Erreur",
-        description: "Impossible de charger les données Postiz. Vérifiez votre configuration dans les paramètres.",
-        variant: "destructive"
-      });
-      setIsConfigured(false);
+      if (!isDemo) {
+        toast({
+          title: "Erreur",
+          description: "Impossible de charger les données Postiz. Vérifiez votre configuration dans les paramètres.",
+          variant: "destructive"
+        });
+        setIsConfigured(false);
+      }
     } finally {
       setLoading(false);
     }
@@ -97,48 +110,11 @@ export const PostizDashboard = () => {
     );
   }
 
-  if (!isConfigured) {
-    return (
-      <div className="space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <Settings className="w-5 h-5 text-blue-500" />
-              <span>Configuration Postiz</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                Postiz n'est pas configuré. Rendez-vous dans les paramètres pour configurer votre clé API et l'URL de votre instance Postiz.
-              </AlertDescription>
-            </Alert>
-            
-            <div className="text-sm text-gray-600 space-y-2">
-              <p><strong>Étapes de configuration :</strong></p>
-              <ol className="list-decimal list-inside space-y-1">
-                <li>Allez dans Paramètres → API & Intégrations</li>
-                <li>Configurez votre clé API Postiz</li>
-                <li>Définissez l'URL de votre instance (locale ou serveur)</li>
-                <li>Sauvegardez vos paramètres</li>
-              </ol>
-            </div>
-            
-            <Button onClick={() => window.location.href = '/settings'}>
-              Configurer Postiz
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   const stats = getPostStats();
 
   return (
     <div className="space-y-6">
-      {/* En-tête avec statistiques */}
+      {/* En-tête avec statut */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
@@ -146,12 +122,31 @@ export const PostizDashboard = () => {
               <FileText className="w-5 h-5 text-blue-500" />
               <span>Gestionnaire Postiz</span>
             </div>
-            <Badge className="bg-green-500">
-              ✓ Connecté à Postiz
-            </Badge>
+            <div className="flex items-center space-x-2">
+              {isDemo ? (
+                <Badge className="bg-orange-500">
+                  <TestTube className="w-3 h-3 mr-1" />
+                  Mode Démonstration
+                </Badge>
+              ) : (
+                <Badge className="bg-green-500">
+                  ✓ Connecté à Postiz
+                </Badge>
+              )}
+            </div>
           </CardTitle>
         </CardHeader>
         <CardContent>
+          {isDemo && (
+            <Alert className="mb-4">
+              <TestTube className="h-4 w-4" />
+              <AlertDescription>
+                Vous utilisez actuellement des données de démonstration. Pour connecter votre vraie instance Postiz, 
+                configurez votre clé API dans les paramètres → API & Intégrations.
+              </AlertDescription>
+            </Alert>
+          )}
+          
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <div className="text-center">
               <div className="text-2xl font-bold text-blue-600">{integrations.length}</div>
@@ -233,6 +228,7 @@ export const PostizDashboard = () => {
               <CardTitle className="flex items-center space-x-2">
                 <BarChart3 className="w-5 h-5 text-blue-500" />
                 <span>Analytics des Publications</span>
+                {isDemo && <Badge variant="outline">Données de démonstration</Badge>}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -269,6 +265,7 @@ export const PostizDashboard = () => {
                           <div className="flex items-center space-x-2">
                             <img src={integration.picture} alt={integration.name} className="w-4 h-4 rounded-full" />
                             <span className="text-sm">{integration.name}</span>
+                            {integration.disabled && <Badge variant="outline" className="text-xs">Désactivé</Badge>}
                           </div>
                           <Badge variant="outline">{count}</Badge>
                         </div>

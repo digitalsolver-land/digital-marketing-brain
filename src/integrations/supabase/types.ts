@@ -27,11 +27,19 @@ export type Database = {
           max_workflows: number | null
           n8n_api_key: string | null
           openrouter_api_key: string | null
+          postiz_api_key: string | null
+          postiz_api_url: string | null
           sms_notifications: boolean | null
           timezone: string | null
           twitter_api: string | null
           updated_at: string | null
           user_id: string
+          whatsapp_ai_enabled: boolean | null
+          whatsapp_ai_instructions: string | null
+          whatsapp_api_token: string | null
+          whatsapp_phone_number_id: string | null
+          whatsapp_response_mode: string | null
+          whatsapp_verify_token: string | null
         }
         Insert: {
           auto_backup?: boolean | null
@@ -50,11 +58,19 @@ export type Database = {
           max_workflows?: number | null
           n8n_api_key?: string | null
           openrouter_api_key?: string | null
+          postiz_api_key?: string | null
+          postiz_api_url?: string | null
           sms_notifications?: boolean | null
           timezone?: string | null
           twitter_api?: string | null
           updated_at?: string | null
           user_id: string
+          whatsapp_ai_enabled?: boolean | null
+          whatsapp_ai_instructions?: string | null
+          whatsapp_api_token?: string | null
+          whatsapp_phone_number_id?: string | null
+          whatsapp_response_mode?: string | null
+          whatsapp_verify_token?: string | null
         }
         Update: {
           auto_backup?: boolean | null
@@ -73,11 +89,19 @@ export type Database = {
           max_workflows?: number | null
           n8n_api_key?: string | null
           openrouter_api_key?: string | null
+          postiz_api_key?: string | null
+          postiz_api_url?: string | null
           sms_notifications?: boolean | null
           timezone?: string | null
           twitter_api?: string | null
           updated_at?: string | null
           user_id?: string
+          whatsapp_ai_enabled?: boolean | null
+          whatsapp_ai_instructions?: string | null
+          whatsapp_api_token?: string | null
+          whatsapp_phone_number_id?: string | null
+          whatsapp_response_mode?: string | null
+          whatsapp_verify_token?: string | null
         }
         Relationships: []
       }

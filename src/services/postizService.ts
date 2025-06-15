@@ -1,5 +1,5 @@
-
 import { supabase } from '@/integrations/supabase/client';
+import { DemoDataService } from './demoDataService';
 
 export interface PostizIntegration {
   id: string;
@@ -57,6 +57,7 @@ export interface UploadResponse {
 class PostizService {
   private baseURL = 'https://api.postiz.com/public/v1';
   private apiKey = '';
+  private isDemo = false;
 
   async initialize(userId: string) {
     try {
@@ -68,17 +69,24 @@ class PostizService {
 
       if (data?.postiz_api_key) {
         this.apiKey = data.postiz_api_key;
+        this.isDemo = false;
         if (data.postiz_api_url) {
           this.baseURL = data.postiz_api_url;
         }
+      } else {
+        // Mode démonstration si pas de clé API
+        this.isDemo = true;
+        console.log('🎭 Mode démonstration Postiz activé - configurez votre clé API dans les paramètres');
       }
     } catch (error) {
       console.error('Error initializing Postiz service:', error);
+      this.isDemo = true;
     }
   }
 
   setApiKey(key: string) {
     this.apiKey = key;
+    this.isDemo = !key;
   }
 
   setBaseURL(url: string) {
@@ -86,7 +94,7 @@ class PostizService {
   }
 
   private async makeRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    if (!this.apiKey) {
+    if (!this.apiKey && !this.isDemo) {
       throw new Error('API Key Postiz non configurée');
     }
 
@@ -107,6 +115,9 @@ class PostizService {
   }
 
   async getIntegrations(): Promise<PostizIntegration[]> {
+    if (this.isDemo) {
+      return DemoDataService.simulateAPICall(DemoDataService.getDemoIntegrations(), 800);
+    }
     return this.makeRequest<PostizIntegration[]>('/integrations');
   }
 
@@ -117,6 +128,11 @@ class PostizService {
     month?: number;
     year: number;
   }): Promise<{ posts: PostizPost[] }> {
+    if (this.isDemo) {
+      const demoPosts = DemoDataService.getDemoPosts();
+      return DemoDataService.simulateAPICall({ posts: demoPosts }, 1000);
+    }
+
     const queryParams = new URLSearchParams();
     queryParams.append('display', params.display);
     queryParams.append('year', params.year.toString());
@@ -129,6 +145,9 @@ class PostizService {
   }
 
   async createPost(payload: CreatePostPayload): Promise<{ postId: string; integration: string }[]> {
+    if (this.isDemo) {
+      return DemoDataService.createDemoPost();
+    }
     return this.makeRequest('/posts', {
       method: 'POST',
       body: JSON.stringify(payload),
@@ -136,12 +155,19 @@ class PostizService {
   }
 
   async deletePost(postId: string): Promise<{ id: string }> {
+    if (this.isDemo) {
+      return DemoDataService.deleteDemoPost(postId);
+    }
     return this.makeRequest(`/posts/${postId}`, {
       method: 'DELETE',
     });
   }
 
   async uploadFile(file: File): Promise<UploadResponse> {
+    if (this.isDemo) {
+      return DemoDataService.uploadDemoFile(file);
+    }
+
     const formData = new FormData();
     formData.append('file', file);
 
@@ -158,6 +184,10 @@ class PostizService {
     }
 
     return response.json();
+  }
+
+  getDemoStatus(): boolean {
+    return this.isDemo;
   }
 }
 
