@@ -114,6 +114,39 @@ class N8nApi {
     }
   }
 
+  async getWorkflow(id: string): Promise<N8nWorkflow> {
+    try {
+      return await this.makeRequest<N8nWorkflow>(`/workflows/${id}`);
+    } catch (error) {
+      console.error('❌ Erreur getWorkflow:', error);
+      throw error;
+    }
+  }
+
+  async createWorkflow(workflow: Partial<N8nWorkflow>): Promise<N8nWorkflow> {
+    try {
+      return await this.makeRequest<N8nWorkflow>('/workflows', {
+        method: 'POST',
+        body: JSON.stringify(workflow)
+      });
+    } catch (error) {
+      console.error('❌ Erreur createWorkflow:', error);
+      throw error;
+    }
+  }
+
+  async updateWorkflow(id: string, workflow: Partial<N8nWorkflow>): Promise<N8nWorkflow> {
+    try {
+      return await this.makeRequest<N8nWorkflow>(`/workflows/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(workflow)
+      });
+    } catch (error) {
+      console.error('❌ Erreur updateWorkflow:', error);
+      throw error;
+    }
+  }
+
   async activateWorkflow(id: string): Promise<N8nWorkflow> {
     return this.makeRequest<N8nWorkflow>(`/workflows/${id}/activate`, { method: 'POST' });
   }
