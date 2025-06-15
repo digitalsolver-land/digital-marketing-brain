@@ -20,7 +20,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // Verify authentication
+    // Vérification de l'authentification
     const authHeader = req.headers.get('Authorization')?.replace('Bearer ', '')
     if (!authHeader) {
       console.error('❌ Token manquant')
@@ -40,16 +40,16 @@ serve(async (req) => {
       )
     }
 
-    // Get user secrets with error handling
+    // Récupération des secrets utilisateur
     const { data: secrets, error: secretsError } = await supabase
       .from('user_secrets')
       .select('secret_name, secret_value')
       .eq('user_id', user.id)
       .in('secret_name', ['n8n_api_key', 'n8n_base_url'])
 
-    // Handle case where table doesn't exist or no secrets found
+    // Gestion du cas où la table n'existe pas encore
     if (secretsError) {
-      console.log('📋 Table ou secrets non trouvés:', secretsError.code)
+      console.log('📋 Table user_secrets non trouvée, retour des valeurs par défaut')
       return new Response(
         JSON.stringify({
           n8n_api_key: null,
@@ -63,7 +63,7 @@ serve(async (req) => {
     }
 
     if (!secrets || secrets.length === 0) {
-      console.log('📋 Aucun secret trouvé')
+      console.log('📋 Aucun secret trouvé pour cet utilisateur')
       return new Response(
         JSON.stringify({
           n8n_api_key: null,
@@ -76,13 +76,13 @@ serve(async (req) => {
       )
     }
 
-    // Format secrets for response
+    // Formatage des secrets pour la réponse
     const secretsMap: Record<string, string> = {}
     secrets.forEach(secret => {
       secretsMap[secret.secret_name] = secret.secret_value
     })
 
-    console.log('📋 Secrets trouvés:', {
+    console.log('📋 Secrets récupérés:', {
       hasApiKey: !!secretsMap.n8n_api_key,
       hasBaseUrl: !!secretsMap.n8n_base_url,
       apiKeyLength: secretsMap.n8n_api_key?.length || 0

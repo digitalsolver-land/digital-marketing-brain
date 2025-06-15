@@ -20,7 +20,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // Verify authentication
+    // Vérification de l'authentification
     const authHeader = req.headers.get('Authorization')?.replace('Bearer ', '')
     if (!authHeader) {
       console.error('❌ Token manquant')
@@ -46,7 +46,7 @@ serve(async (req) => {
       )
     }
 
-    // Get user secrets
+    // Récupération des secrets utilisateur
     const { data: secrets, error: secretsError } = await supabase
       .from('user_secrets')
       .select('secret_name, secret_value')
@@ -57,15 +57,15 @@ serve(async (req) => {
       console.error('❌ Erreur récupération secrets:', secretsError)
       return new Response(JSON.stringify({
         success: false,
-        error: 'Erreur lors de la récupération des secrets',
-        details: secretsError.message
+        error: 'Configuration n8n non trouvée',
+        troubleshooting: 'Veuillez d\'abord sauvegarder votre configuration n8n'
       }), {
-        status: 500,
+        status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
-    // Format secrets map
+    // Formatage des secrets
     const secretsMap: Record<string, string> = {}
     secrets?.forEach(secret => {
       secretsMap[secret.secret_name] = secret.secret_value
@@ -91,11 +91,11 @@ serve(async (req) => {
       });
     }
 
-    // Test connection with proper error handling
+    // Test de connexion avec timeout optimisé
     console.log('🌐 Test vers:', `${n8nBaseUrl}/workflows?limit=1`);
     
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 secondes
 
     try {
       const response = await fetch(`${n8nBaseUrl}/workflows?limit=1`, {
@@ -111,7 +111,8 @@ serve(async (req) => {
 
       console.log('📡 Réponse:', {
         status: response.status,
-        statusText: response.statusText
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries())
       });
 
       if (!response.ok) {
@@ -122,26 +123,28 @@ serve(async (req) => {
 
         switch (response.status) {
           case 401:
-            errorMessage = 'Clé API n8n invalide';
-            troubleshooting = 'Vérifiez que votre clé API est correcte dans n8n';
+            errorMessage = 'Clé API n8n invalide ou expirée';
+            troubleshooting = 'Vérifiez que votre clé API est correcte dans les paramètres n8n';
             break;
           case 403:
-            errorMessage = 'Accès refusé';
+            errorMessage = 'Accès refusé par n8n';
             troubleshooting = 'Vérifiez les permissions de votre clé API';
             break;
           case 404:
             errorMessage = 'URL API non trouvée';
-            troubleshooting = 'Vérifiez que l\'URL se termine par /api/v1';
+            troubleshooting = 'Vérifiez que l\'URL se termine par /api/v1 et que n8n est accessible';
             break;
           case 500:
           case 502:
           case 503:
             errorMessage = 'Serveur n8n indisponible';
-            troubleshooting = 'Le serveur n8n semble avoir des problèmes';
+            troubleshooting = 'Le serveur n8n semble avoir des problèmes techniques';
             break;
           default:
-            troubleshooting = `Erreur: ${errorText}`;
+            troubleshooting = `Détails: ${errorText}`;
         }
+
+        console.error(`❌ ${errorMessage}:`, errorText);
 
         return new Response(JSON.stringify({
           success: false,
@@ -149,7 +152,8 @@ serve(async (req) => {
           troubleshooting,
           details: {
             status: response.status,
-            url: n8nBaseUrl
+            url: n8nBaseUrl,
+            response: errorText
           }
         }), {
           status: response.status,
@@ -158,14 +162,15 @@ serve(async (req) => {
       }
 
       const data = await response.json();
-      console.log('✅ Connexion réussie, workflows:', data.data?.length || 0);
+      console.log('✅ Connexion réussie, workflows trouvés:', data.data?.length || 0);
 
       return new Response(JSON.stringify({
         success: true,
         message: 'Connexion n8n établie avec succès',
         details: {
           workflowCount: data.data?.length || 0,
-          url: n8nBaseUrl
+          url: n8nBaseUrl,
+          serverInfo: data.version || 'Version inconnue'
         }
       }), {
         status: 200,
@@ -176,12 +181,12 @@ serve(async (req) => {
       clearTimeout(timeoutId);
       
       if (fetchError.name === 'AbortError') {
-        console.error('⏱️ Timeout');
+        console.error('⏱️ Timeout de connexion');
         return new Response(JSON.stringify({
           success: false,
           error: 'Timeout de connexion',
-          troubleshooting: 'Le serveur n8n ne répond pas. Vérifiez l\'URL.',
-          details: { timeout: true }
+          troubleshooting: 'Le serveur n8n ne répond pas dans les temps. Vérifiez l\'URL et la disponibilité du serveur.',
+          details: { timeout: true, url: n8nBaseUrl }
         }), {
           status: 408,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -192,8 +197,11 @@ serve(async (req) => {
       return new Response(JSON.stringify({
         success: false,
         error: 'Erreur de connexion réseau',
-        troubleshooting: 'Impossible de joindre le serveur n8n',
-        details: { error: fetchError.message }
+        troubleshooting: 'Impossible de joindre le serveur n8n. Vérifiez l\'URL et votre connexion.',
+        details: { 
+          error: fetchError.message,
+          url: n8nBaseUrl
+        }
       }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -201,10 +209,11 @@ serve(async (req) => {
     }
 
   } catch (error) {
-    console.error('💥 Erreur générale:', error);
+    console.error('💥 Erreur générale test-n8n-connection:', error);
     return new Response(JSON.stringify({
       success: false,
       error: 'Erreur interne du service',
+      troubleshooting: 'Une erreur inattendue s\'est produite. Veuillez réessayer.',
       details: error.message
     }), {
       status: 500,
