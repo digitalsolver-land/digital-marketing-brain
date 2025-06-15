@@ -9,6 +9,78 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      app_settings: {
+        Row: {
+          auto_backup: boolean | null
+          backup_frequency: string | null
+          created_at: string | null
+          data_retention_days: number | null
+          default_language: string | null
+          email_notifications: boolean | null
+          facebook_api: string | null
+          google_ads_api: string | null
+          google_analytics_api: string | null
+          google_search_console_api: string | null
+          id: string
+          instagram_api: string | null
+          linkedin_api: string | null
+          max_workflows: number | null
+          n8n_api_key: string | null
+          openrouter_api_key: string | null
+          sms_notifications: boolean | null
+          timezone: string | null
+          twitter_api: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          auto_backup?: boolean | null
+          backup_frequency?: string | null
+          created_at?: string | null
+          data_retention_days?: number | null
+          default_language?: string | null
+          email_notifications?: boolean | null
+          facebook_api?: string | null
+          google_ads_api?: string | null
+          google_analytics_api?: string | null
+          google_search_console_api?: string | null
+          id?: string
+          instagram_api?: string | null
+          linkedin_api?: string | null
+          max_workflows?: number | null
+          n8n_api_key?: string | null
+          openrouter_api_key?: string | null
+          sms_notifications?: boolean | null
+          timezone?: string | null
+          twitter_api?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          auto_backup?: boolean | null
+          backup_frequency?: string | null
+          created_at?: string | null
+          data_retention_days?: number | null
+          default_language?: string | null
+          email_notifications?: boolean | null
+          facebook_api?: string | null
+          google_ads_api?: string | null
+          google_analytics_api?: string | null
+          google_search_console_api?: string | null
+          id?: string
+          instagram_api?: string | null
+          linkedin_api?: string | null
+          max_workflows?: number | null
+          n8n_api_key?: string | null
+          openrouter_api_key?: string | null
+          sms_notifications?: boolean | null
+          timezone?: string | null
+          twitter_api?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -84,7 +156,7 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "moderator" | "user"
+      app_role: "admin" | "moderator" | "user" | "commercial" | "client"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -200,7 +272,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "moderator", "user"],
+      app_role: ["admin", "moderator", "user", "commercial", "client"],
     },
   },
 } as const

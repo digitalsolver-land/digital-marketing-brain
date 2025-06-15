@@ -1,149 +1,126 @@
 
 import React from 'react';
-import { Bell, Search, Sun, Moon, User, Settings, LogOut } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuTrigger, 
+  DropdownMenuSeparator 
 } from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
-import { useAuth } from '@/contexts/AuthContext';
+import { Brain, User, Settings, LogOut, Shield } from 'lucide-react';
 
-interface HeaderProps {
-  activeSection: string;
-  isDarkMode: boolean;
-  onToggleDarkMode: () => void;
-}
+const Header = () => {
+  const { user, profile, userRoles, signOut } = useAuth();
+  const navigate = useNavigate();
 
-export const Header: React.FC<HeaderProps> = ({ 
-  activeSection, 
-  isDarkMode, 
-  onToggleDarkMode 
-}) => {
-  const { user, profile, isAdmin, signOut } = useAuth();
-
-  const getSectionTitle = (section: string) => {
-    const titles: Record<string, string> = {
-      dashboard: 'Dashboard Principal',
-      workflows: 'Gestionnaire de Workflows',
-      'ai-chat': 'Assistant IA',
-      content: 'Générateur de Contenu',
-      analytics: 'Analytics & Performance',
-      campaigns: 'Gestion des Campagnes',
-      social: 'Automatisation Sociale',
-      competitors: 'Surveillance Concurrentielle',
-      calendar: 'Planning & Calendrier',
-      data: 'Base de Données',
-      settings: 'Paramètres'
-    };
-    return titles[section] || 'Dashboard';
+  const handleProfileClick = () => {
+    navigate('/profile');
   };
 
-  const getUserDisplayName = () => {
-    if (profile?.first_name && profile?.last_name) {
-      return `${profile.first_name} ${profile.last_name}`;
-    }
-    if (profile?.first_name) {
-      return profile.first_name;
-    }
-    return user?.email?.split('@')[0] || 'Utilisateur';
+  const handleSettingsClick = () => {
+    navigate('/settings');
   };
 
-  const getUserInitials = () => {
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/auth');
+  };
+
+  const getInitials = () => {
     if (profile?.first_name && profile?.last_name) {
-      return `${profile.first_name[0]}${profile.last_name[0]}`.toUpperCase();
-    }
-    if (profile?.first_name) {
-      return profile.first_name[0].toUpperCase();
+      return `${profile.first_name[0]}${profile.last_name[0]}`;
     }
     return user?.email?.[0]?.toUpperCase() || 'U';
   };
 
+  const getDisplayName = () => {
+    if (profile?.first_name && profile?.last_name) {
+      return `${profile.first_name} ${profile.last_name}`;
+    }
+    return user?.email || 'Utilisateur';
+  };
+
+  const getPrimaryRole = () => {
+    if (userRoles.includes('admin')) return 'admin';
+    if (userRoles.includes('commercial')) return 'commercial';
+    if (userRoles.includes('client')) return 'client';
+    return 'user';
+  };
+
+  const getRoleBadgeColor = (role: string) => {
+    switch (role) {
+      case 'admin': return 'bg-red-500 hover:bg-red-600';
+      case 'commercial': return 'bg-blue-500 hover:bg-blue-600';
+      case 'client': return 'bg-green-500 hover:bg-green-600';
+      default: return 'bg-gray-500 hover:bg-gray-600';
+    }
+  };
+
+  if (!user) {
+    return null;
+  }
+
   return (
-    <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 px-6 py-4">
-      <div className="flex items-center justify-between">
-        {/* Section Title */}
-        <div>
-          <div className="flex items-center space-x-3">
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-              {getSectionTitle(activeSection)}
-            </h1>
-            {isAdmin && (
-              <Badge variant="secondary" className="bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
-                Admin
-              </Badge>
-            )}
+    <header className="border-b bg-white">
+      <div className="container mx-auto px-4 py-3">
+        <div className="flex items-center justify-between">
+          {/* Logo */}
+          <div className="flex items-center space-x-2">
+            <Brain className="w-8 h-8 text-purple-600" />
+            <h1 className="text-xl font-bold text-slate-900">Marketing AI</h1>
           </div>
-          <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-            Plateforme de Marketing Digital Intégré
-          </p>
-        </div>
-
-        {/* Search Bar */}
-        <div className="flex-1 max-w-md mx-8">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
-            <Input
-              placeholder="Rechercher workflows, campagnes, métriques..."
-              className="pl-10 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-600"
-            />
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div className="flex items-center space-x-4">
-          {/* Notifications */}
-          <Button variant="ghost" size="sm" className="relative">
-            <Bell className="w-5 h-5" />
-            <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full text-xs"></span>
-          </Button>
-
-          {/* Theme Toggle */}
-          <Button variant="ghost" size="sm" onClick={onToggleDarkMode}>
-            {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-          </Button>
 
           {/* User Menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-                  <span className="text-white text-sm font-medium">{getUserInitials()}</span>
-                </div>
-                <div className="hidden md:block text-left">
-                  <p className="text-sm font-medium">{getUserDisplayName()}</p>
-                  <p className="text-xs text-slate-500">{user?.email}</p>
+              <Button variant="ghost" className="flex items-center space-x-3 p-2">
+                <Avatar className="w-8 h-8">
+                  <AvatarImage src={profile?.avatar_url} />
+                  <AvatarFallback>{getInitials()}</AvatarFallback>
+                </Avatar>
+                <div className="flex items-center space-x-2">
+                  <div className="text-left">
+                    <p className="text-sm font-medium">{getDisplayName()}</p>
+                    <p className="text-xs text-slate-600">{user.email}</p>
+                  </div>
+                  <Badge className={`${getRoleBadgeColor(getPrimaryRole())} text-white text-xs`}>
+                    {getPrimaryRole()}
+                  </Badge>
                 </div>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
               <div className="px-2 py-1.5">
-                <p className="text-sm font-medium">{getUserDisplayName()}</p>
-                <p className="text-xs text-slate-500">{user?.email}</p>
-                {isAdmin && (
-                  <Badge variant="secondary" className="mt-1 text-xs">
-                    Administrateur
-                  </Badge>
-                )}
+                <p className="text-sm font-medium">{getDisplayName()}</p>
+                <p className="text-xs text-slate-600">{user.email}</p>
+                <div className="flex gap-1 mt-1">
+                  {userRoles.map((role) => (
+                    <Badge 
+                      key={role} 
+                      variant="outline" 
+                      className="text-xs"
+                    >
+                      {role}
+                    </Badge>
+                  ))}
+                </div>
               </div>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={handleProfileClick}>
                 <User className="w-4 h-4 mr-2" />
-                Profil
+                Mon Profil
               </DropdownMenuItem>
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={handleSettingsClick}>
                 <Settings className="w-4 h-4 mr-2" />
                 Paramètres
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem 
-                className="text-red-600 focus:text-red-600 focus:bg-red-50"
-                onClick={signOut}
-              >
+              <DropdownMenuItem onClick={handleSignOut} className="text-red-600">
                 <LogOut className="w-4 h-4 mr-2" />
                 Déconnexion
               </DropdownMenuItem>
@@ -154,3 +131,5 @@ export const Header: React.FC<HeaderProps> = ({
     </header>
   );
 };
+
+export default Header;
