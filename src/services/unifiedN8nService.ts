@@ -469,12 +469,19 @@ export class UnifiedN8nService {
     try {
       console.log('🚀 Exécution du workflow:', workflowId);
       
-      const config = await this.getConfiguration();
-      
-      const response = await fetch(`${config.baseUrl}/executions`, {
+      // Utiliser la configuration existante ou la récupérer
+      if (!this.config) {
+        this.config = await n8nConfigManager.getEffectiveConfig();
+      }
+
+      if (!this.config.apiKey) {
+        throw new Error('Clé API n8n manquante. Configurez votre clé API dans les paramètres.');
+      }
+
+      const response = await fetch(`${this.config.baseUrl}/executions`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${config.apiKey}`,
+          'X-N8N-API-KEY': this.config.apiKey,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
