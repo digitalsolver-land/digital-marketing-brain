@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -192,7 +193,7 @@ Réponds en français de manière professionnelle et accessible.`;
     return '⚡';
   };
 
-  // Calcul des dimensions du canvas - VERSION CORRIGÉE
+  // Calcul des dimensions du canvas
   const getCanvasBounds = () => {
     if (nodes.length === 0) {
       return { 
@@ -223,7 +224,7 @@ Réponds en français de manière professionnelle et accessible.`;
     return { width, height, minX, minY, maxX, maxY };
   };
 
-  // Fonction pour créer les connexions - VERSION SIMPLE ET FIABLE
+  // Fonction pour créer les connexions
   const createConnectionElements = () => {
     const connectionElements: JSX.Element[] = [];
     
@@ -247,7 +248,7 @@ Réponds en français de manière professionnelle et accessible.`;
         return;
       }
 
-      // Positions SIMPLES et GARANTIES
+      // Positions des connexions
       const x1 = (sourceNode.position_x || 0) + 120; // Sortie du nœud source
       const y1 = (sourceNode.position_y || 0) + 40;  // Centre vertical
       const x2 = (targetNode.position_x || 0);       // Entrée du nœud cible  
@@ -255,10 +256,9 @@ Réponds en français de manière professionnelle et accessible.`;
 
       console.log(`Connexion ${index}: ${sourceNode.name} (${x1},${y1}) → ${targetNode.name} (${x2},${y2})`);
 
-      // Ligne de connexion SIMPLE et VISIBLE
+      // Ligne de connexion
       connectionElements.push(
         <g key={`connection-${connection.id}-${index}`}>
-          {/* Ligne principale ROUGE VIVE */}
           <line
             x1={x1}
             y1={y1}
@@ -275,6 +275,9 @@ Réponds en français de manière professionnelle et accessible.`;
     console.log(`${connectionElements.length} connexion(s) créée(s) avec succès`);
     return connectionElements;
   };
+
+  // Calcul des bounds du canvas - CORRIGÉ
+  const canvasBounds = getCanvasBounds();
 
   // Affichage de débogage si pas de données
   if (!workflow || nodes.length === 0) {
@@ -375,7 +378,7 @@ Réponds en français de manière professionnelle et accessible.`;
         </Card>
       )}
 
-      {/* Visualisation du workflow - VERSION CORRIGÉE */}
+      {/* Visualisation du workflow */}
       <Card className={isFullscreen ? 'fixed inset-0 z-50 rounded-none' : ''}>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -435,7 +438,7 @@ Réponds en français de manière professionnelle et accessible.`;
                 height: '100%'
               }}
             >
-              {/* SVG CANVAS FIXE */}
+              {/* SVG CANVAS */}
               <svg
                 ref={svgRef}
                 width="100%"
@@ -467,7 +470,7 @@ Réponds en français de manière professionnelle et accessible.`;
                   </marker>
                 </defs>
 
-                {/* Grille de fond pour aide visuelle */}
+                {/* Grille de fond */}
                 <defs>
                   <pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse">
                     <path d="M 50 0 L 0 0 0 50" fill="none" stroke="#e5e7eb" strokeWidth="1"/>
