@@ -15,6 +15,17 @@ export interface Workflow {
   jsonData?: any;
 }
 
+export interface WorkflowNode {
+  id: string;
+  workflow_id: string;
+  node_id: string;
+  node_type: string;
+  name: string;
+  position_x: number;
+  position_y: number;
+  parameters: any;
+}
+
 export interface User {
   id: string;
   email: string;
@@ -77,4 +88,27 @@ export interface Conversation {
   unreadCount: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
+  actions?: Array<{
+    type: string;
+    description: string;
+    payload?: any;
+    status?: string;
+  }>;
+}
+
+export interface AIConversation {
+  id: string;
+  userId: string;
+  messages: ChatMessage[];
+  createdAt: string;
+  updatedAt: string;
+  title?: string;
+  context?: any;
 }
