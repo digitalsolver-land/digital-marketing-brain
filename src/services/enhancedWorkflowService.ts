@@ -1,6 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { Workflow } from '@/types/platform';
-import { n8nService } from './n8nService';
+import { n8nApi } from './n8nApi';
 
 export interface N8nWorkflowJSON {
   id?: string;
@@ -58,7 +58,7 @@ class EnhancedWorkflowService {
       // Créer d'abord dans n8n si disponible
       let n8nWorkflowId: string | undefined;
       try {
-        const n8nWorkflow = await n8nService.createWorkflow(template.workflow);
+        const n8nWorkflow = await n8nApi.createWorkflow(template.workflow);
         n8nWorkflowId = n8nWorkflow.id;
       } catch (error) {
         console.log('n8n non disponible, création locale uniquement');
@@ -108,7 +108,7 @@ class EnhancedWorkflowService {
 
       if (workflow.n8n_workflow_id) {
         // Synchroniser depuis n8n
-        const n8nWorkflow = await n8nService.getWorkflow(workflow.n8n_workflow_id);
+        const n8nWorkflow = await n8nApi.getWorkflow(workflow.n8n_workflow_id);
         
         // Mettre à jour la version locale
         await supabase
@@ -121,7 +121,7 @@ class EnhancedWorkflowService {
       } else {
         // Créer dans n8n si pas encore fait
         const jsonData = workflow.json_data as unknown as N8nWorkflowJSON;
-        const n8nWorkflow = await n8nService.createWorkflow(jsonData);
+        const n8nWorkflow = await n8nApi.createWorkflow(jsonData);
         
         await supabase
           .from('workflows')
@@ -238,7 +238,7 @@ class EnhancedWorkflowService {
       // Créer d'abord dans n8n si disponible
       let n8nWorkflowId: string | undefined;
       try {
-        const n8nWorkflow = await n8nService.createWorkflow(jsonData);
+        const n8nWorkflow = await n8nApi.createWorkflow(jsonData);
         n8nWorkflowId = n8nWorkflow.id;
       } catch (error) {
         console.log('n8n non disponible, création locale uniquement');
@@ -403,7 +403,7 @@ class EnhancedWorkflowService {
 
       if (workflow?.n8n_workflow_id) {
         try {
-          await n8nService.deleteWorkflow(workflow.n8n_workflow_id);
+          await n8nApi.deleteWorkflow(workflow.n8n_workflow_id);
         } catch (error) {
           console.log('Erreur suppression n8n, continuons avec la suppression locale');
         }
@@ -447,9 +447,9 @@ class EnhancedWorkflowService {
       if (workflow?.n8n_workflow_id) {
         try {
           if (status === 'active') {
-            await n8nService.activateWorkflow(workflow.n8n_workflow_id);
+            await n8nApi.activateWorkflow(workflow.n8n_workflow_id);
           } else {
-            await n8nService.deactivateWorkflow(workflow.n8n_workflow_id);
+            await n8nApi.deactivateWorkflow(workflow.n8n_workflow_id);
           }
         } catch (error) {
           console.log('Erreur synchronisation statut n8n');
