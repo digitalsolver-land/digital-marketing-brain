@@ -26,6 +26,7 @@ export type Database = {
           linkedin_api: string | null
           max_workflows: number | null
           n8n_api_key: string | null
+          n8n_base_url: string | null
           openrouter_api_key: string | null
           postiz_api_key: string | null
           postiz_api_url: string | null
@@ -57,6 +58,7 @@ export type Database = {
           linkedin_api?: string | null
           max_workflows?: number | null
           n8n_api_key?: string | null
+          n8n_base_url?: string | null
           openrouter_api_key?: string | null
           postiz_api_key?: string | null
           postiz_api_url?: string | null
@@ -88,6 +90,7 @@ export type Database = {
           linkedin_api?: string | null
           max_workflows?: number | null
           n8n_api_key?: string | null
+          n8n_base_url?: string | null
           openrouter_api_key?: string | null
           postiz_api_key?: string | null
           postiz_api_url?: string | null

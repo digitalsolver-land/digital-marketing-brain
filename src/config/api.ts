@@ -26,6 +26,7 @@ export interface N8nConfig {
   baseUrl: string;
   timeout?: number;
   retries?: number;
+  retryDelay?: number;
 }
 
 // Gestionnaire centralisé de configuration n8n
@@ -81,11 +82,16 @@ export class N8nConfigManager {
       
       if (!user) return null;
 
-      const { data: settings } = await supabase
+      const { data: settings, error } = await supabase
         .from('app_settings')
         .select('n8n_api_key, n8n_base_url')
         .eq('user_id', user.id)
         .single();
+      
+      if (error) {
+        console.warn('⚠️ Aucun paramètre n8n trouvé:', error);
+        return null;
+      }
       
       if (settings?.n8n_api_key) {
         return {
@@ -163,3 +169,6 @@ export class N8nConfigManager {
 
 // Instance singleton
 export const n8nConfigManager = N8nConfigManager.getInstance();
+
+// Export de la fonction pour compatibilité
+export const getEffectiveN8nConfig = () => n8nConfigManager.getEffectiveConfig();

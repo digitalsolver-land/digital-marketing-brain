@@ -56,6 +56,15 @@ export interface RequestOptions {
 // États de connexion possibles
 export type ConnectionStatus = 'checking' | 'connected' | 'disconnected' | 'error';
 
+// Interface pour les données JSON de workflow
+interface WorkflowJsonData {
+  nodes?: any[];
+  connections?: any;
+  settings?: any;
+  staticData?: any;
+  tags?: Array<{ id: string; name: string }>;
+}
+
 export class UnifiedN8nService {
   private static instance: UnifiedN8nService;
   private config: N8nConfig | null = null;
@@ -144,6 +153,7 @@ export class UnifiedN8nService {
     const url = `${this.config.baseUrl}${endpoint}`;
     const maxRetries = this.config.retries || 3;
     const timeout = this.config.timeout || 10000;
+    const retryDelay = this.config.retryDelay || 1000;
 
     console.log(`🌐 Requête n8n: ${options.method || 'GET'} ${endpoint}`);
 
@@ -197,7 +207,7 @@ export class UnifiedN8nService {
 
       // Retry logic pour les erreurs réseau ou serveur
       if (retryCount < maxRetries && this.shouldRetry(error)) {
-        const delay = (retryCount + 1) * (this.config.retryDelay || 1000);
+        const delay = (retryCount + 1) * retryDelay;
         console.warn(`⚠️ Tentative ${retryCount + 1}/${maxRetries} échouée, retry dans ${delay}ms...`);
         
         await new Promise(resolve => setTimeout(resolve, delay));
@@ -309,18 +319,21 @@ export class UnifiedN8nService {
       
       if (error) throw error;
 
-      const n8nWorkflows: N8nWorkflow[] = (workflows || []).map(w => ({
-        id: w.id,
-        name: w.name,
-        active: w.status === 'active',
-        nodes: w.json_data?.nodes || [],
-        connections: w.json_data?.connections || {},
-        settings: w.json_data?.settings || {},
-        staticData: w.json_data?.staticData || {},
-        tags: w.tags?.map((tag: string, index: number) => ({ id: index.toString(), name: tag })) || [],
-        createdAt: w.created_at,
-        updatedAt: w.updated_at
-      }));
+      const n8nWorkflows: N8nWorkflow[] = (workflows || []).map(w => {
+        const jsonData = w.json_data as WorkflowJsonData;
+        return {
+          id: w.id,
+          name: w.name,
+          active: w.status === 'active',
+          nodes: jsonData?.nodes || [],
+          connections: jsonData?.connections || {},
+          settings: jsonData?.settings || {},
+          staticData: jsonData?.staticData || {},
+          tags: jsonData?.tags || [],
+          createdAt: w.created_at,
+          updatedAt: w.updated_at
+        };
+      });
 
       return { data: n8nWorkflows };
     } catch (error) {
@@ -330,8 +343,8 @@ export class UnifiedN8nService {
   }
 
   private async createLocalWorkflow(workflowData: any): Promise<N8nWorkflow> {
-    const { workflowService } = await import('./workflowService');
-    const localWorkflow = await workflowService.createWorkflowFromJSON(workflowData);
+    const { enhancedWorkflowService } = await import('./enhancedWorkflowService');
+    const localWorkflow = await enhancedWorkflowService.createWorkflowFromJSON(workflowData);
     
     return {
       id: localWorkflow.id,
