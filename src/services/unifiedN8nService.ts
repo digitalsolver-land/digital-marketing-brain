@@ -78,7 +78,7 @@ export class UnifiedN8nService {
     return UnifiedN8nService.instance;
   }
 
-  // === GESTION DE LA CONNEXION ===
+  // === GESTION DE LA CONNEXION AMÉLIORÉE ===
   async checkConnection(): Promise<{ status: ConnectionStatus; error?: string }> {
     try {
       this.connectionStatus = 'checking';
@@ -86,25 +86,28 @@ export class UnifiedN8nService {
       
       console.log('🔍 Vérification connexion n8n...');
       
-      // Récupérer la configuration
-      this.config = await n8nConfigManager.getEffectiveConfig();
+      // Utiliser la fonction edge pour un test plus robuste
+      const { data, error } = await supabase.functions.invoke('test-n8n-connection');
       
-      if (!this.config.apiKey) {
-        this.connectionStatus = 'disconnected';
-        this.lastError = 'Clé API n8n manquante';
-        return { status: 'disconnected', error: this.lastError };
+      if (error) {
+        console.error('❌ Erreur fonction edge:', error);
+        this.connectionStatus = 'error';
+        this.lastError = 'Erreur lors du test de connexion';
+        return { status: 'error', error: this.lastError };
       }
 
-      // Tester la connexion avec un simple appel API
-      const isAvailable = await this.testConnection();
-      
-      if (isAvailable) {
+      if (data?.success) {
         this.connectionStatus = 'connected';
-        console.log('✅ n8n connecté avec succès');
+        console.log('✅ n8n connecté avec succès via edge function');
+        
+        // Récupérer aussi la config pour l'utiliser localement
+        this.config = await n8nConfigManager.getEffectiveConfig();
+        
         return { status: 'connected' };
       } else {
         this.connectionStatus = 'error';
-        this.lastError = 'Service n8n non disponible';
+        this.lastError = data?.error || 'Test de connexion échoué';
+        console.error('❌ Test de connexion échoué:', data);
         return { status: 'error', error: this.lastError };
       }
     } catch (error) {
@@ -117,10 +120,14 @@ export class UnifiedN8nService {
 
   private async testConnection(): Promise<boolean> {
     try {
+      // Fallback : test direct si la fonction edge n'est pas disponible
+      this.config = await n8nConfigManager.getEffectiveConfig();
+      if (!this.config.apiKey) return false;
+      
       await this.makeRequest('/workflows?limit=1');
       return true;
     } catch (error) {
-      console.warn('⚠️ Test connexion n8n échoué:', error);
+      console.warn('⚠️ Test connexion direct échoué:', error);
       return false;
     }
   }
@@ -143,7 +150,7 @@ export class UnifiedN8nService {
     retryCount = 0
   ): Promise<T> {
     if (!this.config) {
-      throw new Error('Configuration n8n non initialisée');
+      this.config = await n8nConfigManager.getEffectiveConfig();
     }
 
     if (!this.config.apiKey) {

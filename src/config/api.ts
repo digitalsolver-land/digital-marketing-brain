@@ -5,7 +5,7 @@ export const API_CONFIG = {
     API_KEY: '',
     // Configuration par défaut pour les tests
     DEFAULT_SETTINGS: {
-      timeout: 10000,
+      timeout: 15000,
       retries: 3,
       retryDelay: 1000
     }
@@ -43,21 +43,30 @@ export class N8nConfigManager {
   // Récupérer la configuration effective depuis multiple sources
   async getEffectiveConfig(): Promise<N8nConfig> {
     try {
-      // 1. Essayer Supabase d'abord
+      console.log('🔍 Récupération configuration n8n...');
+      
+      // 1. Essayer d'abord les secrets Supabase via edge function
+      const supabaseSecretsConfig = await this.getSupabaseSecretsConfig();
+      if (supabaseSecretsConfig?.apiKey) {
+        console.log('✅ Configuration n8n depuis secrets Supabase');
+        return supabaseSecretsConfig;
+      }
+
+      // 2. Essayer Supabase database ensuite
       const supabaseConfig = await this.getSupabaseConfig();
       if (supabaseConfig?.apiKey) {
-        console.log('✅ Configuration n8n depuis Supabase');
+        console.log('✅ Configuration n8n depuis Supabase database');
         return supabaseConfig;
       }
 
-      // 2. Fallback sur localStorage
+      // 3. Fallback sur localStorage
       const localConfig = this.getLocalConfig();
       if (localConfig?.apiKey) {
         console.log('✅ Configuration n8n depuis localStorage');
         return localConfig;
       }
 
-      // 3. Configuration par défaut (sans clé API)
+      // 4. Configuration par défaut (sans clé API)
       console.warn('⚠️ Aucune clé API n8n configurée');
       return {
         apiKey: '',
@@ -74,7 +83,31 @@ export class N8nConfigManager {
     }
   }
 
-  // Configuration depuis Supabase
+  // Configuration depuis les secrets Supabase (via edge function)
+  private async getSupabaseSecretsConfig(): Promise<N8nConfig | null> {
+    try {
+      const { supabase } = await import('@/integrations/supabase/client');
+      
+      // Utiliser une edge function simple pour récupérer les secrets
+      const { data, error } = await supabase.functions.invoke('get-n8n-secrets');
+      
+      if (error || !data?.n8n_api_key) {
+        console.log('ℹ️ Secrets Supabase non disponibles ou non configurés');
+        return null;
+      }
+      
+      return {
+        apiKey: data.n8n_api_key,
+        baseUrl: data.n8n_base_url || API_CONFIG.N8N.BASE_URL,
+        ...API_CONFIG.N8N.DEFAULT_SETTINGS
+      };
+    } catch (error) {
+      console.warn('⚠️ Erreur récupération secrets Supabase:', error);
+      return null;
+    }
+  }
+
+  // Configuration depuis Supabase database
   private async getSupabaseConfig(): Promise<N8nConfig | null> {
     try {
       const { supabase } = await import('@/integrations/supabase/client');
@@ -89,7 +122,7 @@ export class N8nConfigManager {
         .single();
       
       if (error) {
-        console.warn('⚠️ Aucun paramètre n8n trouvé:', error);
+        console.log('ℹ️ Aucun paramètre n8n trouvé en base:', error.message);
         return null;
       }
       
@@ -101,7 +134,7 @@ export class N8nConfigManager {
         };
       }
     } catch (error) {
-      console.warn('⚠️ Erreur config Supabase:', error);
+      console.warn('⚠️ Erreur config Supabase database:', error);
     }
     return null;
   }
@@ -129,14 +162,16 @@ export class N8nConfigManager {
   // Sauvegarder la configuration
   async saveConfig(config: Partial<N8nConfig>): Promise<void> {
     try {
-      // Sauvegarder dans localStorage
+      console.log('💾 Sauvegarde configuration n8n...');
+      
+      // Sauvegarder dans localStorage (toujours comme fallback)
       const localSettings = {
         n8n_api_key: config.apiKey,
         n8n_base_url: config.baseUrl || API_CONFIG.N8N.BASE_URL
       };
       localStorage.setItem('n8n_user_settings', JSON.stringify(localSettings));
 
-      // Essayer de sauvegarder dans Supabase
+      // Essayer de sauvegarder dans Supabase database
       try {
         const { supabase } = await import('@/integrations/supabase/client');
         const { data: { user } } = await supabase.auth.getUser();
@@ -149,12 +184,13 @@ export class N8nConfigManager {
               n8n_api_key: config.apiKey,
               n8n_base_url: config.baseUrl || API_CONFIG.N8N.BASE_URL
             });
+          console.log('✅ Configuration sauvegardée en base Supabase');
         }
       } catch (supabaseError) {
-        console.warn('⚠️ Impossible de sauvegarder dans Supabase:', supabaseError);
+        console.warn('⚠️ Impossible de sauvegarder en base Supabase:', supabaseError);
       }
 
-      console.log('✅ Configuration n8n sauvegardée');
+      console.log('✅ Configuration n8n sauvegardée (localStorage + Supabase si possible)');
     } catch (error) {
       console.error('❌ Erreur sauvegarde config:', error);
       throw new Error('Impossible de sauvegarder la configuration');
