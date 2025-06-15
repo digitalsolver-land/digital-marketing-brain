@@ -1,7 +1,6 @@
-
 import React, { useState } from 'react';
 import { Sidebar } from '@/components/layout/Sidebar';
-import { Header } from '@/components/layout/Header';
+import Header from '@/components/layout/Header';
 import { MetricsGrid } from '@/components/dashboard/MetricsGrid';
 import { PerformanceChart } from '@/components/dashboard/PerformanceChart';
 import { WorkflowManager } from '@/components/workflows/WorkflowManager';

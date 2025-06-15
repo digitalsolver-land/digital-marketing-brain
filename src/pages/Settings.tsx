@@ -25,6 +25,7 @@ import {
   Shield,
   Trash2
 } from 'lucide-react';
+import type { Database } from '@/integrations/supabase/types';
 
 interface AppSettings {
   n8n_api_key?: string;
@@ -53,6 +54,8 @@ interface UserWithRole {
   last_name?: string;
   roles: string[];
 }
+
+type AppRole = Database['public']['Enums']['app_role'];
 
 const Settings = () => {
   const { user, isAdmin } = useAuth();
@@ -157,11 +160,11 @@ const Settings = () => {
         .delete()
         .eq('user_id', userId);
 
-      // Ajouter le nouveau rôle
+      // Ajouter le nouveau rôle si ce n'est pas 'user'
       if (newRole !== 'user') {
         const { error } = await supabase
           .from('user_roles')
-          .insert({ user_id: userId, role: newRole });
+          .insert({ user_id: userId, role: newRole as AppRole });
 
         if (error) throw error;
       }
@@ -425,7 +428,6 @@ const Settings = () => {
           </div>
         </TabsContent>
 
-        {/* Onglet Notifications */}
         <TabsContent value="notifications">
           <Card>
             <CardHeader>
