@@ -223,15 +223,25 @@ class N8nService {
     retryCount = 0
   ): Promise<T> {
     try {
-      // Récupérer la configuration depuis Supabase
-      const { data: secrets } = await supabase.functions.invoke('get-n8n-secrets');
+      console.log(`🌐 Requête n8n: ${options.method || 'GET'} ${endpoint}`);
       
-      if (!secrets?.apiKey) {
+      // Récupérer la configuration depuis Supabase
+      const { data: secrets, error: secretsError } = await supabase.functions.invoke('get-n8n-secrets');
+      
+      if (secretsError || !secrets?.n8n_api_key) {
+        console.error('❌ Erreur récupération secrets:', secretsError);
+        throw new Error('Configuration n8n manquante. Configurez votre clé API dans les paramètres.');
+      }
+
+      const apiKey = secrets.n8n_api_key;
+      const baseUrl = secrets.n8n_base_url || 'https://n8n.srv860213.hstgr.cloud/api/v1';
+      
+      if (!apiKey) {
         throw new Error('Clé API n8n manquante. Configurez votre clé API dans les paramètres.');
       }
 
-      const url = `${secrets.baseUrl}${endpoint}`;
-      console.log(`🌐 Requête n8n: ${options.method || 'GET'} ${endpoint}`);
+      const url = `${baseUrl}${endpoint}`;
+      console.log(`🔗 URL finale: ${url}`);
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), this.REQUEST_TIMEOUT);
@@ -241,7 +251,7 @@ class N8nService {
         signal: controller.signal,
         headers: {
           'Content-Type': 'application/json',
-          'X-N8N-API-KEY': secrets.apiKey,
+          'X-N8N-API-KEY': apiKey,
           ...options.headers,
         },
       });
@@ -250,6 +260,7 @@ class N8nService {
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => 'Erreur inconnue');
+        console.error(`❌ Erreur HTTP ${response.status}:`, errorText);
         
         switch (response.status) {
           case 401:
@@ -319,9 +330,38 @@ class N8nService {
 
   // === WORKFLOWS ===
   async getWorkflows(options: RequestOptions = {}): Promise<PaginatedResponse<N8nWorkflow>> {
-    const queryString = this.buildQueryParams(options);
-    const endpoint = `/workflows${queryString ? `?${queryString}` : ''}`;
-    return this.makeRequest<PaginatedResponse<N8nWorkflow>>(endpoint);
+    try {
+      const queryString = this.buildQueryParams(options);
+      const endpoint = `/workflows${queryString ? `?${queryString}` : ''}`;
+      
+      console.log('📥 Récupération workflows n8n...');
+      const result = await this.makeRequest<PaginatedResponse<N8nWorkflow>>(endpoint);
+      
+      // Validation du format de retour
+      if (!result) {
+        console.warn('⚠️ Aucune donnée reçue, retour format par défaut');
+        return { data: [], nextCursor: undefined };
+      }
+      
+      // Si l'API retourne directement un tableau (pas encapsulé)
+      if (Array.isArray(result)) {
+        console.log(`✅ ${result.length} workflows récupérés (format tableau)`);
+        return { data: result, nextCursor: undefined };
+      }
+      
+      // Si l'API retourne un objet avec data
+      if (result.data && Array.isArray(result.data)) {
+        console.log(`✅ ${result.data.length} workflows récupérés (format encapsulé)`);
+        return result;
+      }
+      
+      console.warn('⚠️ Format de réponse inattendu:', result);
+      return { data: [], nextCursor: undefined };
+      
+    } catch (error) {
+      console.error('❌ Erreur getWorkflows:', error);
+      throw error;
+    }
   }
 
   async getWorkflow(id: string, options: RequestOptions = {}): Promise<N8nWorkflow> {
@@ -704,7 +744,6 @@ class N8nService {
   }
 
   getWorkflowUrl(workflowId: string): string {
-    // Cette méthode sera améliorée pour récupérer l'URL de base depuis la config
     return `https://n8n.srv860213.hstgr.cloud/workflow/${workflowId}`;
   }
 
