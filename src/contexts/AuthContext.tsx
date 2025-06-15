@@ -263,27 +263,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!user) return { error: new Error('No user logged in') };
 
     try {
-      const { error } = await supabase
+      console.log('Updating profile with:', updates);
+      
+      const { data, error } = await supabase
         .from('profiles')
         .update(updates)
-        .eq('id', user.id);
+        .eq('id', user.id)
+        .select()
+        .single();
 
       if (error) {
-        toast({
-          variant: "destructive",
-          title: "Erreur",
-          description: "Impossible de mettre à jour le profil.",
-        });
-      } else {
-        await fetchUserProfile(user.id);
-        toast({
-          title: "Succès",
-          description: "Profil mis à jour avec succès.",
-        });
+        console.error('Supabase update error:', error);
+        return { error };
       }
 
-      return { error };
+      console.log('Profile updated successfully:', data);
+      setProfile(data);
+      
+      return { error: null };
     } catch (error: any) {
+      console.error('Error in updateProfile:', error);
       return { error };
     }
   };

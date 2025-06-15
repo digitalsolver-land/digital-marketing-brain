@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -24,6 +25,7 @@ const Profile = () => {
   });
 
   useEffect(() => {
+    console.log('Profile data changed:', profile);
     if (profile) {
       setFormData({
         first_name: profile.first_name || '',
@@ -41,7 +43,6 @@ const Profile = () => {
     try {
       console.log('Updating profile with data:', formData);
       
-      // Utiliser la fonction updateProfile du contexte
       const { error } = await updateProfile(formData);
 
       if (error) {
@@ -138,21 +139,29 @@ const Profile = () => {
             <CardContent className="pt-6">
               <div className="flex flex-col items-center text-center">
                 <Avatar className="w-24 h-24 mb-4">
-                  <AvatarImage src={formData.avatar_url} />
+                  <AvatarImage 
+                    src={formData.avatar_url} 
+                    alt={`${formData.first_name} ${formData.last_name}`}
+                  />
                   <AvatarFallback className="text-lg">
-                    {formData.first_name?.[0]}{formData.last_name?.[0]}
+                    {formData.first_name?.[0] || 'U'}{formData.last_name?.[0] || ''}
                   </AvatarFallback>
                 </Avatar>
                 <h3 className="font-semibold text-lg">
-                  {formData.first_name} {formData.last_name}
+                  {formData.first_name && formData.last_name 
+                    ? `${formData.first_name} ${formData.last_name}`
+                    : 'Nom non défini'
+                  }
                 </h3>
                 <p className="text-slate-600 text-sm mb-3">{user?.email}</p>
                 <div className="flex flex-wrap gap-1 justify-center">
-                  {userRoles.map((role) => (
+                  {userRoles.length > 0 ? userRoles.map((role) => (
                     <Badge key={role} className={`${getRoleBadgeColor(role)} text-white`}>
                       {role}
                     </Badge>
-                  ))}
+                  )) : (
+                    <Badge variant="outline">Aucun rôle</Badge>
+                  )}
                 </div>
               </div>
             </CardContent>
