@@ -9,6 +9,7 @@ import { AIChat } from '@/components/ai/AIChat';
 import { ContentGenerator } from '@/components/content/ContentGenerator';
 import { AnalyticsDashboard } from '@/components/analytics/AnalyticsDashboard';
 import { WhatsAppManager } from '@/components/whatsapp/WhatsAppManager';
+import { PostizDashboard } from '@/components/social/PostizDashboard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -87,25 +88,7 @@ const Index = () => {
             <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
               Automatisation Sociale
             </h2>
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <Users className="w-5 h-5 text-pink-500" />
-                  <span>Réseaux Sociaux</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-12">
-                  <Users className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-slate-600 mb-2">
-                    Module en développement
-                  </h3>
-                  <p className="text-slate-500">
-                    L'automatisation sociale sera bientôt disponible
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
+            <PostizDashboard />
           </div>
         );
 
