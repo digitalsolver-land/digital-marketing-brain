@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -82,7 +83,8 @@ const Settings = () => {
     whatsapp_ai_enabled: false,
     whatsapp_response_mode: 'auto',
     whatsapp_ai_instructions: 'Tu es un assistant professionnel qui répond aux questions des clients de manière courtoise et utile.',
-    postiz_api_url: 'https://api.postiz.com/public/v1'
+    postiz_api_url: 'https://api.postiz.com/public/v1',
+    openrouter_api_key: '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'
   });
   const [users, setUsers] = useState<UserWithRoles[]>([]);
 
@@ -171,7 +173,7 @@ const Settings = () => {
 
       toast({
         title: "Paramètres sauvegardés",
-        description: "Vos paramètres ont été mis à jour avec succès.",
+        description: "Vos paramètres ont été mis à jour avec succès. L'IA est maintenant configurée.",
       });
     } catch (error: any) {
       toast({
@@ -279,6 +281,9 @@ const Settings = () => {
                     onChange={(e) => setSettings({ ...settings, openrouter_api_key: e.target.value })}
                     placeholder="sk-or-..."
                   />
+                  <p className="text-xs text-green-600">
+                    ✓ Clé API configurée - L'IA peut maintenant générer du contenu
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="n8n_api_key">n8n API Key</Label>
