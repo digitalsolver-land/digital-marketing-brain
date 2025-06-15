@@ -157,14 +157,17 @@ export const WorkflowVisualization: React.FC<WorkflowVisualizationProps> = ({
     
     if (!sourceNode || !targetNode) return '';
 
-    const sourceX = sourceNode.position_x + 100;
-    const sourceY = sourceNode.position_y + 25;
-    const targetX = targetNode.position_x;
-    const targetY = targetNode.position_y + 25;
+    // Points de connexion plus précis
+    const sourceX = sourceNode.position_x + 120; // Sortie à droite du nœud
+    const sourceY = sourceNode.position_y + 30;  // Milieu vertical du nœud
+    const targetX = targetNode.position_x;       // Entrée à gauche du nœud
+    const targetY = targetNode.position_y + 30;  // Milieu vertical du nœud
 
-    const midX = (sourceX + targetX) / 2;
+    // Ligne courbe Bézier pour une meilleure visibilité
+    const controlX1 = sourceX + 60;
+    const controlX2 = targetX - 60;
     
-    return `M ${sourceX} ${sourceY} Q ${midX} ${sourceY} ${midX} ${(sourceY + targetY) / 2} Q ${midX} ${targetY} ${targetX} ${targetY}`;
+    return `M ${sourceX} ${sourceY} C ${controlX1} ${sourceY} ${controlX2} ${targetY} ${targetX} ${targetY}`;
   };
 
   const transformStyle = {
@@ -286,57 +289,118 @@ export const WorkflowVisualization: React.FC<WorkflowVisualizationProps> = ({
                   backgroundSize: `${20 * zoom}px ${20 * zoom}px`
                 }}
               >
-                {/* Dessiner les connexions d'abord */}
-                {connections.map((connection) => (
-                  <g key={connection.id}>
-                    <path
-                      d={getConnectionPath(connection)}
-                      stroke="#666"
-                      strokeWidth={2 / zoom}
-                      fill="none"
-                      strokeDasharray={connection.connection_type === 'main' ? 'none' : `${5 / zoom},${5 / zoom}`}
-                      markerEnd="url(#arrowhead)"
-                    />
-                  </g>
-                ))}
-
-                {/* Définir le marqueur de flèche */}
+                {/* Définir les marqueurs de flèche */}
                 <defs>
                   <marker
                     id="arrowhead"
-                    markerWidth="10"
-                    markerHeight="7"
-                    refX="9"
-                    refY="3.5"
+                    markerWidth="12"
+                    markerHeight="8"
+                    refX="11"
+                    refY="4"
                     orient="auto"
-                    markerUnits="userSpaceOnUse"
+                    markerUnits="strokeWidth"
                   >
                     <polygon
-                      points="0 0, 10 3.5, 0 7"
-                      fill="#666"
+                      points="0 0, 12 4, 0 8"
+                      fill="#2563eb"
+                      stroke="#2563eb"
+                      strokeWidth="1"
+                    />
+                  </marker>
+                  <marker
+                    id="arrowhead-dashed"
+                    markerWidth="12"
+                    markerHeight="8"
+                    refX="11"
+                    refY="4"
+                    orient="auto"
+                    markerUnits="strokeWidth"
+                  >
+                    <polygon
+                      points="0 0, 12 4, 0 8"
+                      fill="#94a3b8"
+                      stroke="#94a3b8"
+                      strokeWidth="1"
                     />
                   </marker>
                 </defs>
 
+                {/* Dessiner les connexions avec une meilleure visibilité */}
+                {connections.map((connection) => {
+                  const path = getConnectionPath(connection);
+                  const isMainConnection = connection.connection_type === 'main';
+                  
+                  return (
+                    <g key={connection.id}>
+                      {/* Ligne de fond plus épaisse pour la visibilité */}
+                      <path
+                        d={path}
+                        stroke="#ffffff"
+                        strokeWidth="6"
+                        fill="none"
+                        opacity="0.8"
+                      />
+                      {/* Ligne principale */}
+                      <path
+                        d={path}
+                        stroke={isMainConnection ? "#2563eb" : "#94a3b8"}
+                        strokeWidth="3"
+                        fill="none"
+                        strokeDasharray={isMainConnection ? "none" : "8,4"}
+                        markerEnd={isMainConnection ? "url(#arrowhead)" : "url(#arrowhead-dashed)"}
+                        className="transition-all duration-200 hover:stroke-width-4"
+                      />
+                    </g>
+                  );
+                })}
+
                 {/* Dessiner les nœuds */}
                 {nodes.map((node) => (
                   <g key={node.id} transform={`translate(${node.position_x}, ${node.position_y})`}>
+                    {/* Ombre du nœud */}
+                    <rect
+                      x="2"
+                      y="2"
+                      width="120"
+                      height="60"
+                      rx="8"
+                      fill="rgba(0,0,0,0.1)"
+                    />
+                    
                     {/* Rectangle du nœud */}
                     <rect
                       width="120"
                       height="60"
                       rx="8"
                       fill={getNodeColor(node.node_type)}
-                      stroke="#333"
-                      strokeWidth={1 / zoom}
+                      stroke="#ffffff"
+                      strokeWidth="2"
                       className="drop-shadow-sm"
+                    />
+                    
+                    {/* Points de connexion */}
+                    <circle
+                      cx="0"
+                      cy="30"
+                      r="4"
+                      fill="#ffffff"
+                      stroke={getNodeColor(node.node_type)}
+                      strokeWidth="2"
+                    />
+                    <circle
+                      cx="120"
+                      cy="30"
+                      r="4"
+                      fill="#ffffff"
+                      stroke={getNodeColor(node.node_type)}
+                      strokeWidth="2"
                     />
                     
                     {/* Icône du nœud */}
                     <text
                       x="20"
                       y="35"
-                      fontSize={16 / zoom}
+                      fontSize={Math.max(16 / zoom, 12)}
                       fill="white"
                       textAnchor="middle"
                       style={{ pointerEvents: 'none' }}
@@ -348,20 +412,20 @@ export const WorkflowVisualization: React.FC<WorkflowVisualizationProps> = ({
                     <text
                       x="70"
                       y="32"
-                      fontSize={Math.max(10 / zoom, 8)}
+                      fontSize={Math.max(11 / zoom, 9)}
                       fill="white"
                       textAnchor="middle"
                       className="font-medium"
                       style={{ pointerEvents: 'none' }}
                     >
-                      {node.name.length > 14 ? `${node.name.substring(0, 14)}...` : node.name}
+                      {node.name.length > 12 ? `${node.name.substring(0, 12)}...` : node.name}
                     </text>
                     
                     {/* Type du nœud */}
                     <text
                       x="70"
                       y="45"
-                      fontSize={Math.max(8 / zoom, 6)}
+                      fontSize={Math.max(9 / zoom, 7)}
                       fill="rgba(255,255,255,0.8)"
                       textAnchor="middle"
                       style={{ pointerEvents: 'none' }}
@@ -379,6 +443,19 @@ export const WorkflowVisualization: React.FC<WorkflowVisualizationProps> = ({
               <div className="text-gray-600 dark:text-gray-400">• Clic + glisser pour déplacer</div>
               <div className="text-gray-600 dark:text-gray-400">• Molette pour zoomer</div>
               <div className="text-gray-600 dark:text-gray-400">• Boutons pour contrôles précis</div>
+            </div>
+            
+            {/* Légende des connexions */}
+            <div className="absolute bottom-4 left-4 bg-white dark:bg-gray-900 p-3 rounded-lg shadow-md text-xs space-y-2">
+              <div className="font-medium text-gray-700 dark:text-gray-300">Connexions:</div>
+              <div className="flex items-center space-x-2">
+                <div className="w-4 h-0.5 bg-blue-600"></div>
+                <span className="text-gray-600 dark:text-gray-400">Principale</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className="w-4 h-0.5 bg-gray-400 border-dashed" style={{ borderTopStyle: 'dashed', borderTopWidth: '1px' }}></div>
+                <span className="text-gray-600 dark:text-gray-400">Secondaire</span>
+              </div>
             </div>
           </div>
           
