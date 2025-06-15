@@ -237,22 +237,68 @@ export class UnifiedN8nService {
   // === WORKFLOWS ===
   async getWorkflows(options: RequestOptions = {}): Promise<PaginatedResponse<N8nWorkflow>> {
     const params = new URLSearchParams();
-    if (options.limit) params.append('limit', options.limit.toString());
+    
+    // Augmenter la limite par défaut pour récupérer plus de workflows
+    const limit = options.limit || 100;
+    params.append('limit', limit.toString());
+    
     if (options.cursor) params.append('cursor', options.cursor);
     
     const queryString = params.toString();
     const endpoint = `/workflows${queryString ? `?${queryString}` : ''}`;
     
     try {
+      console.log(`📊 Récupération de ${limit} workflows depuis n8n...`);
+      
       const response = await this.makeRequest<{ data: N8nWorkflow[]; nextCursor?: string }>(endpoint);
+      
+      // Enrichir les données des workflows
+      const enrichedWorkflows = await this.enrichWorkflowsData(response.data || []);
+      
+      console.log(`✅ ${enrichedWorkflows.length} workflows récupérés et enrichis`);
+      
       return {
-        data: response.data || [],
+        data: enrichedWorkflows,
         nextCursor: response.nextCursor
       };
     } catch (error) {
       console.error('❌ Erreur récupération workflows:', error);
       // En cas d'erreur, retourner les workflows locaux
       return await this.getLocalWorkflows(options);
+    }
+  }
+
+  // Enrichir les données des workflows avec des détails supplémentaires
+  private async enrichWorkflowsData(workflows: N8nWorkflow[]): Promise<N8nWorkflow[]> {
+    const enrichedWorkflows: N8nWorkflow[] = [];
+    
+    for (const workflow of workflows) {
+      try {
+        if (workflow.id) {
+          // Récupérer les détails complets du workflow
+          const detailedWorkflow = await this.getWorkflowDetails(workflow.id);
+          enrichedWorkflows.push(detailedWorkflow || workflow);
+        } else {
+          enrichedWorkflows.push(workflow);
+        }
+      } catch (error) {
+        console.warn(`⚠️ Impossible d'enrichir le workflow ${workflow.name}:`, error);
+        enrichedWorkflows.push(workflow);
+      }
+    }
+    
+    return enrichedWorkflows;
+  }
+
+  // Récupérer les détails complets d'un workflow
+  private async getWorkflowDetails(workflowId: string): Promise<N8nWorkflow | null> {
+    try {
+      const workflow = await this.makeRequest<N8nWorkflow>(`/workflows/${workflowId}`);
+      console.log(`📋 Détails récupérés pour workflow ${workflow.name}`);
+      return workflow;
+    } catch (error) {
+      console.warn(`⚠️ Erreur récupération détails workflow ${workflowId}:`, error);
+      return null;
     }
   }
 
@@ -277,10 +323,14 @@ export class UnifiedN8nService {
     };
 
     try {
-      return await this.makeRequest<N8nWorkflow>('/workflows', {
+      console.log(`🚀 Création workflow "${workflow.name}" sur n8n...`);
+      const createdWorkflow = await this.makeRequest<N8nWorkflow>('/workflows', {
         method: 'POST',
         body: JSON.stringify(workflowData),
       });
+      
+      console.log(`✅ Workflow "${createdWorkflow.name}" créé avec succès (ID: ${createdWorkflow.id})`);
+      return createdWorkflow;
     } catch (error) {
       console.warn('⚠️ Échec création workflow n8n, fallback local');
       // Fallback: créer en local
@@ -289,21 +339,29 @@ export class UnifiedN8nService {
   }
 
   async activateWorkflow(id: string): Promise<N8nWorkflow> {
-    return this.makeRequest<N8nWorkflow>(`/workflows/${id}/activate`, {
+    console.log(`▶️ Activation workflow ${id}...`);
+    const result = await this.makeRequest<N8nWorkflow>(`/workflows/${id}/activate`, {
       method: 'POST',
     });
+    console.log(`✅ Workflow ${id} activé`);
+    return result;
   }
 
   async deactivateWorkflow(id: string): Promise<N8nWorkflow> {
-    return this.makeRequest<N8nWorkflow>(`/workflows/${id}/deactivate`, {
+    console.log(`⏸️ Désactivation workflow ${id}...`);
+    const result = await this.makeRequest<N8nWorkflow>(`/workflows/${id}/deactivate`, {
       method: 'POST',
     });
+    console.log(`✅ Workflow ${id} désactivé`);
+    return result;
   }
 
   async deleteWorkflow(id: string): Promise<void> {
+    console.log(`🗑️ Suppression workflow ${id}...`);
     await this.makeRequest<void>(`/workflows/${id}`, {
       method: 'DELETE',
     });
+    console.log(`✅ Workflow ${id} supprimé`);
   }
 
   // === MÉTHODES LOCALES (FALLBACK) ===
@@ -329,7 +387,7 @@ export class UnifiedN8nService {
       const n8nWorkflows: N8nWorkflow[] = (workflows || []).map(w => {
         const jsonData = w.json_data as WorkflowJsonData;
         return {
-          id: w.id,
+          id: w.n8n_workflow_id || w.id,
           name: w.name,
           active: w.status === 'active',
           nodes: jsonData?.nodes || [],
@@ -342,6 +400,7 @@ export class UnifiedN8nService {
         };
       });
 
+      console.log(`✅ ${n8nWorkflows.length} workflows locaux récupérés`);
       return { data: n8nWorkflows };
     } catch (error) {
       console.error('❌ Erreur workflows locaux:', error);
@@ -367,6 +426,36 @@ export class UnifiedN8nService {
     };
   }
 
+  // === MÉTHODES D'IMPORTATION ET SYNCHRONISATION ===
+  async importAllWorkflows(): Promise<N8nWorkflow[]> {
+    console.log('🔄 Importation complète des workflows depuis n8n...');
+    
+    const allWorkflows: N8nWorkflow[] = [];
+    let cursor: string | undefined;
+    let hasMore = true;
+    
+    while (hasMore) {
+      try {
+        const result = await this.getWorkflows({ 
+          limit: 50, 
+          cursor 
+        });
+        
+        allWorkflows.push(...result.data);
+        cursor = result.nextCursor;
+        hasMore = !!cursor;
+        
+        console.log(`📊 ${allWorkflows.length} workflows importés jusqu'à présent...`);
+      } catch (error) {
+        console.error('❌ Erreur lors de l\'importation:', error);
+        break;
+      }
+    }
+    
+    console.log(`✅ Importation terminée: ${allWorkflows.length} workflows`);
+    return allWorkflows;
+  }
+
   // === CONFIGURATION ===
   async updateConfig(newConfig: Partial<N8nConfig>): Promise<void> {
     await n8nConfigManager.saveConfig(newConfig);
@@ -374,6 +463,46 @@ export class UnifiedN8nService {
     
     // Re-tester la connexion avec la nouvelle config
     await this.checkConnection();
+  }
+
+  // === MÉTHODES UTILITAIRES ===
+  async executeWorkflow(workflowId: string, inputData?: any): Promise<any> {
+    console.log(`🎯 Exécution workflow ${workflowId}...`);
+    
+    const executionData = inputData ? { data: inputData } : {};
+    
+    try {
+      const result = await this.makeRequest(`/workflows/${workflowId}/execute`, {
+        method: 'POST',
+        body: JSON.stringify(executionData),
+      });
+      
+      console.log(`✅ Workflow ${workflowId} exécuté avec succès`);
+      return result;
+    } catch (error) {
+      console.error(`❌ Erreur exécution workflow ${workflowId}:`, error);
+      throw error;
+    }
+  }
+
+  async getWorkflowExecutions(workflowId: string, options: RequestOptions = {}): Promise<PaginatedResponse<N8nExecution>> {
+    const params = new URLSearchParams();
+    if (options.limit) params.append('limit', options.limit.toString());
+    if (options.cursor) params.append('cursor', options.cursor);
+    
+    const queryString = params.toString();
+    const endpoint = `/workflows/${workflowId}/executions${queryString ? `?${queryString}` : ''}`;
+    
+    try {
+      const response = await this.makeRequest<{ data: N8nExecution[]; nextCursor?: string }>(endpoint);
+      return {
+        data: response.data || [],
+        nextCursor: response.nextCursor
+      };
+    } catch (error) {
+      console.error(`❌ Erreur récupération exécutions workflow ${workflowId}:`, error);
+      return { data: [] };
+    }
   }
 }
 

@@ -1,14 +1,13 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { 
   Play, 
@@ -33,7 +32,7 @@ import {
   Search
 } from 'lucide-react';
 
-import { n8nApiService, N8nWorkflow, N8nExecution, N8nUser, N8nProject, N8nCredential, N8nTag, N8nVariable, N8nAuditReport } from '@/services/n8nApiService';
+import { unifiedN8nService, N8nWorkflow } from '@/services/unifiedN8nService';
 import { workflowService } from '@/services/workflowService';
 import { WorkflowVisualization } from './WorkflowVisualization';
 
@@ -47,15 +46,6 @@ export const EnhancedWorkflowManager: React.FC = () => {
 
   // États pour les données
   const [workflows, setWorkflows] = useState<N8nWorkflow[]>([]);
-  const [executions, setExecutions] = useState<N8nExecution[]>([]);
-  const [users, setUsers] = useState<N8nUser[]>([]);
-  const [projects, setProjects] = useState<N8nProject[]>([]);
-  const [credentials, setCredentials] = useState<N8nCredential[]>([]);
-  const [tags, setTags] = useState<N8nTag[]>([]);
-  const [variables, setVariables] = useState<N8nVariable[]>([]);
-  const [auditReports, setAuditReports] = useState<N8nAuditReport[]>([]);
-
-  // États pour les formulaires
   const [selectedWorkflow, setSelectedWorkflow] = useState<N8nWorkflow | null>(null);
   const [newWorkflowData, setNewWorkflowData] = useState({
     name: '',
@@ -77,45 +67,34 @@ export const EnhancedWorkflowManager: React.FC = () => {
       setConnectionError('');
       console.log('🔍 Vérification connexion n8n...');
       
-      const isAvailable = await n8nApiService.isN8nAvailable();
-      if (isAvailable) {
-        try {
-          // Test réel avec une requête simple
-          await n8nApiService.getWorkflows({ limit: 1 });
-          setN8nConnected(true);
-          setConnectionStatus('connected');
-          console.log('✅ n8n connecté avec succès');
-          
-          toast({
-            title: "n8n connecté",
-            description: "La connexion avec n8n a été établie avec succès.",
-          });
-          
-          // Charger les données initiales
-          await loadInitialData();
-        } catch (apiError) {
-          console.warn('⚠️ API n8n non accessible:', apiError);
-          setN8nConnected(false);
-          setConnectionStatus('error');
-          setConnectionError(apiError instanceof Error ? apiError.message : 'Erreur API inconnue');
-          
-          toast({
-            variant: "destructive",
-            title: "Erreur API n8n",
-            description: "L'API n8n n'est pas accessible. Vérifiez votre clé API.",
-          });
-        }
+      const connectionResult = await unifiedN8nService.checkConnection();
+      
+      if (connectionResult.status === 'connected') {
+        setN8nConnected(true);
+        setConnectionStatus('connected');
+        console.log('✅ n8n connecté avec succès');
+        
+        toast({
+          title: "n8n connecté",
+          description: "La connexion avec n8n a été établie avec succès.",
+        });
+        
+        // Charger les workflows depuis n8n
+        await loadN8nWorkflows();
       } else {
         setN8nConnected(false);
-        setConnectionStatus('disconnected');
-        setConnectionError('Service n8n non disponible');
-        console.warn('⚠️ n8n non disponible, mode local activé');
+        setConnectionStatus('error');
+        setConnectionError(connectionResult.error || 'Connexion échouée');
+        console.error('❌ Connexion n8n échouée:', connectionResult.error);
         
         toast({
           variant: "destructive",
-          title: "n8n non disponible",
-          description: "Fonctionnement en mode local. Vérifiez votre clé API et l'URL n8n.",
+          title: "Erreur connexion n8n",
+          description: connectionResult.error || "Impossible de se connecter à n8n",
         });
+
+        // Fallback vers les workflows locaux
+        await loadLocalWorkflows();
       }
     } catch (error) {
       console.error('❌ Erreur connexion n8n:', error);
@@ -128,73 +107,133 @@ export const EnhancedWorkflowManager: React.FC = () => {
         title: "Erreur de connexion n8n",
         description: error instanceof Error ? error.message : "Impossible de se connecter à n8n",
       });
+
+      // Fallback vers les workflows locaux
+      await loadLocalWorkflows();
     }
   };
 
-  const loadInitialData = async () => {
+  const loadN8nWorkflows = async () => {
     if (!n8nConnected) return;
     
     setLoading(true);
     try {
-      console.log('📊 Chargement des données n8n...');
+      console.log('📊 Chargement workflows depuis n8n...');
       
-      const results = await Promise.allSettled([
-        n8nApiService.getWorkflows({ limit: 50 }),
-        n8nApiService.getExecutions({ limit: 20 }),
-        n8nApiService.getUsers({ limit: 50 }),
-        n8nApiService.getProjects({ limit: 50 }),
-        n8nApiService.getTags({ limit: 100 })
-      ]);
+      // Récupérer tous les workflows avec un limite élevée
+      const result = await unifiedN8nService.getWorkflows({ limit: 100 });
+      
+      if (result.data && result.data.length > 0) {
+        setWorkflows(result.data);
+        console.log(`✅ ${result.data.length} workflows importés depuis n8n`);
+        
+        toast({
+          title: "Workflows importés",
+          description: `${result.data.length} workflow(s) importé(s) depuis n8n`,
+        });
 
-      // Traitement sécurisé des résultats
-      if (results[0].status === 'fulfilled') {
-        setWorkflows(results[0].value.data || []);
-        console.log(`✅ ${results[0].value.data?.length || 0} workflows chargés`);
+        // Synchroniser avec la base locale pour backup
+        await syncWorkflowsToLocal(result.data);
       } else {
-        console.warn('⚠️ Erreur chargement workflows:', results[0].reason);
+        console.log('ℹ️ Aucun workflow trouvé sur n8n');
+        setWorkflows([]);
       }
-
-      if (results[1].status === 'fulfilled') {
-        setExecutions(results[1].value.data || []);
-        console.log(`✅ ${results[1].value.data?.length || 0} exécutions chargées`);
-      } else {
-        console.warn('⚠️ Erreur chargement exécutions:', results[1].reason);
-      }
-
-      if (results[2].status === 'fulfilled') {
-        setUsers(results[2].value.data || []);
-        console.log(`✅ ${results[2].value.data?.length || 0} utilisateurs chargés`);
-      } else {
-        console.warn('⚠️ Erreur chargement utilisateurs:', results[2].reason);
-      }
-
-      if (results[3].status === 'fulfilled') {
-        setProjects(results[3].value.data || []);
-        console.log(`✅ ${results[3].value.data?.length || 0} projets chargés`);
-      } else {
-        console.warn('⚠️ Erreur chargement projets:', results[3].reason);
-      }
-
-      if (results[4].status === 'fulfilled') {
-        setTags(results[4].value.data || []);
-        console.log(`✅ ${results[4].value.data?.length || 0} tags chargés`);
-      } else {
-        console.warn('⚠️ Erreur chargement tags:', results[4].reason);
-      }
-
     } catch (error) {
-      console.error('❌ Erreur chargement données:', error);
+      console.error('❌ Erreur chargement workflows n8n:', error);
       toast({
         variant: "destructive",
         title: "Erreur de chargement",
-        description: "Impossible de charger certaines données depuis n8n",
+        description: "Impossible de charger les workflows depuis n8n",
       });
+      
+      // Fallback vers les workflows locaux
+      await loadLocalWorkflows();
     } finally {
       setLoading(false);
     }
   };
 
-  // === GESTION DES WORKFLOWS ===
+  const syncWorkflowsToLocal = async (n8nWorkflows: N8nWorkflow[]) => {
+    try {
+      console.log('🔄 Synchronisation workflows vers base locale...');
+      
+      for (const workflow of n8nWorkflows) {
+        if (workflow.id && workflow.name) {
+          const workflowData = {
+            name: workflow.name,
+            nodes: workflow.nodes || [],
+            connections: workflow.connections || {},
+            active: workflow.active,
+            settings: workflow.settings || {},
+            staticData: workflow.staticData || {},
+            tags: workflow.tags || []
+          };
+
+          try {
+            // Vérifier si le workflow existe déjà localement
+            const existingWorkflows = await workflowService.getWorkflows();
+            const existingWorkflow = existingWorkflows.find(w => w.n8nWorkflowId === workflow.id);
+
+            if (existingWorkflow) {
+              // Mettre à jour le workflow existant
+              await workflowService.updateWorkflow(existingWorkflow.id, {
+                name: workflow.name,
+                description: `Workflow n8n synchronisé - ${workflow.nodes?.length || 0} nœuds`,
+                status: workflow.active ? 'active' : 'inactive',
+                jsonData: workflowData
+              });
+            } else {
+              // Créer un nouveau workflow local
+              await workflowService.createWorkflow({
+                name: workflow.name,
+                description: `Workflow n8n synchronisé - ${workflow.nodes?.length || 0} nœuds`,
+                status: workflow.active ? 'active' : 'inactive',
+                n8nWorkflowId: workflow.id,
+                jsonData: workflowData
+              });
+            }
+          } catch (syncError) {
+            console.warn(`⚠️ Erreur sync workflow ${workflow.name}:`, syncError);
+          }
+        }
+      }
+      
+      console.log('✅ Synchronisation terminée');
+    } catch (error) {
+      console.error('❌ Erreur synchronisation locale:', error);
+    }
+  };
+
+  const loadLocalWorkflows = async () => {
+    try {
+      console.log('📊 Chargement workflows locaux...');
+      const localWorkflows = await workflowService.getWorkflows();
+      
+      // Convertir les workflows locaux au format N8nWorkflow
+      const n8nFormattedWorkflows: N8nWorkflow[] = localWorkflows.map(workflow => {
+        const jsonData = workflow.jsonData as any;
+        return {
+          id: workflow.n8nWorkflowId || workflow.id,
+          name: workflow.name,
+          active: workflow.status === 'active',
+          nodes: jsonData?.nodes || [],
+          connections: jsonData?.connections || {},
+          settings: jsonData?.settings || {},
+          staticData: jsonData?.staticData || {},
+          tags: jsonData?.tags?.map((tag: string, index: number) => ({ id: index.toString(), name: tag })) || [],
+          createdAt: workflow.createdAt || new Date().toISOString(),
+          updatedAt: workflow.updatedAt || new Date().toISOString()
+        };
+      });
+      
+      setWorkflows(n8nFormattedWorkflows);
+      console.log(`✅ ${n8nFormattedWorkflows.length} workflows locaux chargés`);
+    } catch (error) {
+      console.error('❌ Erreur chargement workflows locaux:', error);
+      setWorkflows([]);
+    }
+  };
+
   const createWorkflow = async () => {
     if (!newWorkflowData.name.trim()) {
       toast({
@@ -234,7 +273,7 @@ export const EnhancedWorkflowManager: React.FC = () => {
           }
         };
 
-        const newWorkflow = await n8nApiService.createWorkflow(workflowData);
+        const newWorkflow = await unifiedN8nService.createWorkflow(workflowData);
         setWorkflows(prev => [newWorkflow, ...prev]);
         
         toast({
@@ -258,15 +297,33 @@ export const EnhancedWorkflowManager: React.FC = () => {
           active: newWorkflowData.active
         };
 
-        await workflowService.createWorkflowFromJSON(jsonData);
+        const localWorkflow = await workflowService.createWorkflow({
+          name: newWorkflowData.name,
+          description: newWorkflowData.description || 'Nouveau workflow',
+          status: newWorkflowData.active ? 'active' : 'inactive',
+          jsonData
+        });
+        
+        // Convertir au format N8nWorkflow
+        const n8nWorkflow: N8nWorkflow = {
+          id: localWorkflow.id,
+          name: localWorkflow.name,
+          active: localWorkflow.status === 'active',
+          nodes: jsonData.nodes,
+          connections: jsonData.connections,
+          settings: {},
+          staticData: {},
+          tags: [],
+          createdAt: localWorkflow.createdAt,
+          updatedAt: localWorkflow.updatedAt
+        };
+        
+        setWorkflows(prev => [n8nWorkflow, ...prev]);
         
         toast({
           title: "Workflow créé",
           description: `Le workflow "${newWorkflowData.name}" a été créé localement`,
         });
-
-        // Recharger les workflows locaux
-        await loadLocalWorkflows();
       }
 
       // Reset du formulaire
@@ -284,32 +341,6 @@ export const EnhancedWorkflowManager: React.FC = () => {
     }
   };
 
-  const loadLocalWorkflows = async () => {
-    try {
-      console.log('📊 Chargement workflows locaux...');
-      const localWorkflows = await workflowService.getWorkflows();
-      
-      // Convertir les workflows locaux au format N8nWorkflow pour compatibilité
-      const n8nFormattedWorkflows: N8nWorkflow[] = localWorkflows.map(workflow => ({
-        id: workflow.id,
-        name: workflow.name,
-        active: workflow.status === 'active',
-        nodes: [],
-        connections: {},
-        settings: {},
-        staticData: {},
-        tags: workflow.tags?.map((tag, index) => ({ id: index.toString(), name: tag })) || [],
-        createdAt: workflow.createdAt || new Date().toISOString(),
-        updatedAt: workflow.updatedAt || new Date().toISOString()
-      }));
-      
-      setWorkflows(n8nFormattedWorkflows);
-      console.log(`✅ ${n8nFormattedWorkflows.length} workflows locaux chargés`);
-    } catch (error) {
-      console.error('❌ Erreur chargement workflows locaux:', error);
-    }
-  };
-
   const toggleWorkflowStatus = async (workflow: N8nWorkflow) => {
     if (!workflow.id) return;
 
@@ -320,9 +351,9 @@ export const EnhancedWorkflowManager: React.FC = () => {
       if (n8nConnected) {
         // Utiliser l'API n8n
         if (workflow.active) {
-          await n8nApiService.deactivateWorkflow(workflow.id);
+          await unifiedN8nService.deactivateWorkflow(workflow.id);
         } else {
-          await n8nApiService.activateWorkflow(workflow.id);
+          await unifiedN8nService.activateWorkflow(workflow.id);
         }
       } else {
         // Utiliser le service local
@@ -355,12 +386,15 @@ export const EnhancedWorkflowManager: React.FC = () => {
   const deleteWorkflow = async (workflow: N8nWorkflow) => {
     if (!workflow.id) return;
 
+    const confirmed = window.confirm(`Êtes-vous sûr de vouloir supprimer le workflow "${workflow.name}" ?`);
+    if (!confirmed) return;
+
     setLoading(true);
     try {
       console.log('🗑️ Suppression workflow:', workflow.id);
       
       if (n8nConnected) {
-        await n8nApiService.deleteWorkflow(workflow.id);
+        await unifiedN8nService.deleteWorkflow(workflow.id);
       } else {
         await workflowService.deleteWorkflow(workflow.id);
       }
@@ -389,171 +423,108 @@ export const EnhancedWorkflowManager: React.FC = () => {
     }
   };
 
-  // === GESTION DES EXÉCUTIONS ===
-  const loadExecutions = async () => {
-    if (!n8nConnected) return;
-
-    setLoading(true);
-    try {
-      console.log('📊 Chargement exécutions...');
-      const result = await n8nApiService.getExecutions({ 
-        limit: 50,
-        includeData: false 
-      });
-      setExecutions(result.data);
-      console.log(`✅ ${result.data.length} exécutions chargées`);
-    } catch (error) {
-      console.error('❌ Erreur chargement exécutions:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const deleteExecution = async (execution: N8nExecution) => {
-    if (!n8nConnected) return;
-
-    setLoading(true);
-    try {
-      console.log('🗑️ Suppression exécution:', execution.id);
-      await n8nApiService.deleteExecution(execution.id);
-      setExecutions(prev => prev.filter(e => e.id !== execution.id));
-      
-      toast({
-        title: "Exécution supprimée",
-        description: "L'exécution a été supprimée avec succès",
-      });
-    } catch (error) {
-      console.error('❌ Erreur suppression exécution:', error);
+  const openWorkflowInN8n = (workflow: N8nWorkflow) => {
+    if (workflow.id && n8nConnected) {
+      // Ouvrir le workflow dans l'interface n8n
+      const n8nUrl = `https://n8n.srv860213.hstgr.cloud/workflow/${workflow.id}`;
+      window.open(n8nUrl, '_blank');
+    } else {
       toast({
         variant: "destructive",
-        title: "Erreur",
-        description: "Impossible de supprimer l'exécution",
+        title: "Non disponible",
+        description: "Connexion n8n requise pour ouvrir le workflow",
       });
-    } finally {
-      setLoading(false);
     }
   };
 
-  // === GESTION DES UTILISATEURS ===
-  const loadUsers = async () => {
-    if (!n8nConnected) return;
+  const importWorkflowFromJson = async () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
 
-    setLoading(true);
-    try {
-      console.log('👥 Chargement utilisateurs...');
-      const result = await n8nApiService.getUsers({ limit: 100 });
-      setUsers(result.data);
-      console.log(`✅ ${result.data.length} utilisateurs chargés`);
-    } catch (error) {
-      console.error('❌ Erreur chargement utilisateurs:', error);
-    } finally {
-      setLoading(false);
-    }
+      try {
+        const text = await file.text();
+        const jsonData = JSON.parse(text);
+
+        if (n8nConnected) {
+          // Importer vers n8n
+          const importedWorkflow = await unifiedN8nService.createWorkflow(jsonData);
+          setWorkflows(prev => [importedWorkflow, ...prev]);
+          
+          toast({
+            title: "Workflow importé",
+            description: `Le workflow "${importedWorkflow.name}" a été importé sur n8n`,
+          });
+        } else {
+          // Importer localement
+          const localWorkflow = await workflowService.createWorkflow({
+            name: jsonData.name || 'Workflow importé',
+            description: 'Workflow importé depuis JSON',
+            status: jsonData.active ? 'active' : 'inactive',
+            jsonData
+          });
+
+          const n8nWorkflow: N8nWorkflow = {
+            id: localWorkflow.id,
+            name: localWorkflow.name,
+            active: localWorkflow.status === 'active',
+            nodes: jsonData.nodes || [],
+            connections: jsonData.connections || {},
+            settings: jsonData.settings || {},
+            staticData: jsonData.staticData || {},
+            tags: jsonData.tags || [],
+            createdAt: localWorkflow.createdAt,
+            updatedAt: localWorkflow.updatedAt
+          };
+
+          setWorkflows(prev => [n8nWorkflow, ...prev]);
+          
+          toast({
+            title: "Workflow importé",
+            description: `Le workflow "${jsonData.name}" a été importé localement`,
+          });
+        }
+      } catch (error) {
+        console.error('❌ Erreur import JSON:', error);
+        toast({
+          variant: "destructive",
+          title: "Erreur d'import",
+          description: "Impossible d'importer le fichier JSON",
+        });
+      }
+    };
+    input.click();
   };
 
-  // === GESTION DES PROJETS ===
-  const loadProjects = async () => {
-    if (!n8nConnected) return;
+  const exportWorkflowToJson = (workflow: N8nWorkflow) => {
+    const exportData = {
+      name: workflow.name,
+      nodes: workflow.nodes,
+      connections: workflow.connections,
+      active: workflow.active,
+      settings: workflow.settings,
+      staticData: workflow.staticData,
+      tags: workflow.tags
+    };
 
-    setLoading(true);
-    try {
-      console.log('📁 Chargement projets...');
-      const result = await n8nApiService.getProjects({ limit: 100 });
-      setProjects(result.data);
-      console.log(`✅ ${result.data.length} projets chargés`);
-    } catch (error) {
-      console.error('❌ Erreur chargement projets:', error);
-    } finally {
-      setLoading(false);
-    }
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${workflow.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    toast({
+      title: "Workflow exporté",
+      description: `Le workflow "${workflow.name}" a été exporté en JSON`,
+    });
   };
 
-  const createProject = async (name: string) => {
-    if (!n8nConnected || !name.trim()) return;
-
-    setLoading(true);
-    try {
-      console.log('🚀 Création projet:', name);
-      const newProject = await n8nApiService.createProject(name);
-      setProjects(prev => [newProject, ...prev]);
-      
-      toast({
-        title: "Projet créé",
-        description: `Le projet "${newProject.name}" a été créé`,
-      });
-    } catch (error) {
-      console.error('❌ Erreur création projet:', error);
-      toast({
-        variant: "destructive",
-        title: "Erreur",
-        description: "Impossible de créer le projet",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // === GESTION DES CREDENTIALS ===
-  const loadCredentials = async () => {
-    if (!n8nConnected) return;
-
-    setLoading(true);
-    try {
-      console.log('🔑 Chargement credentials...');
-      // Note: L'API n8n ne permet pas de lister tous les credentials pour des raisons de sécurité
-      console.log('ℹ️ Les credentials ne peuvent pas être listés via l\'API pour des raisons de sécurité');
-    } catch (error) {
-      console.error('❌ Erreur chargement credentials:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // === AUDIT ET SÉCURITÉ ===
-  const loadN8nAuditReports = async () => {
-    if (!n8nConnected) return;
-
-    setLoading(true);
-    try {
-      console.log('🔍 Génération rapport audit...');
-      const reports = await n8nApiService.generateAudit();
-      setAuditReports(reports);
-      console.log(`✅ ${reports.length} rapports d'audit générés`);
-      
-      toast({
-        title: "Audit généré",
-        description: `${reports.length} rapport(s) d'audit généré(s)`,
-      });
-    } catch (error) {
-      console.error('❌ Erreur génération audit:', error);
-      toast({
-        variant: "destructive",
-        title: "Erreur",
-        description: "Impossible de générer le rapport d'audit",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // === GESTION DES VARIABLES ===
-  const loadVariables = async () => {
-    if (!n8nConnected) return;
-
-    setLoading(true);
-    try {
-      console.log('🔧 Chargement variables...');
-      const result = await n8nApiService.getVariables({ limit: 100 });
-      setVariables(result.data);
-      console.log(`✅ ${result.data.length} variables chargées`);
-    } catch (error) {
-      console.error('❌ Erreur chargement variables:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // === FILTRAGE ET RECHERCHE ===
+  // Filtrage des workflows
   const filteredWorkflows = workflows.filter(workflow => {
     const matchesSearch = workflow.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = filterStatus === 'all' || 
@@ -614,14 +585,8 @@ export const EnhancedWorkflowManager: React.FC = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-8">
+        <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="workflows">Workflows</TabsTrigger>
-          <TabsTrigger value="executions">Exécutions</TabsTrigger>
-          <TabsTrigger value="users">Utilisateurs</TabsTrigger>
-          <TabsTrigger value="projects">Projets</TabsTrigger>
-          <TabsTrigger value="credentials">Credentials</TabsTrigger>
-          <TabsTrigger value="variables">Variables</TabsTrigger>
-          <TabsTrigger value="audit">Audit</TabsTrigger>
           <TabsTrigger value="visualization">Visualisation</TabsTrigger>
         </TabsList>
 
@@ -633,14 +598,28 @@ export const EnhancedWorkflowManager: React.FC = () => {
                 <div>
                   <CardTitle>Workflows n8n</CardTitle>
                   <CardDescription>
-                    Gérez vos workflows d'automatisation
+                    Gérez vos workflows d'automatisation depuis n8n
                   </CardDescription>
                 </div>
                 
-                <Button onClick={n8nConnected ? loadInitialData : loadLocalWorkflows} disabled={loading}>
-                  <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-                  Actualiser
-                </Button>
+                <div className="flex items-center space-x-2">
+                  <Button 
+                    variant="outline" 
+                    onClick={importWorkflowFromJson}
+                    disabled={loading}
+                  >
+                    <Upload className="w-4 h-4 mr-2" />
+                    Importer JSON
+                  </Button>
+                  
+                  <Button 
+                    onClick={n8nConnected ? loadN8nWorkflows : loadLocalWorkflows} 
+                    disabled={loading}
+                  >
+                    <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                    Actualiser
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             
@@ -715,6 +694,24 @@ export const EnhancedWorkflowManager: React.FC = () => {
                 </Select>
               </div>
 
+              {/* Statistiques */}
+              {workflows.length > 0 && (
+                <div className="grid grid-cols-3 gap-4 p-4 bg-slate-50 rounded-lg">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-blue-600">{workflows.length}</div>
+                    <div className="text-sm text-slate-600">Total</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-green-600">{workflows.filter(w => w.active).length}</div>
+                    <div className="text-sm text-slate-600">Actifs</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-gray-600">{workflows.filter(w => !w.active).length}</div>
+                    <div className="text-sm text-slate-600">Inactifs</div>
+                  </div>
+                </div>
+              )}
+
               {/* Liste des workflows */}
               <div className="space-y-3">
                 {loading ? (
@@ -728,6 +725,16 @@ export const EnhancedWorkflowManager: React.FC = () => {
                     <p>Aucun workflow trouvé</p>
                     {searchTerm && (
                       <p className="text-sm">Essayez de modifier votre recherche</p>
+                    )}
+                    {workflows.length === 0 && (
+                      <div className="mt-4">
+                        <p className="text-sm mb-2">
+                          {n8nConnected ? 'Aucun workflow sur votre instance n8n' : 'Mode local actif'}
+                        </p>
+                        <Button onClick={n8nConnected ? loadN8nWorkflows : checkN8nConnection}>
+                          {n8nConnected ? 'Actualiser depuis n8n' : 'Se connecter à n8n'}
+                        </Button>
+                      </div>
                     )}
                   </div>
                 ) : (
@@ -749,6 +756,15 @@ export const EnhancedWorkflowManager: React.FC = () => {
                                   Modifié: {new Date(workflow.updatedAt).toLocaleDateString()}
                                 </span>
                               )}
+                              {workflow.tags && workflow.tags.length > 0 && (
+                                <div className="flex space-x-1">
+                                  {workflow.tags.slice(0, 2).map((tag, index) => (
+                                    <Badge key={index} variant="outline" className="text-xs">
+                                      {tag.name}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -759,6 +775,7 @@ export const EnhancedWorkflowManager: React.FC = () => {
                           variant="outline"
                           size="sm"
                           onClick={() => setSelectedWorkflow(workflow)}
+                          title="Visualiser"
                         >
                           <Eye className="w-4 h-4" />
                         </Button>
@@ -766,8 +783,29 @@ export const EnhancedWorkflowManager: React.FC = () => {
                         <Button
                           variant="outline"
                           size="sm"
+                          onClick={() => exportWorkflowToJson(workflow)}
+                          title="Exporter JSON"
+                        >
+                          <Download className="w-4 h-4" />
+                        </Button>
+                        
+                        {n8nConnected && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openWorkflowInN8n(workflow)}
+                            title="Ouvrir dans n8n"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                        )}
+                        
+                        <Button
+                          variant="outline"
+                          size="sm"
                           onClick={() => toggleWorkflowStatus(workflow)}
                           disabled={loading}
+                          title={workflow.active ? 'Désactiver' : 'Activer'}
                         >
                           {workflow.active ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                         </Button>
@@ -777,6 +815,7 @@ export const EnhancedWorkflowManager: React.FC = () => {
                           size="sm"
                           onClick={() => deleteWorkflow(workflow)}
                           disabled={loading}
+                          title="Supprimer"
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
@@ -789,328 +828,13 @@ export const EnhancedWorkflowManager: React.FC = () => {
           </Card>
         </TabsContent>
 
-        {/* === ONGLET EXÉCUTIONS === */}
-        <TabsContent value="executions" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Exécutions</CardTitle>
-                  <CardDescription>
-                    Historique des exécutions de workflows
-                  </CardDescription>
-                </div>
-                
-                <Button onClick={loadExecutions} disabled={loading || !n8nConnected}>
-                  <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-                  Actualiser
-                </Button>
-              </div>
-            </CardHeader>
-            
-            <CardContent>
-              {!n8nConnected ? (
-                <div className="text-center py-8 text-slate-600">
-                  <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-yellow-500" />
-                  <p>Connexion n8n requise pour afficher les exécutions</p>
-                </div>
-              ) : executions.length === 0 ? (
-                <div className="text-center py-8 text-slate-600">
-                  <Activity className="w-12 h-12 mx-auto mb-4 text-slate-400" />
-                  <p>Aucune exécution trouvée</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {executions.map((execution) => (
-                    <div key={execution.id} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-3">
-                          <Badge variant={execution.finished ? "default" : "secondary"}>
-                            {execution.finished ? 'Terminé' : 'En cours'}
-                          </Badge>
-                          <span className="font-medium">Workflow ID: {execution.workflowId}</span>
-                          <span className="text-sm text-slate-600">Mode: {execution.mode}</span>
-                        </div>
-                        <div className="mt-1 text-sm text-slate-500">
-                          Démarré: {new Date(execution.startedAt).toLocaleString()}
-                          {execution.stoppedAt && (
-                            <span> - Terminé: {new Date(execution.stoppedAt).toLocaleString()}</span>
-                          )}
-                        </div>
-                      </div>
-                      
-                      <div className="flex items-center space-x-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => deleteExecution(execution)}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* === ONGLET UTILISATEURS === */}
-        <TabsContent value="users" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Utilisateurs n8n</CardTitle>
-                  <CardDescription>
-                    Gestion des utilisateurs de l'instance n8n
-                  </CardDescription>
-                </div>
-                
-                <Button onClick={loadUsers} disabled={loading || !n8nConnected}>
-                  <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-                  Actualiser
-                </Button>
-              </div>
-            </CardHeader>
-            
-            <CardContent>
-              {!n8nConnected ? (
-                <div className="text-center py-8 text-slate-600">
-                  <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-yellow-500" />
-                  <p>Connexion n8n requise pour gérer les utilisateurs</p>
-                </div>
-              ) : users.length === 0 ? (
-                <div className="text-center py-8 text-slate-600">
-                  <Users className="w-12 h-12 mx-auto mb-4 text-slate-400" />
-                  <p>Aucun utilisateur trouvé</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {users.map((user) => (
-                    <div key={user.id} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-3">
-                          <div>
-                            <h4 className="font-medium">
-                              {user.firstName && user.lastName 
-                                ? `${user.firstName} ${user.lastName}` 
-                                : user.email}
-                            </h4>
-                            <p className="text-sm text-slate-600">{user.email}</p>
-                          </div>
-                        </div>
-                        <div className="mt-2 flex items-center space-x-2">
-                          <Badge variant={user.isPending ? "secondary" : "default"}>
-                            {user.isPending ? 'En attente' : 'Actif'}
-                          </Badge>
-                          <Badge variant="outline">{user.role}</Badge>
-                          <span className="text-sm text-slate-500">
-                            Créé: {new Date(user.createdAt).toLocaleDateString()}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* === ONGLET PROJETS === */}
-        <TabsContent value="projects" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Projets</CardTitle>
-                  <CardDescription>
-                    Organisation des workflows par projets
-                  </CardDescription>
-                </div>
-                
-                <Button onClick={loadProjects} disabled={loading || !n8nConnected}>
-                  <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-                  Actualiser
-                </Button>
-              </div>
-            </CardHeader>
-            
-            <CardContent>
-              {!n8nConnected ? (
-                <div className="text-center py-8 text-slate-600">
-                  <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-yellow-500" />
-                  <p>Connexion n8n requise pour gérer les projets</p>
-                </div>
-              ) : projects.length === 0 ? (
-                <div className="text-center py-8 text-slate-600">
-                  <Database className="w-12 h-12 mx-auto mb-4 text-slate-400" />
-                  <p>Aucun projet trouvé</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {projects.map((project) => (
-                    <div key={project.id} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div className="flex-1">
-                        <h4 className="font-medium">{project.name}</h4>
-                        <div className="mt-1">
-                          <Badge variant="outline">{project.type}</Badge>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* === ONGLET CREDENTIALS === */}
-        <TabsContent value="credentials" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Credentials</CardTitle>
-              <CardDescription>
-                Gestion des identifiants et connexions
-              </CardDescription>
-            </CardHeader>
-            
-            <CardContent>
-              <div className="text-center py-8 text-slate-600">
-                <Shield className="w-12 h-12 mx-auto mb-4 text-slate-400" />
-                <p>Les credentials ne peuvent pas être affichés pour des raisons de sécurité</p>
-                <p className="text-sm">Utilisez l'interface n8n pour gérer vos credentials</p>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* === ONGLET VARIABLES === */}
-        <TabsContent value="variables" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Variables d'environnement</CardTitle>
-                  <CardDescription>
-                    Variables globales de l'instance n8n
-                  </CardDescription>
-                </div>
-                
-                <Button onClick={loadVariables} disabled={loading || !n8nConnected}>
-                  <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-                  Actualiser
-                </Button>
-              </div>
-            </CardHeader>
-            
-            <CardContent>
-              {!n8nConnected ? (
-                <div className="text-center py-8 text-slate-600">
-                  <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-yellow-500" />
-                  <p>Connexion n8n requise pour gérer les variables</p>
-                </div>
-              ) : variables.length === 0 ? (
-                <div className="text-center py-8 text-slate-600">
-                  <Settings className="w-12 h-12 mx-auto mb-4 text-slate-400" />
-                  <p>Aucune variable trouvée</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {variables.map((variable) => (
-                    <div key={variable.id} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div className="flex-1">
-                        <h4 className="font-medium">{variable.key}</h4>
-                        <p className="text-sm text-slate-600">Type: {variable.type || 'string'}</p>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Badge variant="outline">Configuré</Badge>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* === ONGLET AUDIT === */}
-        <TabsContent value="audit" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Audit de sécurité</CardTitle>
-                  <CardDescription>
-                    Rapports de sécurité et recommandations
-                  </CardDescription>
-                </div>
-                
-                <Button onClick={loadN8nAuditReports} disabled={loading || !n8nConnected}>
-                  <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-                  Générer un audit
-                </Button>
-              </div>
-            </CardHeader>
-            
-            <CardContent>
-              {!n8nConnected ? (
-                <div className="text-center py-8 text-slate-600">
-                  <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-yellow-500" />
-                  <p>Connexion n8n requise pour l'audit de sécurité</p>
-                </div>
-              ) : auditReports.length === 0 ? (
-                <div className="text-center py-8 text-slate-600">
-                  <Shield className="w-12 h-12 mx-auto mb-4 text-slate-400" />
-                  <p>Aucun rapport d'audit disponible</p>
-                  <p className="text-sm">Cliquez sur "Générer un audit" pour commencer</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {auditReports.map((report, index) => (
-                    <div key={index} className="border rounded-lg p-4">
-                      <div className="flex items-center space-x-2 mb-3">
-                        <Badge variant={report.risk === 'high' ? "destructive" : report.risk === 'medium' ? "default" : "secondary"}>
-                          Risque: {report.risk}
-                        </Badge>
-                      </div>
-                      
-                      {report.sections.map((section, sectionIndex) => (
-                        <div key={sectionIndex} className="mb-4 last:mb-0">
-                          <h4 className="font-medium text-sm">{section.title}</h4>
-                          <p className="text-sm text-slate-600 mb-2">{section.description}</p>
-                          <p className="text-sm text-blue-600">{section.recommendation}</p>
-                          
-                          {section.location && section.location.length > 0 && (
-                            <div className="mt-2 space-y-1">
-                              {section.location.map((loc, locIndex) => (
-                                <div key={locIndex} className="text-xs text-slate-500 bg-slate-50 p-2 rounded">
-                                  {loc.workflowName && <span>Workflow: {loc.workflowName} | </span>}
-                                  {loc.nodeName && <span>Node: {loc.nodeName} | </span>}
-                                  {loc.nodeType && <span>Type: {loc.nodeType}</span>}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
         {/* === ONGLET VISUALISATION === */}
         <TabsContent value="visualization" className="space-y-6">
           <Card>
             <CardHeader>
               <CardTitle>Visualisation des workflows</CardTitle>
               <CardDescription>
-                Interface graphique pour visualiser vos workflows
+                Interface graphique pour visualiser et analyser vos workflows
               </CardDescription>
             </CardHeader>
             
@@ -1128,34 +852,35 @@ export const EnhancedWorkflowManager: React.FC = () => {
                   </div>
                   
                   <WorkflowVisualization 
-                    workflow={selectedWorkflow}
+                    workflow={{
+                      id: selectedWorkflow.id,
+                      name: selectedWorkflow.name,
+                      description: `Workflow n8n avec ${selectedWorkflow.nodes?.length || 0} nœuds`,
+                      status: selectedWorkflow.active ? 'active' : 'inactive',
+                      n8n_workflow_id: selectedWorkflow.id,
+                      json_data: {
+                        name: selectedWorkflow.name,
+                        nodes: selectedWorkflow.nodes || [],
+                        connections: selectedWorkflow.connections || {},
+                        active: selectedWorkflow.active,
+                        settings: selectedWorkflow.settings || {},
+                        staticData: selectedWorkflow.staticData || {},
+                        tags: selectedWorkflow.tags || []
+                      }
+                    }}
                     nodes={selectedWorkflow.nodes?.map(node => ({
                       id: node.id || '',
-                      type: node.type || '',
-                      position: { 
-                        x: Array.isArray(node.position) ? node.position[0] : 0, 
-                        y: Array.isArray(node.position) ? node.position[1] : 0 
-                      },
-                      data: {
-                        name: node.name || '',
-                        parameters: node.parameters || {}
-                      }
+                      workflow_id: selectedWorkflow.id || '',
+                      node_id: node.id || '',
+                      node_type: node.type || '',
+                      name: node.name || '',
+                      position_x: Array.isArray(node.position) ? node.position[0] : 0,
+                      position_y: Array.isArray(node.position) ? node.position[1] : 0,
+                      parameters: node.parameters || {}
                     })) || []}
                     connections={[]}
-                    onExecute={() => {
-                      console.log('Exécution du workflow:', selectedWorkflow.id);
-                      toast({
-                        title: "Workflow exécuté",
-                        description: `Le workflow "${selectedWorkflow.name}" a été exécuté`,
-                      });
-                    }}
-                    onEdit={() => {
-                      console.log('Édition du workflow:', selectedWorkflow.id);
-                      toast({
-                        title: "Édition workflow",
-                        description: "Ouverture de l'éditeur...",
-                      });
-                    }}
+                    onExecute={() => toggleWorkflowStatus(selectedWorkflow)}
+                    onEdit={() => openWorkflowInN8n(selectedWorkflow)}
                     onDelete={() => deleteWorkflow(selectedWorkflow)}
                   />
                 </div>
@@ -1163,6 +888,23 @@ export const EnhancedWorkflowManager: React.FC = () => {
                 <div className="text-center py-8 text-slate-600">
                   <FileJson className="w-12 h-12 mx-auto mb-4 text-slate-400" />
                   <p>Sélectionnez un workflow dans l'onglet "Workflows" pour le visualiser</p>
+                  {workflows.length > 0 && (
+                    <div className="mt-4">
+                      <p className="text-sm mb-2">Workflows disponibles:</p>
+                      <div className="flex flex-wrap gap-2 justify-center">
+                        {workflows.slice(0, 5).map((workflow) => (
+                          <Button
+                            key={workflow.id}
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setSelectedWorkflow(workflow)}
+                          >
+                            {workflow.name}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>
