@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { Plus, RefreshCw, Upload, FileJson, Bot, CheckCircle, AlertCircle } from 'lucide-react';
 
-import { n8nApi } from '@/services/n8nApi';
+import { unifiedN8nService } from '@/services/unifiedN8nService';
 import { workflowService, N8nWorkflowJSON } from '@/services/workflowService';
 import { n8nWorkflowAnalyzer, WorkflowAnalysis } from '@/services/n8nWorkflowAnalyzer';
 
@@ -201,7 +202,7 @@ export const WorkflowCreator: React.FC<WorkflowCreatorProps> = ({
         };
 
         if (connected) {
-          await n8nApi.createWorkflow(workflowData);
+          await unifiedN8nService.createWorkflow(workflowData);
           toast({
             title: "Workflow créé",
             description: `Le workflow "${formData.name}" a été créé sur n8n`,
@@ -238,7 +239,7 @@ export const WorkflowCreator: React.FC<WorkflowCreatorProps> = ({
         };
 
         if (connected) {
-          await n8nApi.createWorkflow(basicWorkflowData);
+          await unifiedN8nService.createWorkflow(basicWorkflowData);
         } else {
           await workflowService.createWorkflow({
             name: formData.name,

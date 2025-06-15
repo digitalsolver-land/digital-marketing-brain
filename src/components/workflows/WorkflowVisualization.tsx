@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -20,7 +21,7 @@ import {
 
 import { WorkflowCanvas } from './WorkflowCanvas';
 import { WorkflowAnalysisPanel } from './WorkflowAnalysisPanel';
-import { n8nApi } from '@/services/n8nApi';
+import { unifiedN8nService } from '@/services/unifiedN8nService';
 
 interface WorkflowNode {
   id: string;
@@ -93,7 +94,7 @@ export const WorkflowVisualization: React.FC<WorkflowVisualizationProps> = ({
     try {
       if (workflow.id) {
         // Exécuter via n8n si possible
-        await n8nApi.activateWorkflow(workflow.id);
+        await unifiedN8nService.activateWorkflow(workflow.id);
         toast({
           title: "Workflow exécuté",
           description: `Le workflow "${workflow.name}" a été activé et exécuté`,

@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -6,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Send, Bot, User, Zap, Code, FileText, TrendingUp, Copy, Download } from 'lucide-react';
 import { aiService } from '@/services/aiService';
-import { n8nApi } from '@/services/n8nApi';
+import { n8nService } from '@/services/n8nService';
 import { useToast } from '@/hooks/use-toast';
 import { AIConversation, ChatMessage } from '@/types/platform';
 
@@ -58,7 +59,7 @@ Comment puis-je vous aider aujourd'hui ?`,
       // Déterminer le type d'action basé sur le message
       const action = await aiService.processCommand(inputMessage, {
         currentSection: 'ai-chat',
-        availableWorkflows: await n8nApi.getWorkflows()
+        availableWorkflows: await n8nService.getWorkflows()
       });
 
       let response = '';
@@ -116,7 +117,7 @@ Comment puis-je vous aider aujourd'hui ?`,
   const handleWorkflowCreation = async (payload: any): Promise<string> => {
     try {
       const workflow = await aiService.createWorkflowFromDescription(payload.description);
-      await n8nApi.createWorkflow(workflow);
+      await n8nService.createWorkflow(workflow);
       return `✅ **Workflow créé avec succès !**
 
 **Nom :** ${workflow.name}

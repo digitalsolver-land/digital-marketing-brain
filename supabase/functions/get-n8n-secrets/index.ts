@@ -8,6 +8,7 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
+  // Handle CORS
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -15,21 +16,14 @@ serve(async (req) => {
   try {
     console.log('🔑 Récupération des secrets n8n')
     
+    // Create Supabase client
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // Vérification de l'authentification
+    // Get user from request
     const authHeader = req.headers.get('Authorization')?.replace('Bearer ', '')
-    if (!authHeader) {
-      console.error('❌ Token manquant')
-      return new Response(
-        JSON.stringify({ error: 'Token d\'autorisation manquant' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
-
     const { data: { user }, error: authError } = await supabase.auth.getUser(authHeader)
     
     if (authError || !user) {
@@ -40,52 +34,28 @@ serve(async (req) => {
       )
     }
 
-    // Récupération des secrets utilisateur
+    // Get secrets from user_secrets table
     const { data: secrets, error: secretsError } = await supabase
       .from('user_secrets')
       .select('secret_name, secret_value')
       .eq('user_id', user.id)
       .in('secret_name', ['n8n_api_key', 'n8n_base_url'])
 
-    // Gestion du cas où la table n'existe pas encore
     if (secretsError) {
-      console.log('📋 Table user_secrets non trouvée, retour des valeurs par défaut')
-      return new Response(
-        JSON.stringify({
-          n8n_api_key: null,
-          n8n_base_url: 'https://n8n.srv860213.hstgr.cloud/api/v1'
-        }),
-        { 
-          status: 200, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
-      )
+      console.error('❌ Erreur récupération secrets:', secretsError)
+      throw new Error('Erreur lors de la récupération des secrets')
     }
 
-    if (!secrets || secrets.length === 0) {
-      console.log('📋 Aucun secret trouvé pour cet utilisateur')
-      return new Response(
-        JSON.stringify({
-          n8n_api_key: null,
-          n8n_base_url: 'https://n8n.srv860213.hstgr.cloud/api/v1'
-        }),
-        { 
-          status: 200, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
-      )
-    }
-
-    // Formatage des secrets pour la réponse
+    // Format secrets for response
     const secretsMap: Record<string, string> = {}
-    secrets.forEach(secret => {
+    secrets?.forEach(secret => {
       secretsMap[secret.secret_name] = secret.secret_value
     })
 
-    console.log('📋 Secrets récupérés:', {
+    console.log('📋 Secrets disponibles:', {
       hasApiKey: !!secretsMap.n8n_api_key,
       hasBaseUrl: !!secretsMap.n8n_base_url,
-      apiKeyLength: secretsMap.n8n_api_key?.length || 0
+      apiKeyPrefix: secretsMap.n8n_api_key ? secretsMap.n8n_api_key.substring(0, 10) + '...' : 'Aucune'
     })
 
     return new Response(
