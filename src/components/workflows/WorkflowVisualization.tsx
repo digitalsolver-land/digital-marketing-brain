@@ -35,29 +35,6 @@ interface WorkflowVisualizationProps {
   onDelete?: () => void;
 }
 
-// Inject CSS animations
-const injectStyles = () => {
-  const styleId = 'workflow-styles';
-  if (document.getElementById(styleId)) return;
-  
-  const style = document.createElement('style');
-  style.id = styleId;
-  style.textContent = `
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.7; }
-    }
-    @keyframes connectionFlow {
-      0% { stroke-dashoffset: 20; }
-      100% { stroke-dashoffset: 0; }
-    }
-    .workflow-connection {
-      animation: connectionFlow 2s linear infinite;
-    }
-  `;
-  document.head.appendChild(style);
-};
-
 export const WorkflowVisualization: React.FC<WorkflowVisualizationProps> = ({
   workflow,
   nodes,
@@ -68,52 +45,40 @@ export const WorkflowVisualization: React.FC<WorkflowVisualizationProps> = ({
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [zoom, setZoom] = useState(0.8);
+  const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const [viewBox, setViewBox] = useState('0 0 1200 800');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<string>('');
   const { toast } = useToast();
 
+  // Debug: Log connections avec plus de détails
   useEffect(() => {
-    injectStyles();
-  }, []);
-
-  useEffect(() => {
-    if (nodes.length > 0) {
-      const minX = Math.min(...nodes.map(n => n.position_x)) - 200;
-      const maxX = Math.max(...nodes.map(n => n.position_x)) + 300;
-      const minY = Math.min(...nodes.map(n => n.position_y)) - 200;
-      const maxY = Math.max(...nodes.map(n => n.position_y)) + 300;
+    console.log('=== DEBUGGING CONNECTIONS ===');
+    console.log('Total nodes:', nodes.length);
+    console.log('Total connections:', connections.length);
+    
+    connections.forEach((conn, index) => {
+      const sourceNode = nodes.find(n => n.node_id === conn.source_node_id);
+      const targetNode = nodes.find(n => n.node_id === conn.target_node_id);
       
-      const width = maxX - minX;
-      const height = maxY - minY;
-      
-      setViewBox(`${minX} ${minY} ${width} ${height}`);
-      setPan({ x: 0, y: 0 });
-      setZoom(0.8);
-    }
-  }, [nodes]);
-
-  // Debug: Log nodes and connections to understand the data structure
-  useEffect(() => {
-    console.log('=== DEBUG WORKFLOW VISUALIZATION ===');
-    console.log('Nodes:', nodes.map(n => ({ id: n.id, node_id: n.node_id, name: n.name, x: n.position_x, y: n.position_y })));
-    console.log('Connections:', connections.map(c => ({ 
-      id: c.id, 
-      source: c.source_node_id, 
-      target: c.target_node_id,
-      sourceExists: nodes.some(n => n.node_id === c.source_node_id),
-      targetExists: nodes.some(n => n.node_id === c.target_node_id)
-    })));
+      console.log(`Connection ${index}:`, {
+        id: conn.id,
+        source_id: conn.source_node_id,
+        target_id: conn.target_node_id,
+        source_exists: !!sourceNode,
+        target_exists: !!targetNode,
+        source_position: sourceNode ? { x: sourceNode.position_x, y: sourceNode.position_y } : 'NOT FOUND',
+        target_position: targetNode ? { x: targetNode.position_x, y: targetNode.position_y } : 'NOT FOUND'
+      });
+    });
   }, [nodes, connections]);
 
-  const handleZoomIn = () => setZoom(prev => Math.min(prev * 1.3, 4));
-  const handleZoomOut = () => setZoom(prev => Math.max(prev / 1.3, 0.3));
-  const handleResetView = () => { setZoom(0.8); setPan({ x: 0, y: 0 }); };
+  const handleZoomIn = () => setZoom(prev => Math.min(prev * 1.2, 3));
+  const handleZoomOut = () => setZoom(prev => Math.max(prev / 1.2, 0.3));
+  const handleResetView = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
 
   const handleMouseDown = (e: React.MouseEvent) => {
     setIsDragging(true);
@@ -131,7 +96,7 @@ export const WorkflowVisualization: React.FC<WorkflowVisualizationProps> = ({
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    setZoom(prev => Math.max(0.3, Math.min(4, prev * delta)));
+    setZoom(prev => Math.max(0.3, Math.min(3, prev * delta)));
   };
 
   const analyzeWorkflow = async () => {
@@ -231,50 +196,69 @@ Réponds en français de manière professionnelle et accessible.`;
     return '⚡';
   };
 
-  // Fonction améliorée pour calculer les chemins de connexion
-  const getConnectionPath = (connection: WorkflowConnection): string => {
-    // Recherche des nœuds par différents champs pour assurer la compatibilité
+  // Calcul des dimensions du canvas
+  const getCanvasBounds = () => {
+    if (nodes.length === 0) {
+      return { minX: 0, maxX: 1200, minY: 0, maxY: 800, width: 1200, height: 800 };
+    }
+
+    const minX = Math.min(...nodes.map(n => n.position_x)) - 300;
+    const maxX = Math.max(...nodes.map(n => n.position_x)) + 500;
+    const minY = Math.min(...nodes.map(n => n.position_y)) - 300;
+    const maxY = Math.max(...nodes.map(n => n.position_y)) + 500;
+    
+    return {
+      minX,
+      maxX,
+      minY,
+      maxY,
+      width: maxX - minX,
+      height: maxY - minY
+    };
+  };
+
+  const canvasBounds = getCanvasBounds();
+
+  // Fonction SIMPLIFIÉE pour créer les chemins de connexion
+  const createConnectionPath = (connection: WorkflowConnection): string | null => {
+    // Recherche robuste des nœuds
     const sourceNode = nodes.find(n => 
       n.node_id === connection.source_node_id || 
-      n.id === connection.source_node_id ||
-      n.node_id === connection.source_node_id.toString()
+      n.id === connection.source_node_id
     );
     
     const targetNode = nodes.find(n => 
       n.node_id === connection.target_node_id || 
-      n.id === connection.target_node_id ||
-      n.node_id === connection.target_node_id.toString()
+      n.id === connection.target_node_id
     );
-    
+
     if (!sourceNode || !targetNode) {
-      console.warn('Nœud manquant pour la connexion:', {
-        connection,
+      console.warn(`Nœuds manquants pour connexion ${connection.id}:`, {
+        source: connection.source_node_id,
+        target: connection.target_node_id,
         sourceFound: !!sourceNode,
-        targetFound: !!targetNode,
-        availableNodes: nodes.map(n => ({ id: n.id, node_id: n.node_id }))
+        targetFound: !!targetNode
       });
-      return '';
+      return null;
     }
 
-    // Calcul des positions de connexion
-    const sourceX = sourceNode.position_x + 140; // Sortie du nœud (côté droit)
-    const sourceY = sourceNode.position_y + 40;  // Centre vertical
-    const targetX = targetNode.position_x;       // Entrée du nœud (côté gauche)
-    const targetY = targetNode.position_y + 40;  // Centre vertical
+    // Points de connexion SIMPLIFIÉS
+    const startX = sourceNode.position_x + 140; // Sortie à droite du nœud
+    const startY = sourceNode.position_y + 40;  // Centre vertical
+    const endX = targetNode.position_x;         // Entrée à gauche du nœud
+    const endY = targetNode.position_y + 40;    // Centre vertical
 
-    // Créer une courbe de Bézier pour un rendu fluide
-    const deltaX = targetX - sourceX;
-    const controlOffset = Math.min(Math.abs(deltaX) / 2, 150);
-    const controlX1 = sourceX + controlOffset;
-    const controlX2 = targetX - controlOffset;
+    // LIGNE DROITE pour test - pas de courbe complexe
+    const path = `M ${startX} ${startY} L ${endX} ${endY}`;
     
-    return `M ${sourceX} ${sourceY} C ${controlX1} ${sourceY} ${controlX2} ${targetY} ${targetX} ${targetY}`;
+    console.log(`Connexion ${connection.id} path:`, path);
+    return path;
   };
 
   const transformStyle = {
     transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
     transformOrigin: 'center center',
-    transition: isDragging ? 'none' : 'transform 0.2s ease-out'
+    transition: isDragging ? 'none' : 'transform 0.1s ease-out'
   };
 
   return (
@@ -394,7 +378,7 @@ Réponds en français de manière professionnelle et accessible.`;
         <CardContent>
           <div 
             ref={containerRef}
-            className={`bg-white dark:bg-gray-900 rounded-lg p-4 overflow-hidden cursor-grab active:cursor-grabbing relative border-2 border-slate-200 dark:border-gray-700 ${
+            className={`bg-gray-50 rounded-lg p-4 overflow-hidden cursor-grab active:cursor-grabbing relative border-2 border-slate-300 ${
               isFullscreen ? 'h-screen' : 'min-h-[700px]'
             }`}
             onMouseDown={handleMouseDown}
@@ -407,220 +391,224 @@ Réponds en français de manière professionnelle et accessible.`;
             <div style={transformStyle}>
               <svg
                 ref={svgRef}
-                viewBox={viewBox}
-                className={`w-full ${isFullscreen ? 'h-screen' : 'h-[700px]'}`}
+                width={canvasBounds.width}
+                height={canvasBounds.height}
+                viewBox={`${canvasBounds.minX} ${canvasBounds.minY} ${canvasBounds.width} ${canvasBounds.height}`}
+                className="w-full h-full"
                 style={{ 
-                  background: `
-                    radial-gradient(circle at 20px 20px, rgba(148, 163, 184, 0.1) 1px, transparent 1px),
-                    radial-gradient(circle at 60px 60px, rgba(148, 163, 184, 0.05) 1px, transparent 1px)
-                  `, 
-                  backgroundSize: `${40 * zoom}px ${40 * zoom}px, ${120 * zoom}px ${120 * zoom}px`
+                  background: 'white',
+                  border: '1px solid #e2e8f0'
                 }}
               >
-                {/* Définitions pour les marqueurs et effets */}
+                {/* Définitions des marqueurs pour les flèches */}
                 <defs>
                   <marker
-                    id="arrowhead"
-                    markerWidth="10"
-                    markerHeight="7"
-                    refX="9"
-                    refY="3.5"
+                    id="arrowhead-red"
+                    markerWidth="12"
+                    markerHeight="8"
+                    refX="12"
+                    refY="4"
                     orient="auto"
+                    markerUnits="strokeWidth"
                   >
-                    <polygon
-                      points="0 0, 10 3.5, 0 7"
-                      fill="#FF6B6B"
-                      stroke="#000"
-                      strokeWidth="0.5"
+                    <path
+                      d="M0,0 L0,8 L12,4 z"
+                      fill="#dc2626"
+                      stroke="#dc2626"
+                      strokeWidth="1"
                     />
                   </marker>
                   
                   <marker
-                    id="arrowhead-secondary"
-                    markerWidth="10"
-                    markerHeight="7"
-                    refX="9"
-                    refY="3.5"
+                    id="arrowhead-blue"
+                    markerWidth="12"
+                    markerHeight="8"
+                    refX="12"
+                    refY="4"
                     orient="auto"
+                    markerUnits="strokeWidth"
                   >
-                    <polygon
-                      points="0 0, 10 3.5, 0 7"
-                      fill="#4ECDC4"
-                      stroke="#000"
-                      strokeWidth="0.5"
+                    <path
+                      d="M0,0 L0,8 L12,4 z"
+                      fill="#2563eb"
+                      stroke="#2563eb"
+                      strokeWidth="1"
                     />
                   </marker>
-                  
-                  <filter id="glow">
-                    <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
-                    <feMerge> 
-                      <feMergeNode in="coloredBlur"/>
-                      <feMergeNode in="SourceGraphic"/>
-                    </feMerge>
-                  </filter>
                 </defs>
 
-                {/* Rendu des connexions avec une logique robuste */}
-                {connections.map((connection, index) => {
-                  const path = getConnectionPath(connection);
-                  if (!path) return null;
-                  
-                  const isMainConnection = !connection.connection_type || connection.connection_type === 'main';
-                  const connectionColor = isMainConnection ? '#FF6B6B' : '#4ECDC4';
-                  
-                  return (
-                    <g key={`connection-${connection.id}-${index}`}>
-                      {/* Ligne de fond pour le contraste */}
-                      <path
-                        d={path}
-                        stroke="#000"
-                        strokeWidth="8"
-                        fill="none"
-                        opacity="0.3"
-                      />
-                      
-                      {/* Ligne principale colorée */}
-                      <path
-                        d={path}
-                        stroke={connectionColor}
-                        strokeWidth="5"
-                        fill="none"
-                        strokeDasharray={isMainConnection ? "none" : "8,4"}
-                        markerEnd={isMainConnection ? "url(#arrowhead)" : "url(#arrowhead-secondary)"}
-                        filter="url(#glow)"
-                        className="workflow-connection"
-                        opacity="0.9"
-                      />
-                      
-                      {/* Ligne d'animation */}
-                      <path
-                        d={path}
-                        stroke="#fff"
-                        strokeWidth="2"
-                        fill="none"
-                        strokeDasharray="10,20"
-                        opacity="0.6"
-                        className="workflow-connection"
-                      />
-                    </g>
-                  );
-                })}
+                {/* RENDU DES CONNEXIONS EN PREMIER */}
+                <g id="connections-layer">
+                  {connections.map((connection, index) => {
+                    const path = createConnectionPath(connection);
+                    if (!path) return null;
+                    
+                    const isMainConnection = !connection.connection_type || connection.connection_type === 'main';
+                    const strokeColor = isMainConnection ? '#dc2626' : '#2563eb'; // Rouge ou bleu
+                    const markerId = isMainConnection ? 'arrowhead-red' : 'arrowhead-blue';
+                    
+                    return (
+                      <g key={`connection-${connection.id}-${index}`}>
+                        {/* Ligne de fond pour contraste */}
+                        <path
+                          d={path}
+                          stroke="#000000"
+                          strokeWidth="8"
+                          fill="none"
+                          opacity="0.3"
+                        />
+                        
+                        {/* Ligne principale */}
+                        <path
+                          d={path}
+                          stroke={strokeColor}
+                          strokeWidth="4"
+                          fill="none"
+                          strokeDasharray={isMainConnection ? "none" : "8,4"}
+                          markerEnd={`url(#${markerId})`}
+                          opacity="0.9"
+                        />
+                        
+                        {/* Ligne d'animation */}
+                        <path
+                          d={path}
+                          stroke="#ffffff"
+                          strokeWidth="2"
+                          fill="none"
+                          strokeDasharray="6,12"
+                          opacity="0.7"
+                        >
+                          <animate
+                            attributeName="stroke-dashoffset"
+                            values="18;0"
+                            dur="2s"
+                            repeatCount="indefinite"
+                          />
+                        </path>
+                      </g>
+                    );
+                  })}
+                </g>
 
-                {/* Rendu des nœuds */}
-                {nodes.map((node, index) => (
-                  <g key={`node-${node.id}-${index}`} transform={`translate(${node.position_x}, ${node.position_y})`}>
-                    {/* Rectangle du nœud */}
-                    <rect
-                      width="140"
-                      height="80"
-                      rx="12"
-                      fill={getNodeColor(node.node_type)}
-                      stroke="#ffffff"
-                      strokeWidth="3"
-                      style={{
-                        filter: 'drop-shadow(2px 4px 8px rgba(0,0,0,0.3))'
-                      }}
-                    />
-                    
-                    {/* Points de connexion d'entrée (gauche) */}
-                    <circle
-                      cx="0"
-                      cy="40"
-                      r="6"
-                      fill="#4ECDC4"
-                      stroke="#000"
-                      strokeWidth="2"
-                    />
-                    
-                    {/* Points de connexion de sortie (droite) */}
-                    <circle
-                      cx="140"
-                      cy="40"
-                      r="6"
-                      fill="#FF6B6B"
-                      stroke="#000"
-                      strokeWidth="2"
-                    />
-                    
-                    {/* Icône du nœud */}
-                    <text
-                      x="25"
-                      y="50"
-                      fontSize="18"
-                      fill="white"
-                      textAnchor="middle"
-                      style={{ pointerEvents: 'none' }}
-                    >
-                      {getNodeIcon(node.node_type)}
-                    </text>
-                    
-                    {/* Nom du nœud */}
-                    <text
-                      x="85"
-                      y="35"
-                      fontSize="12"
-                      fill="white"
-                      textAnchor="middle"
-                      fontWeight="bold"
-                      style={{ pointerEvents: 'none' }}
-                    >
-                      {node.name.length > 12 ? `${node.name.substring(0, 12)}...` : node.name}
-                    </text>
-                    
-                    {/* Type du nœud */}
-                    <text
-                      x="85"
-                      y="52"
-                      fontSize="9"
-                      fill="rgba(255,255,255,0.8)"
-                      textAnchor="middle"
-                      style={{ pointerEvents: 'none' }}
-                    >
-                      {node.node_type.split('.').pop()?.replace(/([A-Z])/g, ' $1').trim().substring(0, 15)}
-                    </text>
-                  </g>
-                ))}
+                {/* RENDU DES NŒUDS EN SECOND */}
+                <g id="nodes-layer">
+                  {nodes.map((node, index) => (
+                    <g key={`node-${node.id}-${index}`}>
+                      {/* Rectangle du nœud */}
+                      <rect
+                        x={node.position_x}
+                        y={node.position_y}
+                        width="140"
+                        height="80"
+                        rx="12"
+                        fill={getNodeColor(node.node_type)}
+                        stroke="#ffffff"
+                        strokeWidth="3"
+                        style={{
+                          filter: 'drop-shadow(2px 4px 8px rgba(0,0,0,0.3))'
+                        }}
+                      />
+                      
+                      {/* Points de connexion d'entrée (gauche) */}
+                      <circle
+                        cx={node.position_x}
+                        cy={node.position_y + 40}
+                        r="6"
+                        fill="#2563eb"
+                        stroke="#ffffff"
+                        strokeWidth="2"
+                      />
+                      
+                      {/* Points de connexion de sortie (droite) */}
+                      <circle
+                        cx={node.position_x + 140}
+                        cy={node.position_y + 40}
+                        r="6"
+                        fill="#dc2626"
+                        stroke="#ffffff"
+                        strokeWidth="2"
+                      />
+                      
+                      {/* Icône du nœud */}
+                      <text
+                        x={node.position_x + 25}
+                        y={node.position_y + 50}
+                        fontSize="18"
+                        fill="white"
+                        textAnchor="middle"
+                        style={{ pointerEvents: 'none' }}
+                      >
+                        {getNodeIcon(node.node_type)}
+                      </text>
+                      
+                      {/* Nom du nœud */}
+                      <text
+                        x={node.position_x + 85}
+                        y={node.position_y + 35}
+                        fontSize="12"
+                        fill="white"
+                        textAnchor="middle"
+                        fontWeight="bold"
+                        style={{ pointerEvents: 'none' }}
+                      >
+                        {node.name.length > 12 ? `${node.name.substring(0, 12)}...` : node.name}
+                      </text>
+                      
+                      {/* Type du nœud */}
+                      <text
+                        x={node.position_x + 85}
+                        y={node.position_y + 52}
+                        fontSize="9"
+                        fill="rgba(255,255,255,0.8)"
+                        textAnchor="middle"
+                        style={{ pointerEvents: 'none' }}
+                      >
+                        {node.node_type.split('.').pop()?.replace(/([A-Z])/g, ' $1').trim().substring(0, 15)}
+                      </text>
+                    </g>
+                  ))}
+                </g>
               </svg>
             </div>
             
             {/* Instructions d'utilisation */}
-            <div className="absolute top-4 left-4 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm p-4 rounded-lg shadow-lg text-xs space-y-2 border border-slate-200 dark:border-gray-700">
-              <div className="font-semibold text-gray-800 dark:text-gray-200">🎛️ Navigation:</div>
-              <div className="text-gray-600 dark:text-gray-400">• 🖱️ Clic + glisser pour déplacer</div>
-              <div className="text-gray-600 dark:text-gray-400">• 🔍 Molette pour zoomer/dézoomer</div>
-              <div className="text-gray-600 dark:text-gray-400">• 🎯 Boutons pour contrôles précis</div>
-              <div className="text-gray-600 dark:text-gray-400">• 📺 Plein écran disponible</div>
+            <div className="absolute top-4 left-4 bg-white/95 backdrop-blur-sm p-4 rounded-lg shadow-lg text-xs space-y-2 border">
+              <div className="font-semibold text-gray-800">🎛️ Navigation:</div>
+              <div className="text-gray-600">• 🖱️ Clic + glisser pour déplacer</div>
+              <div className="text-gray-600">• 🔍 Molette pour zoomer/dézoomer</div>
+              <div className="text-gray-600">• 🎯 Boutons pour contrôles précis</div>
+              <div className="text-gray-600">• 📺 Plein écran disponible</div>
             </div>
             
             {/* Légende des connexions */}
-            <div className="absolute bottom-4 left-4 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm p-4 rounded-lg shadow-lg text-xs space-y-3 border border-slate-200 dark:border-gray-700">
-              <div className="font-semibold text-gray-800 dark:text-gray-200">🔗 Connexions:</div>
+            <div className="absolute bottom-4 left-4 bg-white/95 backdrop-blur-sm p-4 rounded-lg shadow-lg text-xs space-y-3 border">
+              <div className="font-semibold text-gray-800">🔗 Connexions:</div>
               <div className="flex items-center space-x-3">
-                <div className="w-6 h-0.5 bg-red-400 rounded"></div>
-                <span className="text-gray-600 dark:text-gray-400">Flux principal</span>
+                <div className="w-6 h-0.5 bg-red-600 rounded"></div>
+                <span className="text-gray-600">Flux principal</span>
               </div>
               <div className="flex items-center space-x-3">
-                <div className="w-6 h-0.5 bg-teal-400 rounded" style={{background: 'repeating-linear-gradient(to right, #4ECDC4 0, #4ECDC4 4px, transparent 4px, transparent 8px)'}}></div>
-                <span className="text-gray-600 dark:text-gray-400">Flux conditionnel</span>
+                <div className="w-6 h-0.5 bg-blue-600 rounded border-dashed"></div>
+                <span className="text-gray-600">Flux conditionnel</span>
               </div>
             </div>
           </div>
           
           {/* Statistiques */}
-          <div className="grid grid-cols-4 gap-4 mt-6 p-4 bg-gradient-to-r from-slate-50 to-slate-100 dark:from-gray-800 dark:to-gray-900 rounded-lg border border-slate-200 dark:border-gray-700">
+          <div className="grid grid-cols-4 gap-4 mt-6 p-4 bg-gradient-to-r from-slate-50 to-slate-100 rounded-lg border">
             <div className="text-center">
               <div className="text-3xl font-bold text-blue-600 mb-1">{nodes.length}</div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">Nœuds</div>
+              <div className="text-sm text-gray-600">Nœuds</div>
             </div>
             <div className="text-center">
               <div className="text-3xl font-bold text-green-600 mb-1">{connections.length}</div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">Connexions</div>
+              <div className="text-sm text-gray-600">Connexions</div>
             </div>
             <div className="text-center">
               <div className="text-3xl font-bold text-purple-600 mb-1">
                 {workflow.status === 'active' ? '✅' : '⏸️'}
               </div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">
+              <div className="text-sm text-gray-600">
                 {workflow.status === 'active' ? 'Actif' : 'Inactif'}
               </div>
             </div>
@@ -628,7 +616,7 @@ Réponds en français de manière professionnelle et accessible.`;
               <div className="text-3xl font-bold text-orange-600 mb-1">
                 {Math.round(zoom * 100)}%
               </div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">Zoom</div>
+              <div className="text-sm text-gray-600">Zoom</div>
             </div>
           </div>
         </CardContent>
