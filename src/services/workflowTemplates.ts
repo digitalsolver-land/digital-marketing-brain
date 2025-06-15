@@ -1,5 +1,11 @@
+import { N8nWorkflowJSON } from './enhancedWorkflowService';
 
-import { WorkflowTemplate } from './enhancedWorkflowService';
+export interface WorkflowTemplate {
+  name: string;
+  description: string;
+  category: string;
+  workflow: N8nWorkflowJSON;
+}
 
 export const workflowTemplates: WorkflowTemplate[] = [
   {

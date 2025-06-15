@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -29,7 +30,7 @@ import {
   AlertCircle,
   Eye,
   Copy,
-  Sync,
+  sync,
   BarChart3,
   Layers
 } from 'lucide-react';
@@ -38,6 +39,7 @@ import { aiService } from '@/services/aiService';
 import { useToast } from '@/hooks/use-toast';
 import { Workflow } from '@/types/platform';
 import { enhancedWorkflowService } from '@/services/enhancedWorkflowService';
+import { workflowService } from '@/services/workflowService';
 import { WorkflowVisualization } from './WorkflowVisualization';
 import { WorkflowJsonImporter } from './WorkflowJsonImporter';
 import { WorkflowTemplateSelector } from './WorkflowTemplateSelector';

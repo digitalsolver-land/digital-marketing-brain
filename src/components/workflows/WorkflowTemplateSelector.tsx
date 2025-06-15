@@ -18,7 +18,8 @@ import {
   Eye,
   Download
 } from 'lucide-react';
-import { workflowTemplates, getCategories, WorkflowTemplate } from '@/services/workflowTemplates';
+import { workflowTemplates, getCategories } from '@/services/workflowTemplates';
+import { WorkflowTemplate } from '@/services/workflowTemplates';
 import { enhancedWorkflowService } from '@/services/enhancedWorkflowService';
 import { useToast } from '@/hooks/use-toast';
 

@@ -1,4 +1,3 @@
-
 import { supabase } from '@/integrations/supabase/client';
 import { Workflow } from '@/types/platform';
 import { n8nService } from './n8nService';
@@ -82,46 +81,8 @@ class EnhancedWorkflowService {
 
       if (error) throw error;
 
-      // Créer les nœuds
-      if (template.workflow.nodes && template.workflow.nodes.length > 0) {
-        const nodes = template.workflow.nodes.map(node => ({
-          workflow_id: workflow.id,
-          node_id: node.id,
-          node_type: node.type,
-          name: node.name,
-          position_x: node.position[0],
-          position_y: node.position[1],
-          parameters: node.parameters || {}
-        }));
-
-        await supabase.from('workflow_nodes').insert(nodes);
-      }
-
-      // Créer les connexions
-      if (template.workflow.connections) {
-        const connections: any[] = [];
-        
-        Object.entries(template.workflow.connections).forEach(([sourceNodeId, nodeConnections]) => {
-          if (nodeConnections.main) {
-            nodeConnections.main.forEach((connectionGroup, sourceIndex) => {
-              connectionGroup.forEach(connection => {
-                connections.push({
-                  workflow_id: workflow.id,
-                  source_node_id: sourceNodeId,
-                  target_node_id: connection.node,
-                  source_index: sourceIndex,
-                  target_index: connection.index,
-                  connection_type: connection.type
-                });
-              });
-            });
-          }
-        });
-
-        if (connections.length > 0) {
-          await supabase.from('workflow_connections').insert(connections);
-        }
-      }
+      // Créer les nœuds et connexions
+      await this.createNodesAndConnections(workflow.id, template.workflow);
 
       return this.mapToWorkflow(workflow);
     } catch (error) {
@@ -159,7 +120,8 @@ class EnhancedWorkflowService {
           .eq('id', workflowId);
       } else {
         // Créer dans n8n si pas encore fait
-        const n8nWorkflow = await n8nService.createWorkflow(workflow.json_data);
+        const jsonData = workflow.json_data as unknown as N8nWorkflowJSON;
+        const n8nWorkflow = await n8nService.createWorkflow(jsonData);
         
         await supabase
           .from('workflows')
@@ -181,8 +143,9 @@ class EnhancedWorkflowService {
       const details = await this.getWorkflowWithDetails(workflowId);
       if (!details) throw new Error('Workflow non trouvé');
 
+      const jsonData = details.workflow.json_data as unknown as N8nWorkflowJSON;
       const duplicatedWorkflow = {
-        ...details.workflow.json_data,
+        ...jsonData,
         name: newName || `${details.workflow.name} (Copie)`,
         id: undefined // Retirer l'ID pour créer un nouveau workflow
       };
@@ -209,7 +172,7 @@ class EnhancedWorkflowService {
 
       if (error) throw error;
 
-      return workflow.json_data;
+      return workflow.json_data as unknown as N8nWorkflowJSON;
     } catch (error) {
       console.error('Erreur export workflow:', error);
       throw new Error('Impossible d\'exporter le workflow');
