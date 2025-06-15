@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -39,6 +40,10 @@ const pulseAnimation = `
   @keyframes pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.7; }
+  }
+  @keyframes flowAnimation {
+    0% { stroke-dashoffset: 20; }
+    100% { stroke-dashoffset: 0; }
   }
 `;
 
@@ -224,16 +229,19 @@ Réponds en français de manière professionnelle et accessible.`;
     const sourceNode = nodes.find(n => n.node_id === connection.source_node_id);
     const targetNode = nodes.find(n => n.node_id === connection.target_node_id);
     
-    if (!sourceNode || !targetNode) return '';
+    if (!sourceNode || !targetNode) {
+      console.log('Missing nodes for connection:', connection);
+      return '';
+    }
 
-    const sourceX = sourceNode.position_x + 140;
-    const sourceY = sourceNode.position_y + 40;
-    const targetX = targetNode.position_x;
-    const targetY = targetNode.position_y + 40;
+    const sourceX = sourceNode.position_x + 140; // Sortie du nœud source (côté droit)
+    const sourceY = sourceNode.position_y + 40;  // Centre vertical du nœud
+    const targetX = targetNode.position_x;       // Entrée du nœud cible (côté gauche)
+    const targetY = targetNode.position_y + 40;  // Centre vertical du nœud
 
-    // Create a smooth curved path
-    const controlX1 = sourceX + 80;
-    const controlX2 = targetX - 80;
+    // Créer une courbe douce pour la connexion
+    const controlX1 = sourceX + Math.min(100, Math.abs(targetX - sourceX) / 2);
+    const controlX2 = targetX - Math.min(100, Math.abs(targetX - sourceX) / 2);
     
     return `M ${sourceX} ${sourceY} C ${controlX1} ${sourceY} ${controlX2} ${targetY} ${targetX} ${targetY}`;
   };
@@ -243,6 +251,18 @@ Réponds en français de manière professionnelle et accessible.`;
     transformOrigin: 'center center',
     transition: isDragging ? 'none' : 'transform 0.2s ease-out'
   };
+
+  console.log('Rendering workflow visualization with:', { 
+    nodesCount: nodes.length, 
+    connectionsCount: connections.length,
+    connections: connections.map(c => ({
+      id: c.id,
+      source: c.source_node_id,
+      target: c.target_node_id,
+      sourceNode: nodes.find(n => n.node_id === c.source_node_id)?.name,
+      targetNode: nodes.find(n => n.node_id === c.target_node_id)?.name
+    }))
+  });
 
   return (
     <div className="space-y-4">
@@ -326,7 +346,7 @@ Réponds en français de manière professionnelle et accessible.`;
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center space-x-2">
               <Eye className="w-5 h-5" />
-              <span>Visualisation du Workflow</span>
+              <span>Visualisation du Workflow ({nodes.length} nœuds, {connections.length} connexions)</span>
             </CardTitle>
             
             {/* Contrôles de navigation */}
@@ -376,7 +396,7 @@ Réponds en français de manière professionnelle et accessible.`;
         <CardContent>
           <div 
             ref={containerRef}
-            className={`bg-gradient-to-br from-slate-50 to-slate-100 dark:from-gray-800 dark:to-gray-900 rounded-lg p-4 overflow-hidden cursor-grab active:cursor-grabbing relative border-2 border-slate-200 dark:border-gray-700 ${
+            className={`bg-white dark:bg-gray-900 rounded-lg p-4 overflow-hidden cursor-grab active:cursor-grabbing relative border-2 border-slate-200 dark:border-gray-700 ${
               isFullscreen ? 'h-screen' : 'min-h-[700px]'
             }`}
             onMouseDown={handleMouseDown}
@@ -393,58 +413,47 @@ Réponds en français de manière professionnelle et accessible.`;
                 className={`w-full ${isFullscreen ? 'h-screen' : 'h-[700px]'}`}
                 style={{ 
                   background: `
-                    radial-gradient(circle at 20px 20px, rgba(148, 163, 184, 0.3) 1px, transparent 1px),
-                    radial-gradient(circle at 60px 60px, rgba(148, 163, 184, 0.2) 1px, transparent 1px)
+                    radial-gradient(circle at 20px 20px, rgba(148, 163, 184, 0.1) 1px, transparent 1px),
+                    radial-gradient(circle at 60px 60px, rgba(148, 163, 184, 0.05) 1px, transparent 1px)
                   `, 
                   backgroundSize: `${40 * zoom}px ${40 * zoom}px, ${120 * zoom}px ${120 * zoom}px`
                 }}
               >
                 {/* Définitions pour les marqueurs et effets */}
                 <defs>
-                  {/* Gradient pour les connexions principales */}
-                  <linearGradient id="connectionGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.8" />
-                    <stop offset="50%" stopColor="#1d4ed8" stopOpacity="1" />
-                    <stop offset="100%" stopColor="#1e40af" stopOpacity="0.8" />
-                  </linearGradient>
-                  
-                  {/* Gradient pour les connexions secondaires */}
-                  <linearGradient id="secondaryGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" stopColor="#64748b" stopOpacity="0.6" />
-                    <stop offset="100%" stopColor="#475569" stopOpacity="0.8" />
-                  </linearGradient>
-                  
-                  {/* Marqueur de flèche principal */}
+                  {/* Marqueur de flèche visible */}
                   <marker
-                    id="arrowhead"
-                    markerWidth="16"
-                    markerHeight="12"
-                    refX="15"
-                    refY="6"
+                    id="arrowhead-visible"
+                    markerWidth="12"
+                    markerHeight="10"
+                    refX="11"
+                    refY="5"
                     orient="auto"
                     markerUnits="strokeWidth"
                   >
                     <polygon
-                      points="0 0, 16 6, 0 12"
-                      fill="url(#connectionGradient)"
-                      stroke="none"
+                      points="0 0, 12 5, 0 10"
+                      fill="#ff0000"
+                      stroke="#000000"
+                      strokeWidth="1"
                     />
                   </marker>
                   
                   {/* Marqueur de flèche secondaire */}
                   <marker
                     id="arrowhead-secondary"
-                    markerWidth="14"
-                    markerHeight="10"
-                    refX="13"
-                    refY="5"
+                    markerWidth="10"
+                    markerHeight="8"
+                    refX="9"
+                    refY="4"
                     orient="auto"
                     markerUnits="strokeWidth"
                   >
                     <polygon
-                      points="0 0, 14 5, 0 10"
-                      fill="url(#secondaryGradient)"
-                      stroke="none"
+                      points="0 0, 10 4, 0 8"
+                      fill="#0066cc"
+                      stroke="#000000"
+                      strokeWidth="1"
                     />
                   </marker>
                   
@@ -452,67 +461,74 @@ Réponds en français de manière professionnelle et accessible.`;
                   <filter id="nodeShadow" x="-20%" y="-20%" width="140%" height="140%">
                     <feDropShadow dx="3" dy="5" stdDeviation="4" floodOpacity="0.3"/>
                   </filter>
-                  
-                  {/* Filtre de lueur pour les connexions */}
-                  <filter id="connectionGlow" x="-50%" y="-50%" width="200%" height="200%">
-                    <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
-                    <feMerge> 
-                      <feMergeNode in="coloredBlur"/>
-                      <feMergeNode in="SourceGraphic"/>
-                    </feMerge>
-                  </filter>
                 </defs>
 
-                {/* Dessiner les connexions avec une visibilité maximale */}
+                {/* Dessiner les connexions avec des couleurs très visibles */}
                 {connections.map((connection, index) => {
                   const path = getConnectionPath(connection);
-                  const isMainConnection = connection.connection_type === 'main';
+                  if (!path) return null;
+                  
+                  const isMainConnection = connection.connection_type === 'main' || !connection.connection_type;
                   
                   return (
-                    <g key={connection.id}>
-                      {/* Ligne de fond blanche pour contraste */}
+                    <g key={`connection-${connection.id}-${index}`}>
+                      {/* Ligne de fond blanche pour contraste maximal */}
                       <path
                         d={path}
-                        stroke="#ffffff"
-                        strokeWidth="12"
-                        fill="none"
-                        opacity="0.9"
-                      />
-                      
-                      {/* Ligne de contraste gris foncé */}
-                      <path
-                        d={path}
-                        stroke="#1f2937"
+                        stroke="white"
                         strokeWidth="8"
                         fill="none"
-                        opacity="0.3"
+                        opacity="1"
                       />
                       
-                      {/* Ligne principale avec gradient et lueur */}
+                      {/* Ligne noire pour contraste */}
                       <path
                         d={path}
-                        stroke={isMainConnection ? "url(#connectionGradient)" : "url(#secondaryGradient)"}
+                        stroke="black"
+                        strokeWidth="6"
+                        fill="none"
+                        opacity="0.8"
+                      />
+                      
+                      {/* Ligne colorée principale - très visible */}
+                      <path
+                        d={path}
+                        stroke={isMainConnection ? "#ff0000" : "#0066cc"}
                         strokeWidth="4"
                         fill="none"
-                        strokeDasharray={isMainConnection ? "none" : "12,6"}
-                        markerEnd={isMainConnection ? "url(#arrowhead)" : "url(#arrowhead-secondary)"}
-                        filter="url(#connectionGlow)"
-                        className="transition-all duration-300 hover:stroke-width-6"
+                        strokeDasharray={isMainConnection ? "none" : "10,5"}
+                        markerEnd={isMainConnection ? "url(#arrowhead-visible)" : "url(#arrowhead-secondary)"}
+                        opacity="1"
                         style={{
-                          animation: `pulse 2s ease-in-out infinite ${index * 0.2}s`
+                          filter: 'drop-shadow(2px 2px 4px rgba(0,0,0,0.5))'
                         }}
                       />
                       
-                      {/* Points de contrôle pour debug (optionnel) */}
-                      {/* <circle cx={sourceX} cy={sourceY} r="3" fill="red" opacity="0.5" />
-                      <circle cx={targetX} cy={targetY} r="3" fill="blue" opacity="0.5" /> */}
+                      {/* Debug: points de connexion */}
+                      {(() => {
+                        const sourceNode = nodes.find(n => n.node_id === connection.source_node_id);
+                        const targetNode = nodes.find(n => n.node_id === connection.target_node_id);
+                        if (!sourceNode || !targetNode) return null;
+                        
+                        const sourceX = sourceNode.position_x + 140;
+                        const sourceY = sourceNode.position_y + 40;
+                        const targetX = targetNode.position_x;
+                        const targetY = targetNode.position_y + 40;
+                        
+                        return (
+                          <>
+                            <circle cx={sourceX} cy={sourceY} r="4" fill="green" stroke="black" strokeWidth="1" />
+                            <circle cx={targetX} cy={targetY} r="4" fill="blue" stroke="black" strokeWidth="1" />
+                          </>
+                        );
+                      })()}
                     </g>
                   );
                 })}
 
-                {/* Dessiner les nœuds avec plus de détails */}
+                {/* Dessiner les nœuds */}
                 {nodes.map((node, index) => (
-                  <g key={node.id} transform={`translate(${node.position_x}, ${node.position_y})`}>
+                  <g key={`node-${node.id}-${index}`} transform={`translate(${node.position_x}, ${node.position_y})`}>
                     {/* Rectangle du nœud avec ombre */}
                     <rect
                       width="140"
@@ -537,26 +553,40 @@ Réponds en français de manière professionnelle et accessible.`;
                       strokeWidth="1"
                     />
                     
-                    {/* Points de connexion gauche (entrée) */}
+                    {/* Points de connexion gauche (entrée) - plus visibles */}
                     <circle
                       cx="0"
                       cy="40"
-                      r="6"
+                      r="8"
                       fill="#ffffff"
-                      stroke={getNodeColor(node.node_type)}
+                      stroke="#000000"
                       strokeWidth="3"
-                      className="drop-shadow-sm"
+                      className="drop-shadow-lg"
+                    />
+                    <circle
+                      cx="0"
+                      cy="40"
+                      r="4"
+                      fill="#0066cc"
+                      stroke="none"
                     />
                     
-                    {/* Points de connexion droite (sortie) */}
+                    {/* Points de connexion droite (sortie) - plus visibles */}
                     <circle
                       cx="140"
                       cy="40"
-                      r="6"
+                      r="8"
                       fill="#ffffff"
-                      stroke={getNodeColor(node.node_type)}
+                      stroke="#000000"
                       strokeWidth="3"
-                      className="drop-shadow-sm"
+                      className="drop-shadow-lg"
+                    />
+                    <circle
+                      cx="140"
+                      cy="40"
+                      r="4"
+                      fill="#ff0000"
+                      stroke="none"
                     />
                     
                     {/* Icône du nœud */}
@@ -621,20 +651,23 @@ Réponds en français de manière professionnelle et accessible.`;
               <div className="text-gray-600 dark:text-gray-400">• 🔍 F11 ou bouton pour plein écran</div>
             </div>
             
-            {/* Légende des connexions */}
+            {/* Légende des connexions - mise à jour */}
             <div className="absolute bottom-4 left-4 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm p-4 rounded-lg shadow-lg text-xs space-y-3 border border-slate-200 dark:border-gray-700">
               <div className="font-semibold text-gray-800 dark:text-gray-200">🔗 Connexions:</div>
               <div className="flex items-center space-x-3">
                 <svg width="30" height="8">
-                  <line x1="0" y1="4" x2="25" y2="4" stroke="url(#connectionGradient)" strokeWidth="3" markerEnd="url(#arrowhead)" />
+                  <line x1="0" y1="4" x2="25" y2="4" stroke="#ff0000" strokeWidth="4" markerEnd="url(#arrowhead-visible)" />
                 </svg>
-                <span className="text-gray-600 dark:text-gray-400">Flux principal</span>
+                <span className="text-gray-600 dark:text-gray-400">Flux principal (rouge)</span>
               </div>
               <div className="flex items-center space-x-3">
                 <svg width="30" height="8">
-                  <line x1="0" y1="4" x2="25" y2="4" stroke="url(#secondaryGradient)" strokeWidth="3" strokeDasharray="8,4" markerEnd="url(#arrowhead-secondary)" />
+                  <line x1="0" y1="4" x2="25" y2="4" stroke="#0066cc" strokeWidth="4" strokeDasharray="10,5" markerEnd="url(#arrowhead-secondary)" />
                 </svg>
-                <span className="text-gray-600 dark:text-gray-400">Flux conditionnel</span>
+                <span className="text-gray-600 dark:text-gray-400">Flux conditionnel (bleu)</span>
+              </div>
+              <div className="text-xs text-gray-500 mt-2">
+                🟢 Points verts = Sortie des nœuds | 🔵 Points bleus = Entrée des nœuds
               </div>
             </div>
           </div>
