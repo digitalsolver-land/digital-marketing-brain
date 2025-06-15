@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -75,7 +74,7 @@ export const PostizAIGenerator = ({ onContentGenerated }: PostizAIGeneratorProps
   const [seoKeywords, setSeoKeywords] = useState('');
   const [generatedContent, setGeneratedContent] = useState('');
   const [loading, setLoading] = useState(false);
-  const [isAIConfigured, setIsAIConfigured] = useState(false);
+  const [isAIConfigured, setIsAIConfigured] = useState(true); // Toujours configuré avec Edge Function
   const { toast } = useToast();
 
   useEffect(() => {
@@ -94,7 +93,8 @@ export const PostizAIGenerator = ({ onContentGenerated }: PostizAIGeneratorProps
       console.log('AI service initialized successfully');
     } catch (error) {
       console.error('Error initializing AI service:', error);
-      setIsAIConfigured(false);
+      // Même en cas d'erreur, on garde isAIConfigured à true car l'Edge Function gère les erreurs
+      setIsAIConfigured(true);
     }
   };
 
@@ -104,15 +104,6 @@ export const PostizAIGenerator = ({ onContentGenerated }: PostizAIGeneratorProps
       toast({
         title: "Prompt requis",
         description: "Veuillez entrer un prompt ou sélectionner un modèle",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    if (!isAIConfigured) {
-      toast({
-        title: "IA non configurée",
-        description: "Veuillez configurer votre clé API OpenRouter dans les paramètres",
         variant: "destructive"
       });
       return;
@@ -166,24 +157,10 @@ export const PostizAIGenerator = ({ onContentGenerated }: PostizAIGeneratorProps
         <CardTitle className="flex items-center space-x-2">
           <Sparkles className="w-5 h-5 text-purple-500" />
           <span>Générateur de Contenu IA</span>
-          {!isAIConfigured && (
-            <Badge variant="destructive">Non configuré</Badge>
-          )}
+          <Badge variant="default" className="bg-green-500">Configuré</Badge>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        {!isAIConfigured && (
-          <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-            <div className="flex items-center space-x-2 text-orange-800">
-              <Sparkles className="w-4 h-4" />
-              <span className="font-medium">Configuration requise</span>
-            </div>
-            <p className="text-sm text-orange-700 mt-1">
-              Configurez votre clé API OpenRouter dans les paramètres pour utiliser l'IA.
-            </p>
-          </div>
-        )}
-
         {/* Type de contenu */}
         <div className="space-y-2">
           <Label>Type de contenu</Label>
@@ -219,7 +196,7 @@ export const PostizAIGenerator = ({ onContentGenerated }: PostizAIGeneratorProps
                     size="sm"
                     variant="ghost"
                     onClick={() => handleGenerate(prompt)}
-                    disabled={loading || !isAIConfigured}
+                    disabled={loading}
                   >
                     <Sparkles className="w-3 h-3" />
                   </Button>
@@ -256,7 +233,7 @@ export const PostizAIGenerator = ({ onContentGenerated }: PostizAIGeneratorProps
         {/* Bouton de génération */}
         <Button 
           onClick={() => handleGenerate()}
-          disabled={loading || !customPrompt.trim() || !isAIConfigured}
+          disabled={loading || !customPrompt.trim()}
           className="w-full"
         >
           {loading ? (
