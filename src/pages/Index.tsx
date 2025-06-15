@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Sidebar } from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
@@ -14,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Users, Target, Calendar, Database, Settings, Search } from 'lucide-react';
+import { N8nManager } from '@/components/workflows/N8nManager';
 
 const Index = () => {
   const [activeSection, setActiveSection] = useState('dashboard');
@@ -40,7 +40,7 @@ const Index = () => {
         );
 
       case 'workflows':
-        return <WorkflowManager />;
+        return <N8nManager />;
 
       case 'ai-chat':
         return <AIChat />;
