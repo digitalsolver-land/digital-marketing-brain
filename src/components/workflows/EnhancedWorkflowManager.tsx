@@ -1131,12 +1131,15 @@ export const EnhancedWorkflowManager: React.FC = () => {
                     workflow={selectedWorkflow}
                     nodes={selectedWorkflow.nodes?.map(node => ({
                       id: node.id || '',
-                      node_id: node.id || '',
-                      node_type: node.type || '',
-                      name: node.name || '',
-                      position_x: Array.isArray(node.position) ? node.position[0] : 0,
-                      position_y: Array.isArray(node.position) ? node.position[1] : 0,
-                      parameters: node.parameters || {}
+                      type: node.type || '',
+                      position: { 
+                        x: Array.isArray(node.position) ? node.position[0] : 0, 
+                        y: Array.isArray(node.position) ? node.position[1] : 0 
+                      },
+                      data: {
+                        name: node.name || '',
+                        parameters: node.parameters || {}
+                      }
                     })) || []}
                     connections={[]}
                     onExecute={() => {
