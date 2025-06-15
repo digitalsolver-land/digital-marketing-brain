@@ -1,3 +1,4 @@
+
 import { supabase } from '@/integrations/supabase/client';
 
 export class AIService {
@@ -11,35 +12,65 @@ export class AIService {
   }
 
   async initialize(userId: string) {
-    // Plus besoin d'initialiser avec la clé API car elle est dans les secrets Supabase
     console.log('AI Service initialized - using Supabase Edge Function');
   }
 
   async generateContent(prompt: string, type: 'blog' | 'social' | 'email' | 'ad' | 'whatsapp', seoKeywords?: string[]): Promise<string> {
     try {
       console.log('Calling Supabase Edge Function for content generation');
+      console.log('Prompt:', prompt.substring(0, 100) + '...');
+      console.log('Type:', type);
+      console.log('SEO Keywords:', seoKeywords);
       
       const { data, error } = await supabase.functions.invoke('generate-ai-content', {
         body: {
-          prompt,
+          prompt: prompt.trim(),
           type,
           seoKeywords: seoKeywords || []
         }
       });
 
+      console.log('Edge Function response:', data);
+      console.log('Edge Function error:', error);
+
       if (error) {
         console.error('Erreur Edge Function:', error);
-        throw new Error(error.message || 'Erreur lors de la génération de contenu');
+        throw new Error(`Erreur de l'Edge Function: ${error.message || 'Erreur inconnue'}`);
       }
 
-      if (!data || !data.content) {
-        throw new Error('Aucun contenu généré');
+      if (!data) {
+        throw new Error('Aucune donnée retournée par l\'Edge Function');
       }
 
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      if (!data.content) {
+        throw new Error('Aucun contenu généré dans la réponse');
+      }
+
+      console.log('Contenu généré avec succès, longueur:', data.content.length);
       return data.content;
+
     } catch (error) {
       console.error('Erreur génération contenu:', error);
-      throw new Error(error instanceof Error ? error.message : 'Échec de la génération de contenu');
+      
+      // Messages d'erreur plus explicites
+      if (error instanceof Error) {
+        if (error.message.includes('not found')) {
+          throw new Error('Service IA non disponible. Veuillez réessayer plus tard.');
+        }
+        if (error.message.includes('unauthorized')) {
+          throw new Error('Configuration IA manquante. Vérifiez vos paramètres.');
+        }
+        if (error.message.includes('API')) {
+          throw new Error('Erreur de l\'API IA. Vérifiez votre configuration.');
+        }
+        throw error;
+      }
+      
+      throw new Error('Échec de la génération de contenu. Veuillez réessayer.');
     }
   }
 
@@ -69,7 +100,9 @@ export class AIService {
         }
       });
 
-      if (error) throw error;
+      if (error) throw new Error(error.message);
+      if (!data?.content) throw new Error('Aucun contenu généré');
+      
       return data.content;
     } catch (error) {
       console.error('Erreur génération réponse WhatsApp:', error);
@@ -88,7 +121,9 @@ export class AIService {
         }
       });
 
-      if (error) throw error;
+      if (error) throw new Error(error.message);
+      if (!data?.content) throw new Error('Aucune analyse générée');
+      
       return JSON.parse(data.content);
     } catch (error) {
       console.error('Erreur analyse SEO:', error);
@@ -105,7 +140,9 @@ export class AIService {
         }
       });
 
-      if (error) throw error;
+      if (error) throw new Error(error.message);
+      if (!data?.content) throw new Error('Aucun workflow généré');
+      
       return JSON.parse(data.content);
     } catch (error) {
       console.error('Erreur création workflow:', error);
@@ -123,7 +160,9 @@ export class AIService {
         }
       });
 
-      if (error) throw error;
+      if (error) throw new Error(error.message);
+      if (!data?.content) throw new Error('Aucune réponse générée');
+      
       return JSON.parse(data.content);
     } catch (error) {
       console.error('Erreur traitement commande:', error);

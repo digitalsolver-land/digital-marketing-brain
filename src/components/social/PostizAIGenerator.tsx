@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { Sparkles, Copy, RefreshCw, Plus } from 'lucide-react';
+import { Sparkles, Copy, RefreshCw, Plus, AlertCircle } from 'lucide-react';
 import { aiService } from '@/services/aiService';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -74,7 +75,7 @@ export const PostizAIGenerator = ({ onContentGenerated }: PostizAIGeneratorProps
   const [seoKeywords, setSeoKeywords] = useState('');
   const [generatedContent, setGeneratedContent] = useState('');
   const [loading, setLoading] = useState(false);
-  const [isAIConfigured, setIsAIConfigured] = useState(true); // Toujours configuré avec Edge Function
+  const [lastError, setLastError] = useState<string>('');
   const { toast } = useToast();
 
   useEffect(() => {
@@ -89,43 +90,74 @@ export const PostizAIGenerator = ({ onContentGenerated }: PostizAIGeneratorProps
     try {
       console.log('Initializing AI service for user:', user.id);
       await aiService.initialize(user.id);
-      setIsAIConfigured(true);
       console.log('AI service initialized successfully');
+      setLastError('');
     } catch (error) {
       console.error('Error initializing AI service:', error);
-      // Même en cas d'erreur, on garde isAIConfigured à true car l'Edge Function gère les erreurs
-      setIsAIConfigured(true);
+      setLastError('Erreur d\'initialisation du service IA');
     }
+  };
+
+  const validateInput = (prompt: string): string | null => {
+    if (!prompt.trim()) {
+      return 'Le prompt ne peut pas être vide';
+    }
+    if (prompt.trim().length < 10) {
+      return 'Le prompt doit contenir au moins 10 caractères';
+    }
+    if (prompt.trim().length > 2000) {
+      return 'Le prompt ne peut pas dépasser 2000 caractères';
+    }
+    return null;
   };
 
   const handleGenerate = async (prompt?: string) => {
     const finalPrompt = prompt || customPrompt;
-    if (!finalPrompt.trim()) {
+    
+    const validationError = validateInput(finalPrompt);
+    if (validationError) {
       toast({
-        title: "Prompt requis",
-        description: "Veuillez entrer un prompt ou sélectionner un modèle",
+        title: "Erreur de validation",
+        description: validationError,
         variant: "destructive"
       });
       return;
     }
 
     setLoading(true);
+    setLastError('');
+    
     try {
-      console.log('Generating content with prompt:', finalPrompt);
+      console.log('=== DÉBUT GÉNÉRATION ===');
+      console.log('User ID:', user?.id);
+      console.log('Prompt:', finalPrompt.substring(0, 100) + '...');
+      console.log('Type:', selectedType);
+      console.log('Keywords:', seoKeywords);
+      
       const keywords = seoKeywords.split(',').map(k => k.trim()).filter(Boolean);
       const content = await aiService.generateContent(finalPrompt, selectedType, keywords);
-      console.log('Content generated successfully:', content.substring(0, 100) + '...');
+      
+      console.log('=== CONTENU GÉNÉRÉ ===');
+      console.log('Longueur:', content.length);
+      console.log('Début:', content.substring(0, 200) + '...');
+      
       setGeneratedContent(content);
       
       toast({
         title: "Contenu généré",
-        description: "Le contenu a été généré avec succès"
+        description: `Contenu de ${content.length} caractères généré avec succès`
       });
     } catch (error) {
-      console.error('Error generating content:', error);
+      console.error('=== ERREUR GÉNÉRATION ===');
+      console.error('Error:', error);
+      console.error('Error message:', error instanceof Error ? error.message : 'Unknown error');
+      
+      const errorMessage = error instanceof Error ? error.message : "Impossible de générer le contenu";
+      setLastError(errorMessage);
+      
       toast({
-        title: "Erreur",
-        description: error instanceof Error ? error.message : "Impossible de générer le contenu",
+        title: "Erreur de génération",
+        description: errorMessage,
         variant: "destructive"
       });
     } finally {
@@ -159,6 +191,12 @@ export const PostizAIGenerator = ({ onContentGenerated }: PostizAIGeneratorProps
           <span>Générateur de Contenu IA</span>
           <Badge variant="default" className="bg-green-500">Configuré</Badge>
         </CardTitle>
+        {lastError && (
+          <div className="flex items-center space-x-2 p-3 bg-red-50 border border-red-200 rounded-md">
+            <AlertCircle className="w-4 h-4 text-red-500" />
+            <span className="text-sm text-red-700">{lastError}</span>
+          </div>
+        )}
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Type de contenu */}
@@ -211,11 +249,14 @@ export const PostizAIGenerator = ({ onContentGenerated }: PostizAIGeneratorProps
           <Label htmlFor="custom-prompt">Prompt personnalisé</Label>
           <Textarea
             id="custom-prompt"
-            placeholder="Décrivez le contenu que vous souhaitez générer..."
+            placeholder="Décrivez le contenu que vous souhaitez générer... (minimum 10 caractères)"
             value={customPrompt}
             onChange={(e) => setCustomPrompt(e.target.value)}
             rows={3}
           />
+          <div className="text-xs text-gray-500">
+            {customPrompt.length}/2000 caractères
+          </div>
         </div>
 
         {/* Mots-clés SEO */}
@@ -233,7 +274,7 @@ export const PostizAIGenerator = ({ onContentGenerated }: PostizAIGeneratorProps
         {/* Bouton de génération */}
         <Button 
           onClick={() => handleGenerate()}
-          disabled={loading || !customPrompt.trim()}
+          disabled={loading || !customPrompt.trim() || customPrompt.trim().length < 10}
           className="w-full"
         >
           {loading ? (
