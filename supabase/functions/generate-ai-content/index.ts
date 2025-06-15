@@ -62,13 +62,39 @@ serve(async (req) => {
           { role: 'user', content: prompt }
         ],
         temperature: 0.7,
-        max_tokens: 2000
+        max_tokens: 1000 // Réduit de 2000 à 1000 pour économiser les crédits
       })
     });
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error('Erreur OpenRouter API:', response.status, errorText);
+      
+      // Gestion spécifique des erreurs courantes
+      if (response.status === 402) {
+        return new Response(
+          JSON.stringify({ 
+            error: 'Crédits OpenRouter insuffisants. Veuillez recharger votre compte OpenRouter ou réduire la longueur de votre prompt.' 
+          }),
+          { 
+            status: 402, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          }
+        );
+      }
+      
+      if (response.status === 401) {
+        return new Response(
+          JSON.stringify({ 
+            error: 'Clé API OpenRouter invalide. Vérifiez votre clé API dans les paramètres.' 
+          }),
+          { 
+            status: 401, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          }
+        );
+      }
+      
       return new Response(
         JSON.stringify({ error: `Erreur API OpenRouter: ${response.status} - ${errorText}` }),
         { 
@@ -136,22 +162,22 @@ function getSystemPrompt(type: string, seoKeywords?: string[]): string {
   
   switch (type) {
     case 'blog':
-      return `${basePrompt} Crée un article de blog engageant et informatif en français. Structure avec titre, introduction, développement et conclusion. ${seoInstructions}`;
+      return `${basePrompt} Crée un article de blog engageant et informatif en français. Structure avec titre, introduction, développement et conclusion. Sois concis et direct. ${seoInstructions}`;
     case 'social':
-      return `${basePrompt} Crée du contenu social média accrocheur et viral en français. Inclus des hashtags pertinents et un call-to-action. Adapte le ton selon le réseau (professionnel pour LinkedIn, décontracté pour Instagram/TikTok). ${seoInstructions}`;
+      return `${basePrompt} Crée du contenu social média accrocheur et viral en français. Inclus des hashtags pertinents et un call-to-action. Adapte le ton selon le réseau (professionnel pour LinkedIn, décontracté pour Instagram/TikTok). Sois concis. ${seoInstructions}`;
     case 'email':
-      return `${basePrompt} Crée un email marketing persuasif en français avec un objet accrocheur et un CTA fort. Structure: salutation, accroche, corps du message, CTA. ${seoInstructions}`;
+      return `${basePrompt} Crée un email marketing persuasif en français avec un objet accrocheur et un CTA fort. Structure: salutation, accroche, corps du message, CTA. Sois concis. ${seoInstructions}`;
     case 'ad':
-      return `${basePrompt} Crée une publicité concise et impactante en français. Focus sur le bénéfice client et l'urgence. Maximum 150 mots. ${seoInstructions}`;
+      return `${basePrompt} Crée une publicité concise et impactante en français. Focus sur le bénéfice client et l'urgence. Maximum 100 mots. ${seoInstructions}`;
     case 'whatsapp':
-      return `${basePrompt} Tu es un assistant WhatsApp professionnel qui répond de manière courtoise et utile. Réponds en français, sois concis et direct (WhatsApp favorise les messages courts). Reste professionnel mais amical. ${seoInstructions}`;
+      return `${basePrompt} Tu es un assistant WhatsApp professionnel qui répond de manière courtoise et utile. Réponds en français, sois très concis et direct (WhatsApp favorise les messages courts). Reste professionnel mais amical. ${seoInstructions}`;
     case 'seo-analysis':
-      return `${basePrompt} Analyse le contenu fourni pour les aspects SEO. Fournis un rapport détaillé avec des recommandations d'amélioration en format JSON.`;
+      return `${basePrompt} Analyse le contenu fourni pour les aspects SEO. Fournis un rapport concis avec des recommandations d'amélioration en format JSON.`;
     case 'workflow':
       return `${basePrompt} Crée un workflow détaillé basé sur la description fournie. Retourne la structure en format JSON avec les étapes, conditions et actions.`;
     case 'command':
       return `${basePrompt} Traite la commande fournie et retourne une réponse structurée en format JSON.`;
     default:
-      return `${basePrompt} ${seoInstructions}`;
+      return `${basePrompt} Sois concis et direct dans ta réponse. ${seoInstructions}`;
   }
 }
