@@ -1,10 +1,12 @@
+
 import React, { useEffect, useRef, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Play, Settings, Trash2, Eye, ZoomIn, ZoomOut, RotateCcw, Move, Brain, Maximize2, Minimize2 } from 'lucide-react';
+import { Play, Settings, Trash2, Eye, ZoomIn, ZoomOut, RotateCcw, Brain, Maximize2, Minimize2 } from 'lucide-react';
 import { aiService } from '@/services/aiService';
 import { useToast } from '@/hooks/use-toast';
+import { WorkflowCanvas } from './WorkflowCanvas';
 
 interface WorkflowNode {
   id: string;
@@ -42,7 +44,6 @@ export const WorkflowVisualization: React.FC<WorkflowVisualizationProps> = ({
   onEdit,
   onDelete
 }) => {
-  const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -138,95 +139,6 @@ Réponds en français de manière professionnelle et accessible.`;
     } finally {
       setIsAnalyzing(false);
     }
-  };
-
-  const getNodeColor = (nodeType: string): string => {
-    const typeMap: { [key: string]: string } = {
-      'n8n-nodes-base.start': '#10b981',
-      'n8n-nodes-base.webhook': '#ef4444',
-      'n8n-nodes-base.httpRequest': '#06b6d4',
-      'n8n-nodes-base.set': '#f59e0b',
-      'n8n-nodes-base.if': '#ec4899',
-      'n8n-nodes-base.emailSend': '#3b82f6',
-      'n8n-nodes-base.discord': '#7c3aed',
-      'n8n-nodes-base.slack': '#1e293b',
-      'n8n-nodes-base.telegram': '#0ea5e9',
-      'n8n-nodes-base.googleSheets': '#22c55e',
-      'n8n-nodes-base.mysql': '#0f766e',
-      'n8n-nodes-base.postgres': '#1e40af',
-      'n8n-nodes-base.mongodb': '#16a34a',
-      'n8n-nodes-base.function': '#ea580c',
-      'n8n-nodes-base.switch': '#9333ea',
-      'n8n-nodes-base.merge': '#059669',
-      'n8n-nodes-base.wait': '#db2777',
-      'n8n-nodes-base.cron': '#7c2d12',
-      'n8n-nodes-base.schedule': '#1d4ed8',
-      'n8n-nodes-base.executeWorkflow': '#be185d'
-    };
-    return typeMap[nodeType] || '#6b7280';
-  };
-
-  const getNodeIcon = (nodeType: string): string => {
-    if (nodeType.includes('start')) return '▶️';
-    if (nodeType.includes('webhook')) return '🔗';
-    if (nodeType.includes('http')) return '🌐';
-    if (nodeType.includes('set')) return '⚙️';
-    if (nodeType.includes('if')) return '❓';
-    if (nodeType.includes('email')) return '📧';
-    if (nodeType.includes('discord')) return '💬';
-    if (nodeType.includes('slack')) return '💼';
-    if (nodeType.includes('telegram')) return '📱';
-    if (nodeType.includes('sheets')) return '📊';
-    if (nodeType.includes('mysql') || nodeType.includes('postgres') || nodeType.includes('mongodb')) return '🗄️';
-    if (nodeType.includes('function')) return '⚡';
-    if (nodeType.includes('switch')) return '🔀';
-    if (nodeType.includes('merge')) return '🔗';
-    if (nodeType.includes('wait')) return '⏰';
-    if (nodeType.includes('cron') || nodeType.includes('schedule')) return '📅';
-    return '⚡';
-  };
-
-  // Fonction pour créer les connexions
-  const createConnectionElements = () => {
-    const connectionElements: JSX.Element[] = [];
-    
-    connections.forEach((connection, index) => {
-      const sourceNode = nodes.find(n => 
-        n.node_id === connection.source_node_id || 
-        n.id === connection.source_node_id
-      );
-      
-      const targetNode = nodes.find(n => 
-        n.node_id === connection.target_node_id || 
-        n.id === connection.target_node_id
-      );
-
-      if (!sourceNode || !targetNode) {
-        return;
-      }
-
-      // Calculer les positions réelles avec les offsets
-      const x1 = (sourceNode.position_x || 0) + 500 + 120; // Sortie du nœud source
-      const y1 = (sourceNode.position_y || 0) + 300 + 40;  // Centre vertical
-      const x2 = (targetNode.position_x || 0) + 500;       // Entrée du nœud cible  
-      const y2 = (targetNode.position_y || 0) + 300 + 40;  // Centre vertical
-
-      connectionElements.push(
-        <g key={`connection-${connection.id}-${index}`}>
-          <line
-            x1={x1}
-            y1={y1}
-            x2={x2}
-            y2={y2}
-            stroke="#ff4444"
-            strokeWidth="3"
-            markerEnd="url(#arrowhead)"
-          />
-        </g>
-      );
-    });
-    
-    return connectionElements;
   };
 
   // Affichage de débogage si pas de données
@@ -328,7 +240,7 @@ Réponds en français de manière professionnelle et accessible.`;
         </Card>
       )}
 
-      {/* Visualisation du workflow */}
+      {/* Visualisation du workflow avec Canvas */}
       <Card className={isFullscreen ? 'fixed inset-0 z-50 rounded-none' : ''}>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -378,135 +290,12 @@ Réponds en français de manière professionnelle et accessible.`;
               userSelect: 'none' 
             }}
           >
-            {/* SVG avec dimensions fixes et zoom simple */}
-            <svg
-              ref={svgRef}
-              width="100%"
-              height="100%"
-              viewBox="0 0 2000 1400"
-              className="bg-white"
-              style={{
-                transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-                transformOrigin: 'center center',
-                transition: isDragging ? 'none' : 'transform 0.1s ease-out'
-              }}
-            >
-              {/* Définitions des marqueurs */}
-              <defs>
-                <marker
-                  id="arrowhead"
-                  markerWidth="10"
-                  markerHeight="7"
-                  refX="9"
-                  refY="3.5"
-                  orient="auto"
-                  markerUnits="strokeWidth"
-                >
-                  <polygon
-                    points="0 0, 10 3.5, 0 7"
-                    fill="#ff4444"
-                    stroke="#000000"
-                    strokeWidth="1"
-                  />
-                </marker>
-              </defs>
-
-              {/* Grille de fond */}
-              <defs>
-                <pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse">
-                  <path d="M 50 0 L 0 0 0 50" fill="none" stroke="#e5e7eb" strokeWidth="1"/>
-                </pattern>
-              </defs>
-              <rect width="100%" height="100%" fill="url(#grid)" />
-
-              {/* CONNEXIONS */}
-              <g id="connections-layer">
-                {createConnectionElements()}
-              </g>
-
-              {/* NŒUDS */}
-              <g id="nodes-layer">
-                {nodes.map((node, index) => {
-                  // Position avec offset pour centrer le workflow
-                  const nodeX = (node.position_x || 0) + 500;
-                  const nodeY = (node.position_y || 0) + 300;
-                  
-                  return (
-                    <g key={`node-${node.id || node.node_id}-${index}`}>
-                      {/* Rectangle du nœud */}
-                      <rect
-                        x={nodeX}
-                        y={nodeY}
-                        width="120"
-                        height="80"
-                        rx="8"
-                        fill={getNodeColor(node.node_type)}
-                        stroke="#ffffff"
-                        strokeWidth="3"
-                        filter="drop-shadow(2px 4px 8px rgba(0,0,0,0.3))"
-                      />
-                      
-                      {/* Point de connexion d'entrée */}
-                      <circle
-                        cx={nodeX}
-                        cy={nodeY + 40}
-                        r="5"
-                        fill="#0066ff"
-                        stroke="#ffffff"
-                        strokeWidth="2"
-                      />
-                      
-                      {/* Point de connexion de sortie */}
-                      <circle
-                        cx={nodeX + 120}
-                        cy={nodeY + 40}
-                        r="5"
-                        fill="#ff4444"
-                        stroke="#ffffff"
-                        strokeWidth="2"
-                      />
-                      
-                      {/* Icône du nœud */}
-                      <text
-                        x={nodeX + 20}
-                        y={nodeY + 45}
-                        fontSize="16"
-                        fill="white"
-                        textAnchor="middle"
-                        dominantBaseline="middle"
-                      >
-                        {getNodeIcon(node.node_type)}
-                      </text>
-                      
-                      {/* Nom du nœud */}
-                      <text
-                        x={nodeX + 70}
-                        y={nodeY + 35}
-                        fontSize="11"
-                        fill="white"
-                        textAnchor="middle"
-                        fontWeight="bold"
-                        dominantBaseline="middle"
-                      >
-                        {node.name.length > 10 ? `${node.name.substring(0, 10)}...` : node.name}
-                      </text>
-                      
-                      {/* Type du nœud */}
-                      <text
-                        x={nodeX + 70}
-                        y={nodeY + 55}
-                        fontSize="8"
-                        fill="rgba(255,255,255,0.8)"
-                        textAnchor="middle"
-                        dominantBaseline="middle"
-                      >
-                        {node.node_type.split('.').pop()?.substring(0, 12)}
-                      </text>
-                    </g>
-                  );
-                })}
-              </g>
-            </svg>
+            <WorkflowCanvas 
+              nodes={nodes}
+              connections={connections}
+              zoom={zoom}
+              pan={pan}
+            />
             
             {/* Instructions d'utilisation */}
             <div className="absolute top-4 left-4 bg-white/95 backdrop-blur-sm p-3 rounded-lg shadow-lg text-xs space-y-1 border">
