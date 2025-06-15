@@ -1,3 +1,4 @@
+
 import { supabase } from '@/integrations/supabase/client';
 import { DemoDataService } from './demoDataService';
 
@@ -26,6 +27,28 @@ export interface PostizPost {
     name: string;
     picture: string;
   };
+  analytics?: {
+    views: number;
+    likes: number;
+    shares: number;
+    comments: number;
+  };
+}
+
+export interface PostizAnalytics {
+  totalPosts: number;
+  totalViews: number;
+  totalLikes: number;
+  totalShares: number;
+  totalComments: number;
+  engagement: number;
+  topPerformingPost?: PostizPost;
+  integrationStats: Array<{
+    integrationId: string;
+    name: string;
+    posts: number;
+    engagement: number;
+  }>;
 }
 
 export interface CreatePostPayload {
@@ -54,6 +77,37 @@ export interface UploadResponse {
   updatedAt: string;
 }
 
+export interface PostizLead {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  source: string;
+  integrationId: string;
+  createdAt: string;
+  status: 'new' | 'contacted' | 'qualified' | 'converted';
+  notes?: string;
+}
+
+export interface AutoPostingRule {
+  id: string;
+  name: string;
+  enabled: boolean;
+  schedule: {
+    frequency: 'daily' | 'weekly' | 'monthly';
+    time: string;
+    days?: string[];
+  };
+  integrations: string[];
+  contentType: 'ai_generated' | 'template' | 'rss';
+  parameters: {
+    prompt?: string;
+    template?: string;
+    rssUrl?: string;
+    keywords?: string[];
+  };
+}
+
 class PostizService {
   private baseURL = 'https://api.postiz.com/public/v1';
   private apiKey = '';
@@ -74,7 +128,6 @@ class PostizService {
           this.baseURL = data.postiz_api_url;
         }
       } else {
-        // Mode démonstration si pas de clé API
         this.isDemo = true;
         console.log('🎭 Mode démonstration Postiz activé - configurez votre clé API dans les paramètres');
       }
@@ -98,10 +151,14 @@ class PostizService {
       throw new Error('API Key Postiz non configurée');
     }
 
+    if (this.isDemo) {
+      throw new Error('Mode démonstration - utilisez les méthodes de service spécifiques');
+    }
+
     const response = await fetch(`${this.baseURL}${endpoint}`, {
       ...options,
       headers: {
-        'Authorization': this.apiKey,
+        'Authorization': `Bearer ${this.apiKey}`,
         'Content-Type': 'application/json',
         ...options.headers,
       },
@@ -174,7 +231,7 @@ class PostizService {
     const response = await fetch(`${this.baseURL}/upload`, {
       method: 'POST',
       headers: {
-        'Authorization': this.apiKey,
+        'Authorization': `Bearer ${this.apiKey}`,
       },
       body: formData,
     });
@@ -184,6 +241,77 @@ class PostizService {
     }
 
     return response.json();
+  }
+
+  async getAnalytics(integrationId?: string): Promise<PostizAnalytics> {
+    if (this.isDemo) {
+      return DemoDataService.getDemoAnalytics();
+    }
+    
+    const endpoint = integrationId ? `/analytics?integration=${integrationId}` : '/analytics';
+    return this.makeRequest<PostizAnalytics>(endpoint);
+  }
+
+  async getLeads(): Promise<PostizLead[]> {
+    if (this.isDemo) {
+      return DemoDataService.getDemoLeads();
+    }
+    return this.makeRequest<PostizLead[]>('/leads');
+  }
+
+  async updateLead(leadId: string, updates: Partial<PostizLead>): Promise<PostizLead> {
+    if (this.isDemo) {
+      return DemoDataService.updateDemoLead(leadId, updates);
+    }
+    return this.makeRequest<PostizLead>(`/leads/${leadId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(updates),
+    });
+  }
+
+  async getAutoPostingRules(): Promise<AutoPostingRule[]> {
+    if (this.isDemo) {
+      return DemoDataService.getDemoAutoPostingRules();
+    }
+    return this.makeRequest<AutoPostingRule[]>('/auto-posting/rules');
+  }
+
+  async createAutoPostingRule(rule: Omit<AutoPostingRule, 'id'>): Promise<AutoPostingRule> {
+    if (this.isDemo) {
+      return DemoDataService.createDemoAutoPostingRule(rule);
+    }
+    return this.makeRequest<AutoPostingRule>('/auto-posting/rules', {
+      method: 'POST',
+      body: JSON.stringify(rule),
+    });
+  }
+
+  async updateAutoPostingRule(ruleId: string, updates: Partial<AutoPostingRule>): Promise<AutoPostingRule> {
+    if (this.isDemo) {
+      return DemoDataService.updateDemoAutoPostingRule(ruleId, updates);
+    }
+    return this.makeRequest<AutoPostingRule>(`/auto-posting/rules/${ruleId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(updates),
+    });
+  }
+
+  async deleteAutoPostingRule(ruleId: string): Promise<{ id: string }> {
+    if (this.isDemo) {
+      return DemoDataService.deleteDemoAutoPostingRule(ruleId);
+    }
+    return this.makeRequest(`/auto-posting/rules/${ruleId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async triggerAutoPost(ruleId: string): Promise<{ success: boolean; posts: any[] }> {
+    if (this.isDemo) {
+      return DemoDataService.triggerDemoAutoPost(ruleId);
+    }
+    return this.makeRequest(`/auto-posting/rules/${ruleId}/trigger`, {
+      method: 'POST',
+    });
   }
 
   getDemoStatus(): boolean {

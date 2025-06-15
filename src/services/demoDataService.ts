@@ -1,5 +1,5 @@
 
-import { PostizIntegration, PostizPost } from './postizService';
+import { PostizIntegration, PostizPost, PostizAnalytics, PostizLead, AutoPostingRule } from './postizService';
 
 export class DemoDataService {
   static getDemoIntegrations(): PostizIntegration[] {
@@ -97,6 +97,12 @@ export class DemoDataService {
           providerIdentifier: "facebook",
           name: "Mon Entreprise",
           picture: "https://upload.wikimedia.org/wikipedia/commons/5/51/Facebook_f_logo_%282019%29.svg"
+        },
+        analytics: {
+          views: 2543,
+          likes: 89,
+          shares: 23,
+          comments: 12
         }
       },
       {
@@ -110,6 +116,12 @@ export class DemoDataService {
           providerIdentifier: "instagram",
           name: "Mon Entreprise",
           picture: "https://upload.wikimedia.org/wikipedia/commons/a/a5/Instagram_icon.png"
+        },
+        analytics: {
+          views: 1876,
+          likes: 156,
+          shares: 34,
+          comments: 28
         }
       },
       {
@@ -175,6 +187,131 @@ export class DemoDataService {
     ];
   }
 
+  static getDemoAnalytics(): PostizAnalytics {
+    return {
+      totalPosts: 25,
+      totalViews: 45678,
+      totalLikes: 2341,
+      totalShares: 456,
+      totalComments: 234,
+      engagement: 6.8,
+      topPerformingPost: {
+        id: "demo-post-1",
+        content: "🚀 Découvrez notre nouvelle fonctionnalité d'intelligence artificielle !",
+        publishDate: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+        releaseURL: "https://facebook.com/monentreprise/posts/123456789",
+        state: "PUBLISHED",
+        integration: {
+          id: "demo-facebook-1",
+          providerIdentifier: "facebook",
+          name: "Mon Entreprise",
+          picture: "https://upload.wikimedia.org/wikipedia/commons/5/51/Facebook_f_logo_%282019%29.svg"
+        },
+        analytics: {
+          views: 2543,
+          likes: 89,
+          shares: 23,
+          comments: 12
+        }
+      },
+      integrationStats: [
+        { integrationId: "demo-facebook-1", name: "Facebook", posts: 8, engagement: 7.2 },
+        { integrationId: "demo-instagram-1", name: "Instagram", posts: 6, engagement: 8.9 },
+        { integrationId: "demo-twitter-1", name: "X (Twitter)", posts: 5, engagement: 5.4 },
+        { integrationId: "demo-linkedin-1", name: "LinkedIn", posts: 4, engagement: 6.1 },
+        { integrationId: "demo-youtube-1", name: "YouTube", posts: 2, engagement: 12.3 }
+      ]
+    };
+  }
+
+  static getDemoLeads(): PostizLead[] {
+    return [
+      {
+        id: "lead-1",
+        name: "Marie Dubois",
+        email: "marie.dubois@email.com",
+        phone: "+33123456789",
+        source: "Facebook",
+        integrationId: "demo-facebook-1",
+        createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+        status: "new",
+        notes: "Intéressée par nos services de marketing digital"
+      },
+      {
+        id: "lead-2",
+        name: "Pierre Martin",
+        email: "pierre.martin@enterprise.fr",
+        source: "LinkedIn",
+        integrationId: "demo-linkedin-1",
+        createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+        status: "contacted",
+        notes: "CEO d'une startup, besoin d'automatisation"
+      },
+      {
+        id: "lead-3",
+        name: "Sophie Bernard",
+        email: "sophie@boutique.fr",
+        phone: "+33987654321",
+        source: "Instagram",
+        integrationId: "demo-instagram-1",
+        createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+        status: "qualified",
+        notes: "Propriétaire de boutique e-commerce"
+      }
+    ];
+  }
+
+  static getDemoAutoPostingRules(): AutoPostingRule[] {
+    return [
+      {
+        id: "rule-1",
+        name: "Posts motivationnels quotidiens",
+        enabled: true,
+        schedule: {
+          frequency: "daily",
+          time: "09:00",
+          days: ["monday", "tuesday", "wednesday", "thursday", "friday"]
+        },
+        integrations: ["demo-facebook-1", "demo-linkedin-1"],
+        contentType: "ai_generated",
+        parameters: {
+          prompt: "Génère un post motivationnel pour entrepreneurs",
+          keywords: ["motivation", "entrepreneur", "succès"]
+        }
+      },
+      {
+        id: "rule-2",
+        name: "Conseils marketing hebdomadaires",
+        enabled: true,
+        schedule: {
+          frequency: "weekly",
+          time: "14:00",
+          days: ["wednesday"]
+        },
+        integrations: ["demo-linkedin-1", "demo-twitter-1"],
+        contentType: "ai_generated",
+        parameters: {
+          prompt: "Partage un conseil pratique de marketing digital",
+          keywords: ["marketing", "digital", "conseil", "stratégie"]
+        }
+      },
+      {
+        id: "rule-3",
+        name: "Contenu Instagram créatif",
+        enabled: false,
+        schedule: {
+          frequency: "daily",
+          time: "18:00"
+        },
+        integrations: ["demo-instagram-1"],
+        contentType: "template",
+        parameters: {
+          template: "🎨 Créativité du jour : [CONTENU_ALEATOIRE] #creativity #inspiration"
+        }
+      }
+    ];
+  }
+
   static async simulateAPICall<T>(data: T, delay: number = 1000): Promise<T> {
     return new Promise((resolve) => {
       setTimeout(() => resolve(data), delay);
@@ -205,6 +342,47 @@ export class DemoDataService {
       organizationId: "demo-org-123",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
+    };
+  }
+
+  static async updateDemoLead(leadId: string, updates: Partial<PostizLead>): Promise<PostizLead> {
+    await this.simulateAPICall(null, 600);
+    const leads = this.getDemoLeads();
+    const lead = leads.find(l => l.id === leadId);
+    return { ...lead!, ...updates };
+  }
+
+  static async createDemoAutoPostingRule(rule: Omit<AutoPostingRule, 'id'>): Promise<AutoPostingRule> {
+    await this.simulateAPICall(null, 800);
+    return {
+      id: `rule-${Date.now()}`,
+      ...rule
+    };
+  }
+
+  static async updateDemoAutoPostingRule(ruleId: string, updates: Partial<AutoPostingRule>): Promise<AutoPostingRule> {
+    await this.simulateAPICall(null, 600);
+    const rules = this.getDemoAutoPostingRules();
+    const rule = rules.find(r => r.id === ruleId);
+    return { ...rule!, ...updates };
+  }
+
+  static async deleteDemoAutoPostingRule(ruleId: string): Promise<{ id: string }> {
+    await this.simulateAPICall(null, 500);
+    return { id: ruleId };
+  }
+
+  static async triggerDemoAutoPost(ruleId: string): Promise<{ success: boolean; posts: any[] }> {
+    await this.simulateAPICall(null, 1500);
+    return {
+      success: true,
+      posts: [
+        {
+          id: `auto-post-${Date.now()}`,
+          content: "Post automatique généré par IA",
+          integrations: ["demo-facebook-1"]
+        }
+      ]
     };
   }
 }

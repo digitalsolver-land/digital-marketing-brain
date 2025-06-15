@@ -5,12 +5,14 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Settings, Plus, Calendar, FileText, Users, AlertCircle, Sparkles, BarChart3, TestTube } from 'lucide-react';
-import { postizService, PostizIntegration, PostizPost } from '@/services/postizService';
+import { Settings, Plus, Calendar, FileText, Users, AlertCircle, Sparkles, BarChart3, TestTube, Clock, Zap } from 'lucide-react';
+import { postizService, PostizIntegration, PostizPost, PostizAnalytics } from '@/services/postizService';
 import { PostizCreatePost } from './PostizCreatePost';
 import { PostizPostsList } from './PostizPostsList';
 import { PostizIntegrations } from './PostizIntegrations';
 import { PostizAIGenerator } from './PostizAIGenerator';
+import { PostizLeads } from './PostizLeads';
+import { PostizAutoPosting } from './PostizAutoPosting';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -20,6 +22,7 @@ export const PostizDashboard = () => {
   const [isDemo, setIsDemo] = useState(false);
   const [integrations, setIntegrations] = useState<PostizIntegration[]>([]);
   const [posts, setPosts] = useState<PostizPost[]>([]);
+  const [analytics, setAnalytics] = useState<PostizAnalytics | null>(null);
   const [loading, setLoading] = useState(false);
   const [aiGeneratedContent, setAIGeneratedContent] = useState('');
   const [activeTab, setActiveTab] = useState('create');
@@ -60,17 +63,19 @@ export const PostizDashboard = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [integrationsData, postsData] = await Promise.all([
+      const [integrationsData, postsData, analyticsData] = await Promise.all([
         postizService.getIntegrations(),
         postizService.getPosts({
           display: 'month',
           month: new Date().getMonth() + 1,
           year: new Date().getFullYear()
-        })
+        }),
+        postizService.getAnalytics()
       ]);
       
       setIntegrations(integrationsData);
       setPosts(postsData.posts);
+      setAnalytics(analyticsData);
     } catch (error) {
       if (!isDemo) {
         toast({
@@ -114,7 +119,7 @@ export const PostizDashboard = () => {
 
   return (
     <div className="space-y-6">
-      {/* En-tête avec statut */}
+      {/* En-tête avec statut et métriques globales */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
@@ -147,7 +152,8 @@ export const PostizDashboard = () => {
             </Alert>
           )}
           
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          {/* Métriques principales */}
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-4">
             <div className="text-center">
               <div className="text-2xl font-bold text-blue-600">{integrations.length}</div>
               <div className="text-sm text-gray-600">Réseaux connectés</div>
@@ -168,16 +174,52 @@ export const PostizDashboard = () => {
               <div className="text-2xl font-bold text-red-600">{stats.errors}</div>
               <div className="text-sm text-gray-600">Erreurs</div>
             </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-purple-600">
+                {analytics?.totalViews.toLocaleString() || '0'}
+              </div>
+              <div className="text-sm text-gray-600">Vues totales</div>
+            </div>
           </div>
+
+          {/* Métriques d'engagement */}
+          {analytics && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t">
+              <div className="text-center">
+                <div className="text-lg font-semibold text-pink-600">
+                  {analytics.totalLikes.toLocaleString()}
+                </div>
+                <div className="text-xs text-gray-500">Likes</div>
+              </div>
+              <div className="text-center">
+                <div className="text-lg font-semibold text-blue-600">
+                  {analytics.totalShares.toLocaleString()}
+                </div>
+                <div className="text-xs text-gray-500">Partages</div>
+              </div>
+              <div className="text-center">
+                <div className="text-lg font-semibold text-green-600">
+                  {analytics.totalComments.toLocaleString()}
+                </div>
+                <div className="text-xs text-gray-500">Commentaires</div>
+              </div>
+              <div className="text-center">
+                <div className="text-lg font-semibold text-orange-600">
+                  {analytics.engagement.toFixed(1)}%
+                </div>
+                <div className="text-xs text-gray-500">Engagement</div>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
       {/* Onglets principaux */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="ai" className="flex items-center space-x-2">
             <Sparkles className="w-4 h-4" />
-            <span>IA Générateur</span>
+            <span>IA</span>
           </TabsTrigger>
           <TabsTrigger value="create" className="flex items-center space-x-2">
             <Plus className="w-4 h-4" />
@@ -187,8 +229,16 @@ export const PostizDashboard = () => {
             <Calendar className="w-4 h-4" />
             <span>Publications</span>
           </TabsTrigger>
-          <TabsTrigger value="integrations" className="flex items-center space-x-2">
+          <TabsTrigger value="auto" className="flex items-center space-x-2">
+            <Clock className="w-4 h-4" />
+            <span>Auto</span>
+          </TabsTrigger>
+          <TabsTrigger value="leads" className="flex items-center space-x-2">
             <Users className="w-4 h-4" />
+            <span>Leads</span>
+          </TabsTrigger>
+          <TabsTrigger value="integrations" className="flex items-center space-x-2">
+            <Zap className="w-4 h-4" />
             <span>Réseaux</span>
           </TabsTrigger>
           <TabsTrigger value="analytics" className="flex items-center space-x-2">
@@ -218,6 +268,14 @@ export const PostizDashboard = () => {
           />
         </TabsContent>
 
+        <TabsContent value="auto">
+          <PostizAutoPosting integrations={integrations} />
+        </TabsContent>
+
+        <TabsContent value="leads">
+          <PostizLeads />
+        </TabsContent>
+
         <TabsContent value="integrations">
           <PostizIntegrations integrations={integrations} />
         </TabsContent>
@@ -227,55 +285,80 @@ export const PostizDashboard = () => {
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
                 <BarChart3 className="w-5 h-5 text-blue-500" />
-                <span>Analytics des Publications</span>
+                <span>Analytics détaillées</span>
                 {isDemo && <Badge variant="outline">Données de démonstration</Badge>}
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-6 md:grid-cols-2">
-                <div className="space-y-4">
-                  <h3 className="font-semibold">Répartition par statut</h3>
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm">Publications réussies</span>
-                      <Badge className="bg-green-500">{stats.published}</Badge>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm">Publications programmées</span>
-                      <Badge className="bg-orange-500">{stats.scheduled}</Badge>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm">Brouillons</span>
-                      <Badge variant="secondary">{stats.drafts}</Badge>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm">Erreurs</span>
-                      <Badge variant="destructive">{stats.errors}</Badge>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <h3 className="font-semibold">Répartition par réseau</h3>
-                  <div className="space-y-2">
-                    {integrations.map((integration) => {
-                      const count = posts.filter(p => p.integration.id === integration.id).length;
-                      return (
-                        <div key={integration.id} className="flex justify-between items-center">
-                          <div className="flex items-center space-x-2">
-                            <img src={integration.picture} alt={integration.name} className="w-4 h-4 rounded-full" />
-                            <span className="text-sm">{integration.name}</span>
-                            {integration.disabled && <Badge variant="outline" className="text-xs">Désactivé</Badge>}
-                          </div>
-                          <Badge variant="outline">{count}</Badge>
+              {analytics ? (
+                <div className="space-y-6">
+                  {/* Post le plus performant */}
+                  {analytics.topPerformingPost && (
+                    <div className="border rounded-lg p-4 bg-gradient-to-r from-blue-50 to-purple-50">
+                      <h3 className="font-semibold mb-2 text-blue-900">🏆 Post le plus performant</h3>
+                      <div className="bg-white rounded p-3">
+                        <p className="text-sm mb-2">{analytics.topPerformingPost.content}</p>
+                        <div className="flex items-center space-x-4 text-xs text-gray-600">
+                          <span>👁️ {analytics.topPerformingPost.analytics?.views}</span>
+                          <span>❤️ {analytics.topPerformingPost.analytics?.likes}</span>
+                          <span>🔄 {analytics.topPerformingPost.analytics?.shares}</span>
+                          <span>💬 {analytics.topPerformingPost.analytics?.comments}</span>
                         </div>
-                      );
-                    })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Statistiques par réseau */}
+                  <div className="space-y-4">
+                    <h3 className="font-semibold">Performance par réseau social</h3>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      {analytics.integrationStats.map((stat) => (
+                        <div key={stat.integrationId} className="border rounded-lg p-4">
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="font-medium">{stat.name}</span>
+                            <Badge variant="outline">{stat.posts} posts</Badge>
+                          </div>
+                          <div className="text-2xl font-bold text-blue-600 mb-1">
+                            {stat.engagement.toFixed(1)}%
+                          </div>
+                          <div className="text-sm text-gray-500">Taux d'engagement moyen</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Évolution des métriques */}
+                  <div className="space-y-4">
+                    <h3 className="font-semibold">Métriques globales</h3>
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                      <div className="text-center p-4 border rounded-lg">
+                        <div className="text-3xl font-bold text-blue-600 mb-2">
+                          {analytics.totalPosts}
+                        </div>
+                        <div className="text-sm text-gray-600">Total publications</div>
+                      </div>
+                      <div className="text-center p-4 border rounded-lg">
+                        <div className="text-3xl font-bold text-green-600 mb-2">
+                          {analytics.totalViews.toLocaleString()}
+                        </div>
+                        <div className="text-sm text-gray-600">Vues totales</div>
+                      </div>
+                      <div className="text-center p-4 border rounded-lg">
+                        <div className="text-3xl font-bold text-pink-600 mb-2">
+                          {analytics.totalLikes.toLocaleString()}
+                        </div>
+                        <div className="text-sm text-gray-600">Likes totaux</div>
+                      </div>
+                      <div className="text-center p-4 border rounded-lg">
+                        <div className="text-3xl font-bold text-orange-600 mb-2">
+                          {analytics.engagement.toFixed(1)}%
+                        </div>
+                        <div className="text-sm text-gray-600">Engagement moyen</div>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-
-              {posts.length === 0 && (
+              ) : (
                 <div className="text-center py-8">
                   <BarChart3 className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                   <h3 className="text-lg font-semibold text-gray-600 mb-2">
