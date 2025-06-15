@@ -1,5 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -21,7 +21,8 @@ import {
   Bell, 
   Users, 
   Shield,
-  Trash2
+  Trash2,
+  ArrowLeft
 } from 'lucide-react';
 
 interface AppSettings {
@@ -55,6 +56,7 @@ interface UserWithRoles {
 type AppRole = 'admin' | 'moderator' | 'user' | 'commercial' | 'client';
 
 const Settings = () => {
+  const navigate = useNavigate();
   const { user, isAdmin } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
@@ -69,6 +71,10 @@ const Settings = () => {
     data_retention_days: 90
   });
   const [users, setUsers] = useState<UserWithRoles[]>([]);
+
+  const handleBackToDashboard = () => {
+    navigate('/');
+  };
 
   useEffect(() => {
     if (user) {
@@ -212,6 +218,18 @@ const Settings = () => {
 
   return (
     <div className="container mx-auto p-6 max-w-6xl">
+      {/* Bouton retour */}
+      <div className="mb-6">
+        <Button 
+          variant="outline" 
+          onClick={handleBackToDashboard}
+          className="flex items-center gap-2"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Retour au Dashboard
+        </Button>
+      </div>
+
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-slate-900">Paramètres</h1>
         <p className="text-slate-600 mt-2">Configurez votre application et gérez vos préférences</p>

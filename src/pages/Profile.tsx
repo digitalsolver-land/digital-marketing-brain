@@ -1,5 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -10,9 +10,10 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { User, Mail, Building2, Calendar, Shield, Save, Upload } from 'lucide-react';
+import { User, Mail, Building2, Calendar, Shield, Save, Upload, ArrowLeft } from 'lucide-react';
 
 const Profile = () => {
+  const navigate = useNavigate();
   const { user, profile, updateProfile, userRoles, loading } = useAuth();
   const { toast } = useToast();
   const [submitting, setSubmitting] = useState(false);
@@ -39,14 +40,39 @@ const Profile = () => {
     setSubmitting(true);
 
     try {
-      const { error } = await updateProfile(formData);
-      if (error) throw error;
+      console.log('Updating profile with data:', formData);
+      
+      // Mettre à jour directement dans Supabase
+      const { error } = await supabase
+        .from('profiles')
+        .update(formData)
+        .eq('id', user?.id);
+
+      if (error) {
+        console.error('Supabase update error:', error);
+        throw error;
+      }
+
+      // Forcer le rechargement du profil
+      if (user) {
+        const { data: updatedProfile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+        
+        console.log('Profile updated successfully:', updatedProfile);
+      }
       
       toast({
         title: "Profil mis à jour",
         description: "Vos informations ont été sauvegardées avec succès.",
       });
+
+      // Recharger la page pour voir les changements
+      window.location.reload();
     } catch (error: any) {
+      console.error('Error updating profile:', error);
       toast({
         variant: "destructive",
         title: "Erreur",
@@ -55,6 +81,10 @@ const Profile = () => {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleBackToDashboard = () => {
+    navigate('/');
   };
 
   const getRoleBadgeColor = (role: string) => {
@@ -99,6 +129,18 @@ const Profile = () => {
 
   return (
     <div className="container mx-auto p-6 max-w-4xl">
+      {/* Bouton retour */}
+      <div className="mb-6">
+        <Button 
+          variant="outline" 
+          onClick={handleBackToDashboard}
+          className="flex items-center gap-2"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Retour au Dashboard
+        </Button>
+      </div>
+
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-slate-900">Mon Profil</h1>
         <p className="text-slate-600 mt-2">Gérez vos informations personnelles et vos préférences</p>
