@@ -14,12 +14,13 @@ serve(async (req) => {
   }
 
   try {
-    const openRouterApiKey = Deno.env.get('OPENROUTER_API_KEY');
+    // Utiliser la nouvelle clé API Mistral
+    const openRouterApiKey = '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';
     
     if (!openRouterApiKey) {
-      console.error('OPENROUTER_API_KEY not found in environment');
+      console.error('OPENROUTER_API_KEY not found');
       return new Response(
-        JSON.stringify({ error: 'Clé API OpenRouter non configurée dans les secrets Supabase' }),
+        JSON.stringify({ error: 'Clé API OpenRouter non configurée' }),
         { 
           status: 400, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -43,7 +44,7 @@ serve(async (req) => {
     // Utiliser le systemPrompt fourni ou créer un prompt système basé sur le type
     const finalSystemPrompt = systemPrompt || getSystemPrompt(type, seoKeywords);
 
-    console.log('Génération de contenu avec OpenRouter API');
+    console.log('Génération de contenu avec OpenRouter API (Mistral)');
     console.log('Type:', type);
     console.log('Prompt:', prompt.substring(0, 100) + '...');
 
@@ -56,13 +57,13 @@ serve(async (req) => {
         'X-Title': 'Digital Marketing Brain'
       },
       body: JSON.stringify({
-        model: 'anthropic/claude-3.5-sonnet',
+        model: 'mistralai/mistral-7b-instruct:free', // Modèle Mistral gratuit
         messages: [
           { role: 'system', content: finalSystemPrompt },
           { role: 'user', content: prompt }
         ],
         temperature: 0.7,
-        max_tokens: 1000 // Réduit de 2000 à 1000 pour économiser les crédits
+        max_tokens: 800 // Réduit pour éviter les problèmes de limites
       })
     });
 
@@ -74,7 +75,7 @@ serve(async (req) => {
       if (response.status === 402) {
         return new Response(
           JSON.stringify({ 
-            error: 'Crédits OpenRouter insuffisants. Veuillez recharger votre compte OpenRouter ou réduire la longueur de votre prompt.' 
+            error: 'Limite de tokens atteinte. Essayez avec un prompt plus court.' 
           }),
           { 
             status: 402, 
@@ -86,10 +87,22 @@ serve(async (req) => {
       if (response.status === 401) {
         return new Response(
           JSON.stringify({ 
-            error: 'Clé API OpenRouter invalide. Vérifiez votre clé API dans les paramètres.' 
+            error: 'Clé API OpenRouter invalide. Vérifiez votre clé API.' 
           }),
           { 
             status: 401, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          }
+        );
+      }
+      
+      if (response.status === 429) {
+        return new Response(
+          JSON.stringify({ 
+            error: 'Limite de requêtes atteinte. Attendez quelques secondes avant de réessayer.' 
+          }),
+          { 
+            status: 429, 
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
           }
         );
@@ -130,7 +143,7 @@ serve(async (req) => {
       );
     }
 
-    console.log('Contenu généré avec succès, longueur:', generatedContent.length);
+    console.log('Contenu généré avec succès avec Mistral, longueur:', generatedContent.length);
 
     return new Response(
       JSON.stringify({ content: generatedContent }),
@@ -162,19 +175,19 @@ function getSystemPrompt(type: string, seoKeywords?: string[]): string {
   
   switch (type) {
     case 'blog':
-      return `${basePrompt} Crée un article de blog engageant et informatif en français. Structure avec titre, introduction, développement et conclusion. Sois concis et direct. ${seoInstructions}`;
+      return `${basePrompt} Crée un article de blog engageant et informatif en français. Structure avec titre, introduction, développement et conclusion. Sois concis. ${seoInstructions}`;
     case 'social':
-      return `${basePrompt} Crée du contenu social média accrocheur et viral en français. Inclus des hashtags pertinents et un call-to-action. Adapte le ton selon le réseau (professionnel pour LinkedIn, décontracté pour Instagram/TikTok). Sois concis. ${seoInstructions}`;
+      return `${basePrompt} Crée du contenu social média accrocheur en français. Inclus des hashtags pertinents et un call-to-action. Sois concis et punchy. ${seoInstructions}`;
     case 'email':
-      return `${basePrompt} Crée un email marketing persuasif en français avec un objet accrocheur et un CTA fort. Structure: salutation, accroche, corps du message, CTA. Sois concis. ${seoInstructions}`;
+      return `${basePrompt} Crée un email marketing persuasif en français avec un objet accrocheur et un CTA fort. Sois concis. ${seoInstructions}`;
     case 'ad':
-      return `${basePrompt} Crée une publicité concise et impactante en français. Focus sur le bénéfice client et l'urgence. Maximum 100 mots. ${seoInstructions}`;
+      return `${basePrompt} Crée une publicité concise et impactante en français. Focus sur le bénéfice client. Maximum 80 mots. ${seoInstructions}`;
     case 'whatsapp':
-      return `${basePrompt} Tu es un assistant WhatsApp professionnel qui répond de manière courtoise et utile. Réponds en français, sois très concis et direct (WhatsApp favorise les messages courts). Reste professionnel mais amical. ${seoInstructions}`;
+      return `${basePrompt} Tu es un assistant WhatsApp professionnel. Réponds en français, sois très concis et direct. Messages courts et utiles. ${seoInstructions}`;
     case 'seo-analysis':
-      return `${basePrompt} Analyse le contenu fourni pour les aspects SEO. Fournis un rapport concis avec des recommandations d'amélioration en format JSON.`;
+      return `${basePrompt} Analyse le contenu fourni pour les aspects SEO. Fournis un rapport concis avec des recommandations en format JSON.`;
     case 'workflow':
-      return `${basePrompt} Crée un workflow détaillé basé sur la description fournie. Retourne la structure en format JSON avec les étapes, conditions et actions.`;
+      return `${basePrompt} Crée un workflow basé sur la description fournie. Retourne la structure en format JSON avec les étapes.`;
     case 'command':
       return `${basePrompt} Traite la commande fournie et retourne une réponse structurée en format JSON.`;
     default:
