@@ -1,4 +1,3 @@
-
 import { API_CONFIG } from '@/config/api';
 
 // Types complets basés sur l'API n8n
@@ -144,6 +143,7 @@ export class N8nApiService {
   private static instance: N8nApiService;
   private apiKey = API_CONFIG.N8N.API_KEY;
   private baseUrl = API_CONFIG.N8N.BASE_URL;
+  private isAvailable = false;
 
   public static getInstance(): N8nApiService {
     if (!N8nApiService.instance) {
@@ -152,7 +152,41 @@ export class N8nApiService {
     return N8nApiService.instance;
   }
 
+  constructor() {
+    this.checkAvailability();
+  }
+
+  private async checkAvailability(): Promise<void> {
+    try {
+      // Test de connexion simple
+      const response = await fetch(`${this.baseUrl}/workflows?limit=1`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        signal: AbortSignal.timeout(5000) // Timeout de 5 secondes
+      });
+      
+      this.isAvailable = response.ok;
+      if (!this.isAvailable) {
+        console.warn('n8n API non accessible, mode local activé');
+      }
+    } catch (error) {
+      console.warn('n8n API non disponible:', error);
+      this.isAvailable = false;
+    }
+  }
+
+  public isN8nAvailable(): boolean {
+    return this.isAvailable;
+  }
+
   private async makeRequest(endpoint: string, options: RequestInit = {}): Promise<any> {
+    if (!this.isAvailable) {
+      throw new Error('Service n8n non disponible');
+    }
+
     const url = `${this.baseUrl}${endpoint}`;
     
     try {
@@ -162,7 +196,8 @@ export class N8nApiService {
           'Authorization': `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json',
           ...options.headers
-        }
+        },
+        signal: AbortSignal.timeout(10000) // Timeout de 10 secondes
       });
 
       if (!response.ok) {
@@ -173,6 +208,8 @@ export class N8nApiService {
       return await response.json();
     } catch (error) {
       console.error('n8n API Request failed:', error);
+      // Marquer comme non disponible en cas d'erreur
+      this.isAvailable = false;
       throw error;
     }
   }
@@ -214,9 +251,36 @@ export class N8nApiService {
   }
 
   async createWorkflow(workflow: Partial<N8nWorkflow>): Promise<N8nWorkflow> {
+    // Validation des données obligatoires
+    if (!workflow.name?.trim()) {
+      throw new Error('Le nom du workflow est requis');
+    }
+
+    if (!workflow.nodes || workflow.nodes.length === 0) {
+      throw new Error('Au moins un nœud est requis');
+    }
+
+    // Workflow valide par défaut
+    const validWorkflow = {
+      name: workflow.name,
+      nodes: workflow.nodes,
+      connections: workflow.connections || {},
+      settings: workflow.settings || {
+        saveExecutionProgress: true,
+        saveManualExecutions: true,
+        saveDataErrorExecution: 'all' as const,
+        saveDataSuccessExecution: 'all' as const,
+        executionTimeout: 3600,
+        timezone: 'Europe/Paris'
+      },
+      active: false,
+      staticData: {},
+      tags: workflow.tags || []
+    };
+
     return await this.makeRequest('/workflows', {
       method: 'POST',
-      body: JSON.stringify(workflow)
+      body: JSON.stringify(validWorkflow)
     });
   }
 

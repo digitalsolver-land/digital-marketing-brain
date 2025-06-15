@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -37,9 +36,12 @@ import {
   Key,
   BarChart3,
   Monitor,
-  AlertTriangle
+  AlertTriangle,
+  WifiOff,
+  CheckCircle2
 } from 'lucide-react';
 import { n8nApiService, N8nWorkflow, N8nExecution, N8nTag, N8nVariable, N8nUser, N8nProject, N8nCredential, N8nAuditReport } from '@/services/n8nApiService';
+import { workflowService } from '@/services/workflowService';
 import { useToast } from '@/hooks/use-toast';
 import { WorkflowVisualization } from './WorkflowVisualization';
 
@@ -56,6 +58,7 @@ export const EnhancedWorkflowManager: React.FC = () => {
   
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('workflows');
+  const [n8nAvailable, setN8nAvailable] = useState(false);
   
   // Filtres et recherche
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -82,21 +85,32 @@ export const EnhancedWorkflowManager: React.FC = () => {
   const { toast } = useToast();
 
   useEffect(() => {
+    checkN8nAvailability();
     loadAllData();
   }, []);
+
+  const checkN8nAvailability = () => {
+    setN8nAvailable(n8nApiService.isN8nAvailable());
+  };
 
   const loadAllData = async () => {
     setIsLoading(true);
     try {
-      await Promise.all([
-        loadWorkflows(),
-        loadExecutions(),
-        loadTags(),
-        loadVariables(),
-        loadUsers(),
-        loadProjects(),
-        loadAuditReports()
-      ]);
+      if (n8nApiService.isN8nAvailable()) {
+        // Charger depuis n8n si disponible
+        await Promise.allSettled([
+          loadN8nWorkflows(),
+          loadN8nExecutions(),
+          loadN8nTags(),
+          loadN8nVariables(),
+          loadN8nUsers(),
+          loadN8nProjects(),
+          loadN8nAuditReports()
+        ]);
+      } else {
+        // Charger depuis la base locale
+        await loadLocalWorkflows();
+      }
     } catch (error) {
       console.error('Erreur chargement données:', error);
       toast({
@@ -109,7 +123,7 @@ export const EnhancedWorkflowManager: React.FC = () => {
     }
   };
 
-  const loadWorkflows = async () => {
+  const loadN8nWorkflows = async () => {
     try {
       const result = await n8nApiService.getWorkflows({
         active: statusFilter === 'all' ? undefined : statusFilter === 'active',
@@ -119,11 +133,33 @@ export const EnhancedWorkflowManager: React.FC = () => {
       });
       setWorkflows(result.data || []);
     } catch (error) {
-      console.error('Erreur chargement workflows:', error);
+      console.error('Erreur chargement workflows n8n:', error);
+      // Fallback vers local
+      await loadLocalWorkflows();
     }
   };
 
-  const loadExecutions = async () => {
+  const loadLocalWorkflows = async () => {
+    try {
+      const localWorkflows = await workflowService.getWorkflows();
+      // Convertir au format n8n pour l'affichage
+      const n8nFormat = localWorkflows.map(w => ({
+        id: w.id,
+        name: w.name,
+        active: w.status === 'active',
+        nodes: [],
+        connections: {},
+        tags: w.tags?.map(tagName => ({ id: tagName, name: tagName })) || [],
+        createdAt: w.createdAt,
+        updatedAt: w.updatedAt
+      } as N8nWorkflow));
+      setWorkflows(n8nFormat);
+    } catch (error) {
+      console.error('Erreur chargement workflows locaux:', error);
+    }
+  };
+
+  const loadN8nExecutions = async () => {
     try {
       const result = await n8nApiService.getExecutions({ limit: 50 });
       setExecutions(result.data || []);
@@ -132,7 +168,7 @@ export const EnhancedWorkflowManager: React.FC = () => {
     }
   };
 
-  const loadTags = async () => {
+  const loadN8nTags = async () => {
     try {
       const result = await n8nApiService.getTags({ limit: 100 });
       setTags(result.data || []);
@@ -141,7 +177,7 @@ export const EnhancedWorkflowManager: React.FC = () => {
     }
   };
 
-  const loadVariables = async () => {
+  const loadN8nVariables = async () => {
     try {
       const result = await n8nApiService.getVariables({ limit: 100 });
       setVariables(result.data || []);
@@ -150,7 +186,7 @@ export const EnhancedWorkflowManager: React.FC = () => {
     }
   };
 
-  const loadUsers = async () => {
+  const loadN8nUsers = async () => {
     try {
       const result = await n8nApiService.getUsers({ limit: 100, includeRole: true });
       setUsers(result.data || []);
@@ -159,7 +195,7 @@ export const EnhancedWorkflowManager: React.FC = () => {
     }
   };
 
-  const loadProjects = async () => {
+  const loadN8nProjects = async () => {
     try {
       const result = await n8nApiService.getProjects({ limit: 100 });
       setProjects(result.data || []);
@@ -168,7 +204,7 @@ export const EnhancedWorkflowManager: React.FC = () => {
     }
   };
 
-  const loadAuditReports = async () => {
+  const loadN8nAuditReports = async () => {
     try {
       const reports = await n8nApiService.generateAudit();
       setAuditReports(reports || []);
@@ -179,6 +215,8 @@ export const EnhancedWorkflowManager: React.FC = () => {
 
   // Actions workflows
   const createWorkflow = async () => {
+    console.log('Création workflow avec:', newWorkflow);
+    
     if (!newWorkflow.name.trim()) {
       toast({
         title: "Erreur",
@@ -189,48 +227,93 @@ export const EnhancedWorkflowManager: React.FC = () => {
     }
 
     try {
-      await n8nApiService.createWorkflow({
-        name: newWorkflow.name,
-        nodes: [
-          {
-            id: 'start',
-            name: 'Start',
-            type: 'n8n-nodes-base.start',
-            position: [250, 300],
-            parameters: {}
+      setIsLoading(true);
+
+      // Créer un nœud de départ valide
+      const startNode = {
+        id: 'start-' + Date.now(),
+        name: 'Start',
+        type: 'n8n-nodes-base.start',
+        position: [250, 300] as [number, number],
+        parameters: {},
+        typeVersion: 1
+      };
+
+      if (n8nApiService.isN8nAvailable()) {
+        // Créer dans n8n
+        console.log('Création dans n8n...');
+        const n8nWorkflow = await n8nApiService.createWorkflow({
+          name: newWorkflow.name,
+          nodes: [startNode],
+          connections: {},
+          settings: {
+            saveExecutionProgress: true,
+            saveManualExecutions: true,
+            executionTimeout: 3600
           }
-        ],
-        connections: {},
-        settings: {
-          saveExecutionProgress: true,
-          saveManualExecutions: true,
-          executionTimeout: 3600
-        }
-      });
+        });
+        
+        console.log('Workflow n8n créé:', n8nWorkflow);
+        
+        // Synchroniser avec la base locale
+        await workflowService.createWorkflowFromJSON({
+          id: n8nWorkflow.id,
+          name: n8nWorkflow.name,
+          nodes: n8nWorkflow.nodes,
+          connections: n8nWorkflow.connections,
+          active: n8nWorkflow.active,
+          settings: n8nWorkflow.settings,
+          tags: n8nWorkflow.tags
+        });
+      } else {
+        // Créer uniquement en local
+        console.log('Création en local...');
+        await workflowService.createWorkflowFromJSON({
+          name: newWorkflow.name,
+          nodes: [startNode],
+          connections: {},
+          active: false,
+          settings: {
+            saveExecutionProgress: true,
+            saveManualExecutions: true,
+            executionTimeout: 3600
+          }
+        });
+      }
 
       toast({
         title: "Succès",
         description: "Workflow créé avec succès"
       });
+      
       setNewWorkflow({ name: '', description: '' });
-      loadWorkflows();
+      await loadAllData();
     } catch (error) {
+      console.error('Erreur création workflow:', error);
       toast({
         title: "Erreur",
-        description: "Échec de la création du workflow",
+        description: `Échec de la création du workflow: ${error instanceof Error ? error.message : 'Erreur inconnue'}`,
         variant: "destructive"
       });
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const toggleWorkflow = async (id: string, isActive: boolean) => {
     try {
-      if (isActive) {
-        await n8nApiService.deactivateWorkflow(id);
+      if (n8nApiService.isN8nAvailable()) {
+        if (isActive) {
+          await n8nApiService.deactivateWorkflow(id);
+        } else {
+          await n8nApiService.activateWorkflow(id);
+        }
       } else {
-        await n8nApiService.activateWorkflow(id);
+        // Mise à jour locale
+        await workflowService.updateWorkflowStatus(id, isActive ? 'inactive' : 'active');
       }
-      loadWorkflows();
+      
+      await loadAllData();
       toast({
         title: "Succès",
         description: `Workflow ${isActive ? 'désactivé' : 'activé'} avec succès`
@@ -246,12 +329,19 @@ export const EnhancedWorkflowManager: React.FC = () => {
 
   const deleteWorkflow = async (id: string) => {
     try {
-      await n8nApiService.deleteWorkflow(id);
+      if (n8nApiService.isN8nAvailable()) {
+        await n8nApiService.deleteWorkflow(id);
+      }
+      
+      // Supprimer aussi en local
+      await workflowService.deleteWorkflow(id);
+      
       toast({
         title: "Succès",
         description: "Workflow supprimé avec succès"
       });
-      loadWorkflows();
+      
+      await loadAllData();
     } catch (error) {
       toast({
         title: "Erreur",
@@ -263,7 +353,31 @@ export const EnhancedWorkflowManager: React.FC = () => {
 
   const viewWorkflowDetails = async (workflowId: string) => {
     try {
-      const workflow = await n8nApiService.getWorkflow(workflowId);
+      let workflow: N8nWorkflow;
+      
+      if (n8nApiService.isN8nAvailable()) {
+        workflow = await n8nApiService.getWorkflow(workflowId);
+      } else {
+        // Récupérer depuis la base locale
+        const details = await workflowService.getWorkflowWithDetails(workflowId);
+        if (!details) throw new Error('Workflow non trouvé');
+        
+        workflow = {
+          id: details.workflow.id,
+          name: details.workflow.name,
+          active: details.workflow.status === 'active',
+          nodes: details.nodes.map(n => ({
+            id: n.node_id,
+            name: n.name,
+            type: n.node_type,
+            position: [n.position_x, n.position_y],
+            parameters: n.parameters
+          })),
+          connections: {},
+          tags: details.workflow.tags?.map((t: string) => ({ id: t, name: t })) || []
+        };
+      }
+      
       setSelectedWorkflow(workflow);
       setActiveTab('visualization');
     } catch (error) {
@@ -287,13 +401,21 @@ export const EnhancedWorkflowManager: React.FC = () => {
     }
 
     try {
-      await n8nApiService.createProject(newProject.name, newProject.type);
-      toast({
-        title: "Succès",
-        description: "Projet créé avec succès"
-      });
-      setNewProject({ name: '', type: 'team' });
-      loadProjects();
+      if (n8nApiService.isN8nAvailable()) {
+        await n8nApiService.createProject(newProject.name, newProject.type);
+        toast({
+          title: "Succès",
+          description: "Projet créé avec succès"
+        });
+        setNewProject({ name: '', type: 'team' });
+        await loadN8nProjects();
+      } else {
+        toast({
+          title: "Information",
+          description: "Les projets nécessitent une connexion n8n active",
+          variant: "default"
+        });
+      }
     } catch (error) {
       toast({
         title: "Erreur",
@@ -315,13 +437,21 @@ export const EnhancedWorkflowManager: React.FC = () => {
     }
 
     try {
-      await n8nApiService.createUsers([newUser]);
-      toast({
-        title: "Succès",
-        description: "Utilisateur créé avec succès"
-      });
-      setNewUser({ email: '', role: 'global:member' });
-      loadUsers();
+      if (n8nApiService.isN8nAvailable()) {
+        await n8nApiService.createUsers([newUser]);
+        toast({
+          title: "Succès",
+          description: "Utilisateur créé avec succès"
+        });
+        setNewUser({ email: '', role: 'global:member' });
+        await loadN8nUsers();
+      } else {
+        toast({
+          title: "Information",
+          description: "La gestion d'utilisateurs nécessite une connexion n8n active",
+          variant: "default"
+        });
+      }
     } catch (error) {
       toast({
         title: "Erreur",
@@ -336,13 +466,21 @@ export const EnhancedWorkflowManager: React.FC = () => {
     if (!newTag.trim()) return;
     
     try {
-      await n8nApiService.createTag(newTag);
-      toast({
-        title: "Succès",
-        description: "Tag créé avec succès"
-      });
-      setNewTag('');
-      loadTags();
+      if (n8nApiService.isN8nAvailable()) {
+        await n8nApiService.createTag(newTag);
+        toast({
+          title: "Succès",
+          description: "Tag créé avec succès"
+        });
+        setNewTag('');
+        await loadN8nTags();
+      } else {
+        toast({
+          title: "Information",
+          description: "La gestion de tags nécessite une connexion n8n active",
+          variant: "default"
+        });
+      }
     } catch (error) {
       toast({
         title: "Erreur",
@@ -364,13 +502,21 @@ export const EnhancedWorkflowManager: React.FC = () => {
     }
     
     try {
-      await n8nApiService.createVariable(newVariable);
-      toast({
-        title: "Succès",
-        description: "Variable créée avec succès"
-      });
-      setNewVariable({ key: '', value: '', type: 'string' });
-      loadVariables();
+      if (n8nApiService.isN8nAvailable()) {
+        await n8nApiService.createVariable(newVariable);
+        toast({
+          title: "Succès",
+          description: "Variable créée avec succès"
+        });
+        setNewVariable({ key: '', value: '', type: 'string' });
+        await loadN8nVariables();
+      } else {
+        toast({
+          title: "Information",
+          description: "La gestion de variables nécessite une connexion n8n active",
+          variant: "default"
+        });
+      }
     } catch (error) {
       toast({
         title: "Erreur",
@@ -409,15 +555,35 @@ export const EnhancedWorkflowManager: React.FC = () => {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-wrap gap-4 justify-between items-center">
-        <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
-          Gestionnaire n8n Avancé
-        </h2>
+        <div className="flex items-center space-x-4">
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
+            Gestionnaire n8n Avancé
+          </h2>
+          
+          {/* Statut de connexion n8n */}
+          <div className="flex items-center space-x-2">
+            {n8nAvailable ? (
+              <div className="flex items-center text-green-600">
+                <CheckCircle2 className="w-4 h-4 mr-1" />
+                <span className="text-sm">n8n Connecté</span>
+              </div>
+            ) : (
+              <div className="flex items-center text-orange-600">
+                <WifiOff className="w-4 h-4 mr-1" />
+                <span className="text-sm">Mode Local</span>
+              </div>
+            )}
+          </div>
+        </div>
         
         <div className="flex items-center space-x-2">
           <Button 
             variant="outline" 
             size="sm" 
-            onClick={loadAllData}
+            onClick={() => {
+              checkN8nAvailability();
+              loadAllData();
+            }}
             disabled={isLoading}
           >
             <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
@@ -465,19 +631,21 @@ export const EnhancedWorkflowManager: React.FC = () => {
                 </SelectContent>
               </Select>
 
-              <Select value={selectedProject} onValueChange={setSelectedProject}>
-                <SelectTrigger className="w-40">
-                  <SelectValue placeholder="Projet" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Tous les projets</SelectItem>
-                  {projects.map((project) => (
-                    <SelectItem key={project.id} value={project.id}>
-                      {project.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {n8nAvailable && (
+                <Select value={selectedProject} onValueChange={setSelectedProject}>
+                  <SelectTrigger className="w-40">
+                    <SelectValue placeholder="Projet" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tous les projets</SelectItem>
+                    {projects.map((project) => (
+                      <SelectItem key={project.id} value={project.id}>
+                        {project.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
             <Dialog>
@@ -502,8 +670,12 @@ export const EnhancedWorkflowManager: React.FC = () => {
                     value={newWorkflow.description}
                     onChange={(e) => setNewWorkflow({...newWorkflow, description: e.target.value})}
                   />
-                  <Button onClick={createWorkflow} className="w-full">
-                    Créer Workflow
+                  <Button 
+                    onClick={createWorkflow} 
+                    className="w-full"
+                    disabled={isLoading}
+                  >
+                    {isLoading ? 'Création...' : 'Créer Workflow'}
                   </Button>
                 </div>
               </DialogContent>
@@ -639,79 +811,100 @@ export const EnhancedWorkflowManager: React.FC = () => {
 
         {/* EXECUTIONS TAB */}
         <TabsContent value="executions" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <Activity className="w-5 h-5" />
-                <span>Historique des Exécutions</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {executions.map((execution) => (
-                  <div key={execution.id} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex items-center space-x-4">
-                      {getExecutionStatusIcon(execution)}
-                      <div>
-                        <p className="font-medium">Exécution #{execution.id}</p>
-                        <p className="text-sm text-gray-600">Workflow: {execution.workflowId}</p>
-                        <p className="text-xs text-gray-500">
-                          {new Date(execution.startedAt).toLocaleString()}
-                        </p>
+          {!n8nAvailable ? (
+            <div className="text-center py-12">
+              <WifiOff className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-slate-600 mb-2">
+                Connexion n8n requise
+              </h3>
+              <p className="text-slate-500">
+                Les exécutions nécessitent une connexion active à n8n
+              </p>
+            </div>
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <Activity className="w-5 h-5" />
+                  <span>Historique des Exécutions</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {executions.map((execution) => (
+                    <div key={execution.id} className="flex items-center justify-between p-4 border rounded-lg">
+                      <div className="flex items-center space-x-4">
+                        {getExecutionStatusIcon(execution)}
+                        <div>
+                          <p className="font-medium">Exécution #{execution.id}</p>
+                          <p className="text-sm text-gray-600">Workflow: {execution.workflowId}</p>
+                          <p className="text-xs text-gray-500">
+                            {new Date(execution.startedAt).toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Badge variant={execution.finished ? 'default' : 'secondary'}>
+                          {execution.finished ? 'Terminé' : 'En cours'}
+                        </Badge>
+                        <Button size="sm" variant="outline">
+                          <Eye className="w-4 h-4" />
+                        </Button>
                       </div>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <Badge variant={execution.finished ? 'default' : 'secondary'}>
-                        {execution.finished ? 'Terminé' : 'En cours'}
-                      </Badge>
-                      <Button size="sm" variant="outline">
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {/* PROJECTS TAB */}
         <TabsContent value="projects" className="space-y-6">
-          <div className="flex justify-between items-center">
-            <h3 className="text-lg font-semibold">Gestion des Projets</h3>
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Nouveau Projet
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Créer un Projet</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <Input
-                    placeholder="Nom du projet"
-                    value={newProject.name}
-                    onChange={(e) => setNewProject({...newProject, name: e.target.value})}
-                  />
-                  <Select value={newProject.type} onValueChange={(value) => setNewProject({...newProject, type: value})}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="team">Équipe</SelectItem>
-                      <SelectItem value="personal">Personnel</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Button onClick={createProject} className="w-full">
-                    Créer Projet
+          {!n8nAvailable ? (
+            <div className="text-center py-12">
+              <WifiOff className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-slate-600 mb-2">
+                Connexion n8n requise
+              </h3>
+            </div>
+          ) : (
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-semibold">Gestion des Projets</h3>
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Nouveau Projet
                   </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
-          </div>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Créer un Projet</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <Input
+                      placeholder="Nom du projet"
+                      value={newProject.name}
+                      onChange={(e) => setNewProject({...newProject, name: e.target.value})}
+                    />
+                    <Select value={newProject.type} onValueChange={(value) => setNewProject({...newProject, type: value})}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="team">Équipe</SelectItem>
+                        <SelectItem value="personal">Personnel</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button onClick={createProject} className="w-full">
+                      Créer Projet
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {projects.map((project) => (
@@ -742,41 +935,50 @@ export const EnhancedWorkflowManager: React.FC = () => {
 
         {/* USERS TAB */}
         <TabsContent value="users" className="space-y-6">
-          <div className="flex justify-between items-center">
-            <h3 className="text-lg font-semibold">Gestion des Utilisateurs</h3>
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button>
-                  <UserPlus className="w-4 h-4 mr-2" />
-                  Nouvel Utilisateur
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Créer un Utilisateur</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <Input
-                    placeholder="Email"
-                    value={newUser.email}
-                    onChange={(e) => setNewUser({...newUser, email: e.target.value})}
-                  />
-                  <Select value={newUser.role} onValueChange={(value: any) => setNewUser({...newUser, role: value})}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="global:admin">Admin</SelectItem>
-                      <SelectItem value="global:member">Membre</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Button onClick={createUser} className="w-full">
-                    Créer Utilisateur
+          {!n8nAvailable ? (
+            <div className="text-center py-12">
+              <WifiOff className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-slate-600 mb-2">
+                Connexion n8n requise
+              </h3>
+            </div>
+          ) : (
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-semibold">Gestion des Utilisateurs</h3>
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button>
+                    <UserPlus className="w-4 h-4 mr-2" />
+                    Nouvel Utilisateur
                   </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
-          </div>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Créer un Utilisateur</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <Input
+                      placeholder="Email"
+                      value={newUser.email}
+                      onChange={(e) => setNewUser({...newUser, email: e.target.value})}
+                    />
+                    <Select value={newUser.role} onValueChange={(value: any) => setNewUser({...newUser, role: value})}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="global:admin">Admin</SelectItem>
+                        <SelectItem value="global:member">Membre</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button onClick={createUser} className="w-full">
+                      Créer Utilisateur
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
+          )}
 
           <div className="space-y-4">
             {users.map((user) => (
