@@ -1,7 +1,7 @@
 
 import React from 'react';
-import { EnhancedWorkflowManager } from './EnhancedWorkflowManager';
+import { OptimizedWorkflowManager } from './OptimizedWorkflowManager';
 
 export const WorkflowManager: React.FC = () => {
-  return <EnhancedWorkflowManager />;
+  return <OptimizedWorkflowManager />;
 };

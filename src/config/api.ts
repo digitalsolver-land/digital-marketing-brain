@@ -1,62 +1,165 @@
 
 export const API_CONFIG = {
   N8N: {
-    BASE_URL: import.meta.env.VITE_N8N_BASE_URL || 'http://localhost:5678/api/v1',
-    API_KEY: import.meta.env.VITE_N8N_API_KEY || '',
-    // Fallback pour les clés stockées dans les paramètres utilisateur
-    get EFFECTIVE_API_KEY() {
-      // Récupérer depuis les paramètres utilisateur si disponible
-      const userSettings = localStorage.getItem('n8n_user_settings');
-      if (userSettings) {
-        try {
-          const settings = JSON.parse(userSettings);
-          return settings.n8n_api_key || this.API_KEY;
-        } catch (error) {
-          console.warn('Erreur lecture paramètres n8n:', error);
-        }
-      }
-      return this.API_KEY;
+    BASE_URL: 'http://localhost:5678/api/v1',
+    API_KEY: '',
+    // Configuration par défaut pour les tests
+    DEFAULT_SETTINGS: {
+      timeout: 10000,
+      retries: 3,
+      retryDelay: 1000
     }
   },
   OPENROUTER: {
-    API_KEY: import.meta.env.VITE_OPENROUTER_API_KEY || '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',
+    API_KEY: '',
     BASE_URL: 'https://openrouter.ai/api/v1'
   },
   POSTIZ: {
-    API_URL: import.meta.env.VITE_POSTIZ_API_URL || 'https://api.postiz.com/public/v1',
-    API_KEY: import.meta.env.VITE_POSTIZ_API_KEY || ''
+    API_URL: 'https://api.postiz.com/public/v1',
+    API_KEY: ''
   }
 };
 
-// Fonction pour mettre à jour les clés API depuis les paramètres utilisateur
-export const updateN8nConfig = (apiKey: string, baseUrl?: string) => {
-  const settings = {
-    n8n_api_key: apiKey,
-    n8n_base_url: baseUrl || API_CONFIG.N8N.BASE_URL
-  };
-  
-  localStorage.setItem('n8n_user_settings', JSON.stringify(settings));
-  console.log('✅ Configuration n8n mise à jour');
-};
+// Interface pour la configuration n8n
+export interface N8nConfig {
+  apiKey: string;
+  baseUrl: string;
+  timeout?: number;
+  retries?: number;
+}
 
-// Fonction pour récupérer la configuration effective
-export const getEffectiveN8nConfig = () => {
-  const userSettings = localStorage.getItem('n8n_user_settings');
+// Gestionnaire centralisé de configuration n8n
+export class N8nConfigManager {
+  private static instance: N8nConfigManager;
   
-  if (userSettings) {
+  public static getInstance(): N8nConfigManager {
+    if (!N8nConfigManager.instance) {
+      N8nConfigManager.instance = new N8nConfigManager();
+    }
+    return N8nConfigManager.instance;
+  }
+
+  // Récupérer la configuration effective depuis multiple sources
+  async getEffectiveConfig(): Promise<N8nConfig> {
     try {
-      const settings = JSON.parse(userSettings);
+      // 1. Essayer Supabase d'abord
+      const supabaseConfig = await this.getSupabaseConfig();
+      if (supabaseConfig?.apiKey) {
+        console.log('✅ Configuration n8n depuis Supabase');
+        return supabaseConfig;
+      }
+
+      // 2. Fallback sur localStorage
+      const localConfig = this.getLocalConfig();
+      if (localConfig?.apiKey) {
+        console.log('✅ Configuration n8n depuis localStorage');
+        return localConfig;
+      }
+
+      // 3. Configuration par défaut (sans clé API)
+      console.warn('⚠️ Aucune clé API n8n configurée');
       return {
-        apiKey: settings.n8n_api_key || API_CONFIG.N8N.API_KEY,
-        baseUrl: settings.n8n_base_url || API_CONFIG.N8N.BASE_URL
+        apiKey: '',
+        baseUrl: API_CONFIG.N8N.BASE_URL,
+        ...API_CONFIG.N8N.DEFAULT_SETTINGS
       };
     } catch (error) {
-      console.warn('Erreur lecture paramètres n8n:', error);
+      console.error('❌ Erreur récupération config n8n:', error);
+      return {
+        apiKey: '',
+        baseUrl: API_CONFIG.N8N.BASE_URL,
+        ...API_CONFIG.N8N.DEFAULT_SETTINGS
+      };
     }
   }
-  
-  return {
-    apiKey: API_CONFIG.N8N.API_KEY,
-    baseUrl: API_CONFIG.N8N.BASE_URL
-  };
-};
+
+  // Configuration depuis Supabase
+  private async getSupabaseConfig(): Promise<N8nConfig | null> {
+    try {
+      const { supabase } = await import('@/integrations/supabase/client');
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) return null;
+
+      const { data: settings } = await supabase
+        .from('app_settings')
+        .select('n8n_api_key, n8n_base_url')
+        .eq('user_id', user.id)
+        .single();
+      
+      if (settings?.n8n_api_key) {
+        return {
+          apiKey: settings.n8n_api_key,
+          baseUrl: settings.n8n_base_url || API_CONFIG.N8N.BASE_URL,
+          ...API_CONFIG.N8N.DEFAULT_SETTINGS
+        };
+      }
+    } catch (error) {
+      console.warn('⚠️ Erreur config Supabase:', error);
+    }
+    return null;
+  }
+
+  // Configuration depuis localStorage
+  private getLocalConfig(): N8nConfig | null {
+    try {
+      const userSettings = localStorage.getItem('n8n_user_settings');
+      if (userSettings) {
+        const settings = JSON.parse(userSettings);
+        if (settings.n8n_api_key) {
+          return {
+            apiKey: settings.n8n_api_key,
+            baseUrl: settings.n8n_base_url || API_CONFIG.N8N.BASE_URL,
+            ...API_CONFIG.N8N.DEFAULT_SETTINGS
+          };
+        }
+      }
+    } catch (error) {
+      console.warn('⚠️ Erreur config localStorage:', error);
+    }
+    return null;
+  }
+
+  // Sauvegarder la configuration
+  async saveConfig(config: Partial<N8nConfig>): Promise<void> {
+    try {
+      // Sauvegarder dans localStorage
+      const localSettings = {
+        n8n_api_key: config.apiKey,
+        n8n_base_url: config.baseUrl || API_CONFIG.N8N.BASE_URL
+      };
+      localStorage.setItem('n8n_user_settings', JSON.stringify(localSettings));
+
+      // Essayer de sauvegarder dans Supabase
+      try {
+        const { supabase } = await import('@/integrations/supabase/client');
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (user && config.apiKey) {
+          await supabase
+            .from('app_settings')
+            .upsert({
+              user_id: user.id,
+              n8n_api_key: config.apiKey,
+              n8n_base_url: config.baseUrl || API_CONFIG.N8N.BASE_URL
+            });
+        }
+      } catch (supabaseError) {
+        console.warn('⚠️ Impossible de sauvegarder dans Supabase:', supabaseError);
+      }
+
+      console.log('✅ Configuration n8n sauvegardée');
+    } catch (error) {
+      console.error('❌ Erreur sauvegarde config:', error);
+      throw new Error('Impossible de sauvegarder la configuration');
+    }
+  }
+
+  // Valider la configuration
+  validateConfig(config: N8nConfig): boolean {
+    return !!(config.apiKey && config.baseUrl);
+  }
+}
+
+// Instance singleton
+export const n8nConfigManager = N8nConfigManager.getInstance();
