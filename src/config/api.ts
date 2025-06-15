@@ -1,7 +1,7 @@
 
 export const API_CONFIG = {
   N8N: {
-    BASE_URL: 'http://localhost:5678/api/v1',
+    BASE_URL: 'https://n8n.srv860213.hstgr.cloud/api/v1',
     API_KEY: '',
     // Configuration par défaut pour les tests
     DEFAULT_SETTINGS: {

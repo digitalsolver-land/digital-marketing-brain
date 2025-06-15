@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -24,7 +23,7 @@ export const N8nConfigurationPanel: React.FC<N8nConfigurationPanelProps> = ({
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
   const [config, setConfig] = useState({
     apiKey: '',
-    baseUrl: 'http://localhost:5678/api/v1',
+    baseUrl: 'https://n8n.srv860213.hstgr.cloud/api/v1',
     saveLocal: true
   });
 
@@ -38,7 +37,7 @@ export const N8nConfigurationPanel: React.FC<N8nConfigurationPanelProps> = ({
       setConfig(prev => ({
         ...prev,
         apiKey: currentConfig.apiKey || '',
-        baseUrl: currentConfig.baseUrl || 'http://localhost:5678/api/v1'
+        baseUrl: currentConfig.baseUrl || 'https://n8n.srv860213.hstgr.cloud/api/v1'
       }));
       
       const status = unifiedN8nService.getConnectionStatus();
@@ -212,7 +211,7 @@ export const N8nConfigurationPanel: React.FC<N8nConfigurationPanelProps> = ({
               id="base-url"
               value={config.baseUrl}
               onChange={(e) => setConfig(prev => ({ ...prev, baseUrl: e.target.value }))}
-              placeholder="http://localhost:5678/api/v1"
+              placeholder="https://n8n.srv860213.hstgr.cloud/api/v1"
             />
             <p className="text-xs text-gray-500">
               URL complète de votre instance n8n avec /api/v1
