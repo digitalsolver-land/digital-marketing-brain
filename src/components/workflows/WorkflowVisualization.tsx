@@ -3,7 +3,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Play, Settings, Trash2, Eye, ZoomIn, ZoomOut, RotateCcw, Move } from 'lucide-react';
+import { Play, Settings, Trash2, Eye, ZoomIn, ZoomOut, RotateCcw, Move, Brain, Maximize2, Minimize2 } from 'lucide-react';
+import { aiService } from '@/services/aiService';
+import { useToast } from '@/hooks/use-toast';
 
 interface WorkflowNode {
   id: string;
@@ -43,41 +45,43 @@ export const WorkflowVisualization: React.FC<WorkflowVisualizationProps> = ({
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState(0.8);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const [viewBox, setViewBox] = useState('0 0 800 600');
+  const [viewBox, setViewBox] = useState('0 0 1200 800');
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysis, setAnalysis] = useState<string>('');
+  const { toast } = useToast();
 
   useEffect(() => {
     if (nodes.length > 0) {
-      // Calculer les limites du workflow avec padding
-      const minX = Math.min(...nodes.map(n => n.position_x)) - 150;
-      const maxX = Math.max(...nodes.map(n => n.position_x)) + 250;
-      const minY = Math.min(...nodes.map(n => n.position_y)) - 150;
-      const maxY = Math.max(...nodes.map(n => n.position_y)) + 250;
+      // Calculate workflow bounds with generous padding
+      const minX = Math.min(...nodes.map(n => n.position_x)) - 200;
+      const maxX = Math.max(...nodes.map(n => n.position_x)) + 300;
+      const minY = Math.min(...nodes.map(n => n.position_y)) - 200;
+      const maxY = Math.max(...nodes.map(n => n.position_y)) + 300;
       
       const width = maxX - minX;
       const height = maxY - minY;
       
       setViewBox(`${minX} ${minY} ${width} ${height}`);
-      
-      // Centrer la vue
       setPan({ x: 0, y: 0 });
-      setZoom(1);
+      setZoom(0.8);
     }
   }, [nodes]);
 
   const handleZoomIn = () => {
-    setZoom(prev => Math.min(prev * 1.2, 3));
+    setZoom(prev => Math.min(prev * 1.3, 4));
   };
 
   const handleZoomOut = () => {
-    setZoom(prev => Math.max(prev / 1.2, 0.5));
+    setZoom(prev => Math.max(prev / 1.3, 0.3));
   };
 
   const handleResetView = () => {
-    setZoom(1);
+    setZoom(0.8);
     setPan({ x: 0, y: 0 });
   };
 
@@ -102,44 +106,95 @@ export const WorkflowVisualization: React.FC<WorkflowVisualizationProps> = ({
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    setZoom(prev => Math.max(0.5, Math.min(3, prev * delta)));
+    setZoom(prev => Math.max(0.3, Math.min(4, prev * delta)));
+  };
+
+  const analyzeWorkflow = async () => {
+    setIsAnalyzing(true);
+    try {
+      const workflowDescription = `
+        Workflow: ${workflow.name}
+        Description: ${workflow.description}
+        Nombre de nœuds: ${nodes.length}
+        Nombre de connexions: ${connections.length}
+        
+        Nœuds:
+        ${nodes.map(node => `- ${node.name} (${node.node_type})`).join('\n')}
+        
+        Connexions:
+        ${connections.map(conn => {
+          const sourceNode = nodes.find(n => n.node_id === conn.source_node_id);
+          const targetNode = nodes.find(n => n.node_id === conn.target_node_id);
+          return `- ${sourceNode?.name || 'Unknown'} → ${targetNode?.name || 'Unknown'}`;
+        }).join('\n')}
+      `;
+
+      const prompt = `Analyse ce workflow n8n et explique-le de manière claire et détaillée:
+
+${workflowDescription}
+
+Fournis une analyse qui inclut:
+1. Le but principal du workflow
+2. Comment il fonctionne étape par étape
+3. Les points forts et optimisations possibles
+4. Des suggestions d'amélioration si applicable
+
+Réponds en français de manière professionnelle et accessible.`;
+
+      const result = await aiService.generateContent(prompt, 'workflow');
+      setAnalysis(result);
+      
+      toast({
+        title: "Analyse terminée",
+        description: "L'IA a analysé votre workflow avec succès.",
+      });
+    } catch (error) {
+      console.error('Erreur analyse workflow:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible d'analyser le workflow. Veuillez réessayer.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   const getNodeColor = (nodeType: string): string => {
     const typeMap: { [key: string]: string } = {
-      'n8n-nodes-base.start': '#00d26e',
-      'n8n-nodes-base.webhook': '#ff6b6b',
-      'n8n-nodes-base.httpRequest': '#4ecdc4',
-      'n8n-nodes-base.set': '#feca57',
-      'n8n-nodes-base.if': '#ff9ff3',
-      'n8n-nodes-base.emailSend': '#54a0ff',
-      'n8n-nodes-base.discord': '#7289da',
-      'n8n-nodes-base.slack': '#4a154b',
-      'n8n-nodes-base.telegram': '#0088cc',
-      'n8n-nodes-base.googleSheets': '#34a853',
-      'n8n-nodes-base.mysql': '#00618a',
-      'n8n-nodes-base.postgres': '#336791',
-      'n8n-nodes-base.mongodb': '#47a248',
-      'n8n-nodes-base.function': '#ff6b35',
-      'n8n-nodes-base.switch': '#a55eea',
-      'n8n-nodes-base.merge': '#26de81',
-      'n8n-nodes-base.wait': '#fd79a8',
-      'n8n-nodes-base.cron': '#6c5ce7',
-      'n8n-nodes-base.schedule': '#74b9ff',
-      'n8n-nodes-base.executeWorkflow': '#fd79a8'
+      'n8n-nodes-base.start': '#10b981',
+      'n8n-nodes-base.webhook': '#ef4444',
+      'n8n-nodes-base.httpRequest': '#06b6d4',
+      'n8n-nodes-base.set': '#f59e0b',
+      'n8n-nodes-base.if': '#ec4899',
+      'n8n-nodes-base.emailSend': '#3b82f6',
+      'n8n-nodes-base.discord': '#7c3aed',
+      'n8n-nodes-base.slack': '#1e293b',
+      'n8n-nodes-base.telegram': '#0ea5e9',
+      'n8n-nodes-base.googleSheets': '#22c55e',
+      'n8n-nodes-base.mysql': '#0f766e',
+      'n8n-nodes-base.postgres': '#1e40af',
+      'n8n-nodes-base.mongodb': '#16a34a',
+      'n8n-nodes-base.function': '#ea580c',
+      'n8n-nodes-base.switch': '#9333ea',
+      'n8n-nodes-base.merge': '#059669',
+      'n8n-nodes-base.wait': '#db2777',
+      'n8n-nodes-base.cron': '#7c2d12',
+      'n8n-nodes-base.schedule': '#1d4ed8',
+      'n8n-nodes-base.executeWorkflow': '#be185d'
     };
-    return typeMap[nodeType] || '#666666';
+    return typeMap[nodeType] || '#6b7280';
   };
 
   const getNodeIcon = (nodeType: string): string => {
-    if (nodeType.includes('start')) return '▶';
+    if (nodeType.includes('start')) return '▶️';
     if (nodeType.includes('webhook')) return '🔗';
     if (nodeType.includes('http')) return '🌐';
     if (nodeType.includes('set')) return '⚙️';
     if (nodeType.includes('if')) return '❓';
     if (nodeType.includes('email')) return '📧';
     if (nodeType.includes('discord')) return '💬';
-    if (nodeType.includes('slack')) return '💬';
+    if (nodeType.includes('slack')) return '💼';
     if (nodeType.includes('telegram')) return '📱';
     if (nodeType.includes('sheets')) return '📊';
     if (nodeType.includes('mysql') || nodeType.includes('postgres') || nodeType.includes('mongodb')) return '🗄️';
@@ -157,15 +212,14 @@ export const WorkflowVisualization: React.FC<WorkflowVisualizationProps> = ({
     
     if (!sourceNode || !targetNode) return '';
 
-    // Points de connexion plus précis
-    const sourceX = sourceNode.position_x + 120; // Sortie à droite du nœud
-    const sourceY = sourceNode.position_y + 30;  // Milieu vertical du nœud
-    const targetX = targetNode.position_x;       // Entrée à gauche du nœud
-    const targetY = targetNode.position_y + 30;  // Milieu vertical du nœud
+    const sourceX = sourceNode.position_x + 140;
+    const sourceY = sourceNode.position_y + 40;
+    const targetX = targetNode.position_x;
+    const targetY = targetNode.position_y + 40;
 
-    // Ligne courbe Bézier pour une meilleure visibilité
-    const controlX1 = sourceX + 60;
-    const controlX2 = targetX - 60;
+    // Create a smooth curved path
+    const controlX1 = sourceX + 80;
+    const controlX2 = targetX - 80;
     
     return `M ${sourceX} ${sourceY} C ${controlX1} ${sourceY} ${controlX2} ${targetY} ${targetX} ${targetY}`;
   };
@@ -173,7 +227,7 @@ export const WorkflowVisualization: React.FC<WorkflowVisualizationProps> = ({
   const transformStyle = {
     transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
     transformOrigin: 'center center',
-    transition: isDragging ? 'none' : 'transform 0.1s ease-out'
+    transition: isDragging ? 'none' : 'transform 0.2s ease-out'
   };
 
   return (
@@ -201,6 +255,16 @@ export const WorkflowVisualization: React.FC<WorkflowVisualizationProps> = ({
               </div>
             </div>
             <div className="flex space-x-2">
+              <Button 
+                size="sm" 
+                variant="outline" 
+                onClick={analyzeWorkflow}
+                disabled={isAnalyzing}
+                className="bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100"
+              >
+                <Brain className="w-4 h-4 mr-1" />
+                {isAnalyzing ? 'Analyse...' : 'Analyser IA'}
+              </Button>
               {onExecute && (
                 <Button size="sm" onClick={onExecute}>
                   <Play className="w-4 h-4 mr-1" />
@@ -223,8 +287,27 @@ export const WorkflowVisualization: React.FC<WorkflowVisualizationProps> = ({
         </CardHeader>
       </Card>
 
+      {/* Analyse IA */}
+      {analysis && (
+        <Card className="border-purple-200 bg-purple-50">
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2 text-purple-800">
+              <Brain className="w-5 h-5" />
+              <span>Analyse IA du Workflow</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="prose prose-sm max-w-none text-purple-900">
+              {analysis.split('\n').map((paragraph, index) => (
+                <p key={index} className="mb-2">{paragraph}</p>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Visualisation du workflow */}
-      <Card>
+      <Card className={isFullscreen ? 'fixed inset-0 z-50 rounded-none' : ''}>
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center space-x-2">
@@ -234,6 +317,14 @@ export const WorkflowVisualization: React.FC<WorkflowVisualizationProps> = ({
             
             {/* Contrôles de navigation */}
             <div className="flex items-center space-x-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setIsFullscreen(!isFullscreen)}
+                title={isFullscreen ? "Quitter le plein écran" : "Plein écran"}
+              >
+                {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+              </Button>
               <Button
                 size="sm"
                 variant="outline"
@@ -271,7 +362,9 @@ export const WorkflowVisualization: React.FC<WorkflowVisualizationProps> = ({
         <CardContent>
           <div 
             ref={containerRef}
-            className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 min-h-[600px] overflow-hidden cursor-grab active:cursor-grabbing relative"
+            className={`bg-gradient-to-br from-slate-50 to-slate-100 dark:from-gray-800 dark:to-gray-900 rounded-lg p-4 overflow-hidden cursor-grab active:cursor-grabbing relative border-2 border-slate-200 dark:border-gray-700 ${
+              isFullscreen ? 'h-screen' : 'min-h-[700px]'
+            }`}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
@@ -283,124 +376,180 @@ export const WorkflowVisualization: React.FC<WorkflowVisualizationProps> = ({
               <svg
                 ref={svgRef}
                 viewBox={viewBox}
-                className="w-full h-full min-h-[600px]"
+                className={`w-full ${isFullscreen ? 'h-screen' : 'h-[700px]'}`}
                 style={{ 
-                  background: 'linear-gradient(to right, #f8f9fa 1px, transparent 1px), linear-gradient(to bottom, #f8f9fa 1px, transparent 1px)', 
-                  backgroundSize: `${20 * zoom}px ${20 * zoom}px`
+                  background: `
+                    radial-gradient(circle at 20px 20px, rgba(148, 163, 184, 0.3) 1px, transparent 1px),
+                    radial-gradient(circle at 60px 60px, rgba(148, 163, 184, 0.2) 1px, transparent 1px)
+                  `, 
+                  backgroundSize: `${40 * zoom}px ${40 * zoom}px, ${120 * zoom}px ${120 * zoom}px`
                 }}
               >
-                {/* Définir les marqueurs de flèche */}
+                {/* Définitions pour les marqueurs et effets */}
                 <defs>
+                  {/* Gradient pour les connexions principales */}
+                  <linearGradient id="connectionGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.8" />
+                    <stop offset="50%" stopColor="#1d4ed8" stopOpacity="1" />
+                    <stop offset="100%" stopColor="#1e40af" stopOpacity="0.8" />
+                  </linearGradient>
+                  
+                  {/* Gradient pour les connexions secondaires */}
+                  <linearGradient id="secondaryGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="#64748b" stopOpacity="0.6" />
+                    <stop offset="100%" stopColor="#475569" stopOpacity="0.8" />
+                  </linearGradient>
+                  
+                  {/* Marqueur de flèche principal */}
                   <marker
                     id="arrowhead"
-                    markerWidth="12"
-                    markerHeight="8"
-                    refX="11"
-                    refY="4"
+                    markerWidth="16"
+                    markerHeight="12"
+                    refX="15"
+                    refY="6"
                     orient="auto"
                     markerUnits="strokeWidth"
                   >
                     <polygon
-                      points="0 0, 12 4, 0 8"
-                      fill="#2563eb"
-                      stroke="#2563eb"
-                      strokeWidth="1"
+                      points="0 0, 16 6, 0 12"
+                      fill="url(#connectionGradient)"
+                      stroke="none"
                     />
                   </marker>
+                  
+                  {/* Marqueur de flèche secondaire */}
                   <marker
-                    id="arrowhead-dashed"
-                    markerWidth="12"
-                    markerHeight="8"
-                    refX="11"
-                    refY="4"
+                    id="arrowhead-secondary"
+                    markerWidth="14"
+                    markerHeight="10"
+                    refX="13"
+                    refY="5"
                     orient="auto"
                     markerUnits="strokeWidth"
                   >
                     <polygon
-                      points="0 0, 12 4, 0 8"
-                      fill="#94a3b8"
-                      stroke="#94a3b8"
-                      strokeWidth="1"
+                      points="0 0, 14 5, 0 10"
+                      fill="url(#secondaryGradient)"
+                      stroke="none"
                     />
                   </marker>
+                  
+                  {/* Filtre d'ombre pour les nœuds */}
+                  <filter id="nodeShadow" x="-20%" y="-20%" width="140%" height="140%">
+                    <feDropShadow dx="3" dy="5" stdDeviation="4" floodOpacity="0.3"/>
+                  </filter>
+                  
+                  {/* Filtre de lueur pour les connexions */}
+                  <filter id="connectionGlow" x="-50%" y="-50%" width="200%" height="200%">
+                    <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+                    <feMerge> 
+                      <feMergeNode in="coloredBlur"/>
+                      <feMergeNode in="SourceGraphic"/>
+                    </feMerge>
+                  </filter>
                 </defs>
 
-                {/* Dessiner les connexions avec une meilleure visibilité */}
-                {connections.map((connection) => {
+                {/* Dessiner les connexions avec une visibilité maximale */}
+                {connections.map((connection, index) => {
                   const path = getConnectionPath(connection);
                   const isMainConnection = connection.connection_type === 'main';
                   
                   return (
                     <g key={connection.id}>
-                      {/* Ligne de fond plus épaisse pour la visibilité */}
+                      {/* Ligne de fond blanche pour contraste */}
                       <path
                         d={path}
                         stroke="#ffffff"
-                        strokeWidth="6"
+                        strokeWidth="12"
                         fill="none"
-                        opacity="0.8"
+                        opacity="0.9"
                       />
-                      {/* Ligne principale */}
+                      
+                      {/* Ligne de contraste gris foncé */}
                       <path
                         d={path}
-                        stroke={isMainConnection ? "#2563eb" : "#94a3b8"}
-                        strokeWidth="3"
+                        stroke="#1f2937"
+                        strokeWidth="8"
                         fill="none"
-                        strokeDasharray={isMainConnection ? "none" : "8,4"}
-                        markerEnd={isMainConnection ? "url(#arrowhead)" : "url(#arrowhead-dashed)"}
-                        className="transition-all duration-200 hover:stroke-width-4"
+                        opacity="0.3"
                       />
+                      
+                      {/* Ligne principale avec gradient et lueur */}
+                      <path
+                        d={path}
+                        stroke={isMainConnection ? "url(#connectionGradient)" : "url(#secondaryGradient)"}
+                        strokeWidth="4"
+                        fill="none"
+                        strokeDasharray={isMainConnection ? "none" : "12,6"}
+                        markerEnd={isMainConnection ? "url(#arrowhead)" : "url(#arrowhead-secondary)"}
+                        filter="url(#connectionGlow)"
+                        className="transition-all duration-300 hover:stroke-width-6"
+                        style={{
+                          animation: `pulse 2s ease-in-out infinite ${index * 0.2}s`
+                        }}
+                      />
+                      
+                      {/* Points de contrôle pour debug (optionnel) */}
+                      {/* <circle cx={sourceX} cy={sourceY} r="3" fill="red" opacity="0.5" />
+                      <circle cx={targetX} cy={targetY} r="3" fill="blue" opacity="0.5" /> */}
                     </g>
                   );
                 })}
 
-                {/* Dessiner les nœuds */}
-                {nodes.map((node) => (
+                {/* Dessiner les nœuds avec plus de détails */}
+                {nodes.map((node, index) => (
                   <g key={node.id} transform={`translate(${node.position_x}, ${node.position_y})`}>
-                    {/* Ombre du nœud */}
+                    {/* Rectangle du nœud avec ombre */}
                     <rect
-                      x="2"
-                      y="2"
-                      width="120"
-                      height="60"
-                      rx="8"
-                      fill="rgba(0,0,0,0.1)"
-                    />
-                    
-                    {/* Rectangle du nœud */}
-                    <rect
-                      width="120"
-                      height="60"
-                      rx="8"
+                      width="140"
+                      height="80"
+                      rx="12"
                       fill={getNodeColor(node.node_type)}
                       stroke="#ffffff"
-                      strokeWidth="2"
+                      strokeWidth="3"
+                      filter="url(#nodeShadow)"
+                      className="transition-all duration-200 hover:stroke-width-4"
+                    />
+                    
+                    {/* Bordure intérieure pour l'effet de profondeur */}
+                    <rect
+                      x="3"
+                      y="3"
+                      width="134"
+                      height="74"
+                      rx="9"
+                      fill="none"
+                      stroke="rgba(255,255,255,0.3)"
+                      strokeWidth="1"
+                    />
+                    
+                    {/* Points de connexion gauche (entrée) */}
+                    <circle
+                      cx="0"
+                      cy="40"
+                      r="6"
+                      fill="#ffffff"
+                      stroke={getNodeColor(node.node_type)}
+                      strokeWidth="3"
                       className="drop-shadow-sm"
                     />
                     
-                    {/* Points de connexion */}
+                    {/* Points de connexion droite (sortie) */}
                     <circle
-                      cx="0"
-                      cy="30"
-                      r="4"
+                      cx="140"
+                      cy="40"
+                      r="6"
                       fill="#ffffff"
                       stroke={getNodeColor(node.node_type)}
-                      strokeWidth="2"
-                    />
-                    <circle
-                      cx="120"
-                      cy="30"
-                      r="4"
-                      fill="#ffffff"
-                      stroke={getNodeColor(node.node_type)}
-                      strokeWidth="2"
+                      strokeWidth="3"
+                      className="drop-shadow-sm"
                     />
                     
                     {/* Icône du nœud */}
                     <text
-                      x="20"
-                      y="35"
-                      fontSize={Math.max(16 / zoom, 12)}
+                      x="25"
+                      y="45"
+                      fontSize="20"
                       fill="white"
                       textAnchor="middle"
                       style={{ pointerEvents: 'none' }}
@@ -408,76 +557,109 @@ export const WorkflowVisualization: React.FC<WorkflowVisualizationProps> = ({
                       {getNodeIcon(node.node_type)}
                     </text>
                     
-                    {/* Nom du nœud */}
+                    {/* Nom du nœud - ligne 1 */}
                     <text
-                      x="70"
-                      y="32"
-                      fontSize={Math.max(11 / zoom, 9)}
+                      x="85"
+                      y="35"
+                      fontSize="13"
                       fill="white"
                       textAnchor="middle"
-                      className="font-medium"
+                      className="font-semibold"
                       style={{ pointerEvents: 'none' }}
                     >
-                      {node.name.length > 12 ? `${node.name.substring(0, 12)}...` : node.name}
+                      {node.name.length > 10 ? `${node.name.substring(0, 10)}...` : node.name}
                     </text>
                     
-                    {/* Type du nœud */}
+                    {/* Type du nœud - ligne 2 */}
                     <text
-                      x="70"
-                      y="45"
-                      fontSize={Math.max(9 / zoom, 7)}
-                      fill="rgba(255,255,255,0.8)"
+                      x="85"
+                      y="52"
+                      fontSize="10"
+                      fill="rgba(255,255,255,0.9)"
                       textAnchor="middle"
                       style={{ pointerEvents: 'none' }}
                     >
-                      {node.node_type.split('.').pop()?.replace(/([A-Z])/g, ' $1').trim()}
+                      {node.node_type.split('.').pop()?.replace(/([A-Z])/g, ' $1').trim().substring(0, 12)}
                     </text>
+                    
+                    {/* Badge de status si actif */}
+                    {workflow.status === 'active' && (
+                      <circle
+                        cx="125"
+                        cy="15"
+                        r="4"
+                        fill="#10b981"
+                        stroke="white"
+                        strokeWidth="2"
+                      />
+                    )}
                   </g>
                 ))}
               </svg>
             </div>
             
             {/* Instructions d'utilisation */}
-            <div className="absolute top-4 left-4 bg-white dark:bg-gray-900 p-3 rounded-lg shadow-md text-xs space-y-1">
-              <div className="font-medium text-gray-700 dark:text-gray-300">Navigation:</div>
-              <div className="text-gray-600 dark:text-gray-400">• Clic + glisser pour déplacer</div>
-              <div className="text-gray-600 dark:text-gray-400">• Molette pour zoomer</div>
-              <div className="text-gray-600 dark:text-gray-400">• Boutons pour contrôles précis</div>
+            <div className="absolute top-4 left-4 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm p-4 rounded-lg shadow-lg text-xs space-y-2 border border-slate-200 dark:border-gray-700">
+              <div className="font-semibold text-gray-800 dark:text-gray-200">🎛️ Navigation:</div>
+              <div className="text-gray-600 dark:text-gray-400">• 🖱️ Clic + glisser pour déplacer</div>
+              <div className="text-gray-600 dark:text-gray-400">• 🔍 Molette pour zoomer/dézoomer</div>
+              <div className="text-gray-600 dark:text-gray-400">• 🎯 Boutons pour contrôles précis</div>
+              <div className="text-gray-600 dark:text-gray-400">• 🔍 F11 ou bouton pour plein écran</div>
             </div>
             
             {/* Légende des connexions */}
-            <div className="absolute bottom-4 left-4 bg-white dark:bg-gray-900 p-3 rounded-lg shadow-md text-xs space-y-2">
-              <div className="font-medium text-gray-700 dark:text-gray-300">Connexions:</div>
-              <div className="flex items-center space-x-2">
-                <div className="w-4 h-0.5 bg-blue-600"></div>
-                <span className="text-gray-600 dark:text-gray-400">Principale</span>
+            <div className="absolute bottom-4 left-4 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm p-4 rounded-lg shadow-lg text-xs space-y-3 border border-slate-200 dark:border-gray-700">
+              <div className="font-semibold text-gray-800 dark:text-gray-200">🔗 Connexions:</div>
+              <div className="flex items-center space-x-3">
+                <svg width="30" height="8">
+                  <line x1="0" y1="4" x2="25" y2="4" stroke="url(#connectionGradient)" strokeWidth="3" markerEnd="url(#arrowhead)" />
+                </svg>
+                <span className="text-gray-600 dark:text-gray-400">Flux principal</span>
               </div>
-              <div className="flex items-center space-x-2">
-                <div className="w-4 h-0.5 bg-gray-400 border-dashed" style={{ borderTopStyle: 'dashed', borderTopWidth: '1px' }}></div>
-                <span className="text-gray-600 dark:text-gray-400">Secondaire</span>
+              <div className="flex items-center space-x-3">
+                <svg width="30" height="8">
+                  <line x1="0" y1="4" x2="25" y2="4" stroke="url(#secondaryGradient)" strokeWidth="3" strokeDasharray="8,4" markerEnd="url(#arrowhead-secondary)" />
+                </svg>
+                <span className="text-gray-600 dark:text-gray-400">Flux conditionnel</span>
               </div>
             </div>
           </div>
           
-          {/* Statistiques */}
-          <div className="grid grid-cols-3 gap-4 mt-4 p-4 bg-white dark:bg-gray-900 rounded-lg border">
+          {/* Statistiques détaillées */}
+          <div className="grid grid-cols-4 gap-4 mt-6 p-4 bg-gradient-to-r from-slate-50 to-slate-100 dark:from-gray-800 dark:to-gray-900 rounded-lg border border-slate-200 dark:border-gray-700">
             <div className="text-center">
-              <div className="text-2xl font-bold text-blue-600">{nodes.length}</div>
-              <div className="text-sm text-gray-600">Nœuds</div>
+              <div className="text-3xl font-bold text-blue-600 mb-1">{nodes.length}</div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">Nœuds</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-green-600">{connections.length}</div>
-              <div className="text-sm text-gray-600">Connexions</div>
+              <div className="text-3xl font-bold text-green-600 mb-1">{connections.length}</div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">Connexions</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-purple-600">
+              <div className="text-3xl font-bold text-purple-600 mb-1">
+                {workflow.status === 'active' ? '✅' : '⏸️'}
+              </div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">
                 {workflow.status === 'active' ? 'Actif' : 'Inactif'}
               </div>
-              <div className="text-sm text-gray-600">Statut</div>
+            </div>
+            <div className="text-center">
+              <div className="text-3xl font-bold text-orange-600 mb-1">
+                {Math.round(zoom * 100)}%
+              </div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">Zoom</div>
             </div>
           </div>
         </CardContent>
       </Card>
+
+      {/* Style pour l'animation de pulsation */}
+      <style jsx>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.7; }
+        }
+      `}</style>
     </div>
   );
 };
