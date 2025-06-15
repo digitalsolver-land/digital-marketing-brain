@@ -15,7 +15,7 @@ export class AIService {
     console.log('AI Service initialized - using Supabase Edge Function');
   }
 
-  async generateContent(prompt: string, type: 'blog' | 'social' | 'email' | 'ad' | 'whatsapp', seoKeywords?: string[]): Promise<string> {
+  async generateContent(prompt: string, type: 'blog' | 'social' | 'email' | 'ad' | 'whatsapp' | 'workflow', seoKeywords?: string[]): Promise<string> {
     try {
       console.log('Calling Supabase Edge Function for content generation');
       console.log('Prompt:', prompt.substring(0, 100) + '...');

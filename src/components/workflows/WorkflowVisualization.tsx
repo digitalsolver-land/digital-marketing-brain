@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -33,6 +32,21 @@ interface WorkflowVisualizationProps {
   onExecute?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
+}
+
+// Add CSS styles at the top level
+const pulseAnimation = `
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+`;
+
+// Inject styles into document head
+if (typeof document !== 'undefined') {
+  const styleElement = document.createElement('style');
+  styleElement.textContent = pulseAnimation;
+  document.head.appendChild(styleElement);
 }
 
 export const WorkflowVisualization: React.FC<WorkflowVisualizationProps> = ({
@@ -652,14 +666,6 @@ Réponds en français de manière professionnelle et accessible.`;
           </div>
         </CardContent>
       </Card>
-
-      {/* Style pour l'animation de pulsation */}
-      <style jsx>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.7; }
-        }
-      `}</style>
     </div>
   );
 };
