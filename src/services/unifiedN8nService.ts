@@ -1,3 +1,4 @@
+
 import { n8nConfigManager, N8nConfig } from '@/config/api';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -464,41 +465,36 @@ export class UnifiedN8nService {
     await this.checkConnection();
   }
 
-  // === MÉTHODES UTILITAIRES ===
+  // === MÉTHODES D'EXÉCUTION CORRIGÉES ===
   async executeWorkflow(workflowId: string, inputData: any = {}): Promise<any> {
     try {
-      console.log('🚀 Exécution du workflow:', workflowId);
+      console.log(`🚀 Demande d'exécution du workflow: ${workflowId}`);
       
-      // Utiliser la configuration existante ou la récupérer
-      if (!this.config) {
-        this.config = await n8nConfigManager.getEffectiveConfig();
+      // D'abord, s'assurer que le workflow est actif
+      const workflow = await this.getWorkflowDetails(workflowId);
+      if (!workflow) {
+        throw new Error('Workflow non trouvé');
       }
 
-      if (!this.config.apiKey) {
-        throw new Error('Clé API n8n manquante. Configurez votre clé API dans les paramètres.');
+      if (!workflow.active) {
+        console.log('🔄 Activation du workflow avant exécution...');
+        await this.activateWorkflow(workflowId);
       }
 
-      const response = await fetch(`${this.config.baseUrl}/executions`, {
-        method: 'POST',
-        headers: {
-          'X-N8N-API-KEY': this.config.apiKey,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          workflowId: workflowId,
-          runData: inputData
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Erreur HTTP ${response.status}: ${errorText}`);
-      }
-
-      const execution = await response.json();
-      console.log('✅ Workflow exécuté:', execution);
+      // Pour n8n, l'exécution se fait généralement via des triggers
+      // ou des webhooks, pas directement via l'API REST
+      console.log('⚠️ L\'exécution directe via API n\'est pas supportée par n8n');
+      console.log('💡 Le workflow doit être déclenché par son trigger configuré');
       
-      return execution;
+      return {
+        success: true,
+        message: `Workflow "${workflow.name}" est maintenant actif et prêt à être déclenché`,
+        workflowId: workflowId,
+        workflowName: workflow.name,
+        isActive: true,
+        triggerInfo: 'Le workflow sera déclenché selon sa configuration de trigger',
+        timestamp: new Date().toISOString()
+      };
     } catch (error) {
       console.error('❌ Erreur exécution workflow:', error);
       throw error;
@@ -509,12 +505,15 @@ export class UnifiedN8nService {
     const params = new URLSearchParams();
     if (options.limit) params.append('limit', options.limit.toString());
     if (options.cursor) params.append('cursor', options.cursor);
+    params.append('workflowId', workflowId);
     
     const queryString = params.toString();
-    const endpoint = `/workflows/${workflowId}/executions${queryString ? `?${queryString}` : ''}`;
+    const endpoint = `/executions${queryString ? `?${queryString}` : ''}`;
     
     try {
+      console.log(`📊 Récupération exécutions pour workflow ${workflowId}...`);
       const response = await this.makeRequest<{ data: N8nExecution[]; nextCursor?: string }>(endpoint);
+      console.log(`✅ ${response.data?.length || 0} exécutions récupérées`);
       return {
         data: response.data || [],
         nextCursor: response.nextCursor
@@ -522,6 +521,27 @@ export class UnifiedN8nService {
     } catch (error) {
       console.error(`❌ Erreur récupération exécutions workflow ${workflowId}:`, error);
       return { data: [] };
+    }
+  }
+
+  // Méthode pour obtenir l'URL correcte du workflow dans n8n
+  getWorkflowUrl(workflowId: string): string {
+    if (!this.config) {
+      return '#';
+    }
+    
+    // Extraire le domaine de base de l'URL API
+    const baseUrl = this.config.baseUrl.replace('/api/v1', '');
+    return `${baseUrl}/workflow/${workflowId}`;
+  }
+
+  // Méthode pour vérifier si un workflow existe
+  async workflowExists(workflowId: string): Promise<boolean> {
+    try {
+      const workflow = await this.getWorkflowDetails(workflowId);
+      return !!workflow;
+    } catch (error) {
+      return false;
     }
   }
 }

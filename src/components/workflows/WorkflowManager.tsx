@@ -19,7 +19,8 @@ import {
   Eye,
   Edit,
   Trash2,
-  Search
+  Search,
+  ExternalLink
 } from 'lucide-react';
 
 import { unifiedN8nService, N8nWorkflow } from '@/services/unifiedN8nService';
@@ -237,10 +238,22 @@ export const WorkflowManager: React.FC = () => {
     setLoading(true);
     try {
       if (n8nConnected) {
-        await unifiedN8nService.executeWorkflow(workflow.id, {});
+        // Vérifier d'abord si le workflow existe
+        const exists = await unifiedN8nService.workflowExists(workflow.id);
+        if (!exists) {
+          toast({
+            variant: "destructive",
+            title: "Workflow non trouvé",
+            description: "Ce workflow n'existe pas sur votre instance n8n",
+          });
+          return;
+        }
+
+        const result = await unifiedN8nService.executeWorkflow(workflow.id, {});
+        
         toast({
-          title: "Workflow exécuté",
-          description: `Le workflow "${workflow.name}" a été exécuté avec succès`,
+          title: "Workflow prêt",
+          description: result.message || `Le workflow "${workflow.name}" est maintenant actif`,
         });
       } else {
         toast({
@@ -254,7 +267,7 @@ export const WorkflowManager: React.FC = () => {
       toast({
         variant: "destructive",
         title: "Erreur d'exécution",
-        description: "Impossible d'exécuter le workflow",
+        description: error instanceof Error ? error.message : "Impossible d'exécuter le workflow",
       });
     } finally {
       setLoading(false);
@@ -300,7 +313,8 @@ export const WorkflowManager: React.FC = () => {
 
   const openWorkflowInN8n = (workflow: N8nWorkflow) => {
     if (workflow.id && n8nConnected) {
-      const n8nUrl = `https://n8n.srv860213.hstgr.cloud/workflow/${workflow.id}`;
+      const n8nUrl = unifiedN8nService.getWorkflowUrl(workflow.id);
+      console.log('🔗 Ouverture workflow dans n8n:', n8nUrl);
       window.open(n8nUrl, '_blank');
     } else {
       toast({
@@ -472,6 +486,11 @@ export const WorkflowManager: React.FC = () => {
                           <span className="text-sm text-slate-600">
                             {workflow.nodes?.length || 0} nœud(s)
                           </span>
+                          {workflow.id && (
+                            <span className="text-xs text-slate-400">
+                              ID: {workflow.id}
+                            </span>
+                          )}
                         </div>
                       </div>
                       
@@ -501,7 +520,7 @@ export const WorkflowManager: React.FC = () => {
                             onClick={() => openWorkflowInN8n(workflow)}
                             title="Ouvrir dans n8n"
                           >
-                            <Edit className="w-4 h-4" />
+                            <ExternalLink className="w-4 h-4" />
                           </Button>
                         )}
                         
@@ -510,7 +529,7 @@ export const WorkflowManager: React.FC = () => {
                           size="sm"
                           onClick={() => executeWorkflow(workflow)}
                           disabled={loading}
-                          title="Exécuter"
+                          title="Activer/Préparer exécution"
                         >
                           <Play className="w-4 h-4" />
                         </Button>
