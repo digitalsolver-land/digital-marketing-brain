@@ -1,4 +1,3 @@
-
 import { supabase } from '@/integrations/supabase/client';
 import { Workflow } from '@/types/platform';
 
@@ -75,7 +74,7 @@ class WorkflowService {
           user_id: user.id,
           name: jsonData.name,
           description: `Workflow importé avec ${jsonData.nodes?.length || 0} nœuds`,
-          json_data: jsonData,
+          json_data: jsonData as any,
           status: 'inactive',
           tags: jsonData.tags?.map(tag => tag.name) || []
         })
@@ -149,6 +148,89 @@ class WorkflowService {
     } catch (error) {
       console.error('Erreur création workflow:', error);
       throw new Error('Impossible de créer le workflow');
+    }
+  }
+
+  async updateWorkflowJSON(workflowId: string, jsonData: N8nWorkflowJSON): Promise<void> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      // Mettre à jour le workflow
+      const { error: workflowError } = await supabase
+        .from('workflows')
+        .update({
+          json_data: jsonData as any,
+          name: jsonData.name,
+          tags: jsonData.tags?.map(tag => tag.name) || []
+        })
+        .eq('id', workflowId)
+        .eq('user_id', user.id);
+
+      if (workflowError) throw workflowError;
+
+      // Supprimer les anciens nœuds et connexions
+      await supabase
+        .from('workflow_nodes')
+        .delete()
+        .eq('workflow_id', workflowId);
+
+      await supabase
+        .from('workflow_connections')
+        .delete()
+        .eq('workflow_id', workflowId);
+
+      // Recréer les nœuds
+      if (jsonData.nodes && jsonData.nodes.length > 0) {
+        const nodes = jsonData.nodes.map(node => ({
+          workflow_id: workflowId,
+          node_id: node.id,
+          node_type: node.type,
+          name: node.name,
+          position_x: node.position[0],
+          position_y: node.position[1],
+          parameters: node.parameters || {}
+        }));
+
+        const { error: nodesError } = await supabase
+          .from('workflow_nodes')
+          .insert(nodes);
+
+        if (nodesError) throw nodesError;
+      }
+
+      // Recréer les connexions
+      if (jsonData.connections) {
+        const connections: any[] = [];
+        
+        Object.entries(jsonData.connections).forEach(([sourceNodeId, nodeConnections]) => {
+          if (nodeConnections.main) {
+            nodeConnections.main.forEach((connectionGroup, sourceIndex) => {
+              connectionGroup.forEach(connection => {
+                connections.push({
+                  workflow_id: workflowId,
+                  source_node_id: sourceNodeId,
+                  target_node_id: connection.node,
+                  source_index: sourceIndex,
+                  target_index: connection.index,
+                  connection_type: connection.type
+                });
+              });
+            });
+          }
+        });
+
+        if (connections.length > 0) {
+          const { error: connectionsError } = await supabase
+            .from('workflow_connections')
+            .insert(connections);
+
+          if (connectionsError) throw connectionsError;
+        }
+      }
+    } catch (error) {
+      console.error('Erreur mise à jour workflow:', error);
+      throw new Error('Impossible de mettre à jour le workflow');
     }
   }
 

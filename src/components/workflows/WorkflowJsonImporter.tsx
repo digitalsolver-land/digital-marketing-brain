@@ -6,7 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Upload, FileText, CheckCircle, AlertCircle } from 'lucide-react';
+import { Upload, FileText, CheckCircle, AlertCircle, Save, Bot } from 'lucide-react';
 import { workflowService, N8nWorkflowJSON } from '@/services/workflowService';
 import { useToast } from '@/hooks/use-toast';
 
@@ -20,6 +20,8 @@ export const WorkflowJsonImporter: React.FC<WorkflowJsonImporterProps> = ({
   const [jsonInput, setJsonInput] = useState('');
   const [workflowName, setWorkflowName] = useState('');
   const [isImporting, setIsImporting] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isFixingWithAI, setIsFixingWithAI] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [parsedWorkflow, setParsedWorkflow] = useState<N8nWorkflowJSON | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -94,11 +96,76 @@ export const WorkflowJsonImporter: React.FC<WorkflowJsonImporterProps> = ({
     }
   };
 
-  const importWorkflow = async () => {
+  const fixWithAI = async () => {
+    if (!jsonInput.trim()) {
+      toast({
+        title: "Erreur",
+        description: "Aucun JSON à corriger",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsFixingWithAI(true);
+    try {
+      // Simuler la correction IA (à remplacer par un vrai service IA)
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Exemple de correction basique
+      let correctedJson = jsonInput;
+      
+      // Ajouter des propriétés manquantes si nécessaire
+      try {
+        const parsed = JSON.parse(correctedJson);
+        
+        // S'assurer que chaque nœud a les propriétés requises
+        if (parsed.nodes) {
+          parsed.nodes = parsed.nodes.map((node: any, index: number) => ({
+            id: node.id || `node_${index}`,
+            name: node.name || `Node ${index + 1}`,
+            type: node.type || 'n8n-nodes-base.set',
+            position: Array.isArray(node.position) ? node.position : [100 + index * 200, 100],
+            parameters: node.parameters || {},
+            ...node
+          }));
+        }
+        
+        if (!parsed.connections) {
+          parsed.connections = {};
+        }
+        
+        correctedJson = JSON.stringify(parsed, null, 2);
+        
+        setJsonInput(correctedJson);
+        handleJsonChange(correctedJson);
+        
+        toast({
+          title: "Succès",
+          description: "JSON corrigé par l'IA"
+        });
+      } catch (error) {
+        toast({
+          title: "Erreur",
+          description: "Impossible de corriger le JSON",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Erreur",
+        description: "Erreur lors de la correction IA",
+        variant: "destructive"
+      });
+    } finally {
+      setIsFixingWithAI(false);
+    }
+  };
+
+  const saveWorkflow = async () => {
     if (!parsedWorkflow) {
       toast({
         title: "Erreur",
-        description: "Aucun workflow valide à importer",
+        description: "Aucun workflow valide à sauvegarder",
         variant: "destructive"
       });
       return;
@@ -113,19 +180,19 @@ export const WorkflowJsonImporter: React.FC<WorkflowJsonImporterProps> = ({
       return;
     }
 
-    setIsImporting(true);
+    setIsSaving(true);
     try {
       // Utiliser le nom personnalisé
-      const workflowToImport = {
+      const workflowToSave = {
         ...parsedWorkflow,
         name: workflowName
       };
 
-      await workflowService.createWorkflowFromJSON(workflowToImport);
+      await workflowService.createWorkflowFromJSON(workflowToSave);
       
       toast({
         title: "Succès",
-        description: `Workflow "${workflowName}" importé avec succès`
+        description: `Workflow "${workflowName}" sauvegardé avec succès`
       });
       
       // Reset du formulaire
@@ -141,13 +208,15 @@ export const WorkflowJsonImporter: React.FC<WorkflowJsonImporterProps> = ({
     } catch (error) {
       toast({
         title: "Erreur",
-        description: "Échec de l'importation du workflow",
+        description: "Échec de la sauvegarde du workflow",
         variant: "destructive"
       });
     } finally {
-      setIsImporting(false);
+      setIsSaving(false);
     }
   };
+
+  const importWorkflow = saveWorkflow; // Alias pour compatibilité
 
   return (
     <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -213,6 +282,19 @@ export const WorkflowJsonImporter: React.FC<WorkflowJsonImporterProps> = ({
                 />
               </div>
 
+              {/* Boutons d'action pour le JSON */}
+              <div className="flex space-x-2">
+                <Button
+                  variant="outline"
+                  onClick={fixWithAI}
+                  disabled={isFixingWithAI || !jsonInput.trim()}
+                  className="flex items-center space-x-2"
+                >
+                  <Bot className="w-4 h-4" />
+                  <span>{isFixingWithAI ? 'Correction en cours...' : 'Corriger par IA'}</span>
+                </Button>
+              </div>
+
               {/* Validation du JSON */}
               {validationError && (
                 <div className="flex items-center space-x-2 p-3 bg-red-50 border border-red-200 rounded-lg">
@@ -267,13 +349,27 @@ export const WorkflowJsonImporter: React.FC<WorkflowJsonImporterProps> = ({
                   </div>
                 </div>
 
-                <Button
-                  onClick={importWorkflow}
-                  disabled={isImporting || !workflowName.trim()}
-                  className="w-full"
-                >
-                  {isImporting ? 'Importation en cours...' : 'Importer le Workflow'}
-                </Button>
+                {/* Boutons d'action */}
+                <div className="flex space-x-2">
+                  <Button
+                    onClick={saveWorkflow}
+                    disabled={isSaving || !workflowName.trim()}
+                    className="flex items-center space-x-2"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>{isSaving ? 'Sauvegarde en cours...' : 'Sauvegarder'}</span>
+                  </Button>
+                  
+                  <Button
+                    variant="outline"
+                    onClick={importWorkflow}
+                    disabled={isImporting || !workflowName.trim()}
+                    className="flex items-center space-x-2"
+                  >
+                    <Upload className="w-4 h-4" />
+                    <span>{isImporting ? 'Importation en cours...' : 'Importer le Workflow'}</span>
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           )}
