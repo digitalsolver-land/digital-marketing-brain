@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -62,11 +61,6 @@ export const WorkflowVisualization: React.FC<WorkflowVisualizationProps> = ({
     console.log('Connections:', connections);
     console.log('Nodes count:', nodes.length);
     console.log('Connections count:', connections.length);
-    
-    if (nodes.length > 0) {
-      const bounds = getCanvasBounds();
-      console.log('Canvas bounds:', bounds);
-    }
   }, [workflow, nodes, connections]);
 
   const handleZoomIn = () => setZoom(prev => Math.min(prev * 1.2, 3));
@@ -74,7 +68,6 @@ export const WorkflowVisualization: React.FC<WorkflowVisualizationProps> = ({
   const handleResetView = () => { 
     setZoom(1); 
     setPan({ x: 0, y: 0 }); 
-    console.log('Vue réinitialisée');
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -193,46 +186,11 @@ Réponds en français de manière professionnelle et accessible.`;
     return '⚡';
   };
 
-  // Calcul des dimensions du canvas
-  const getCanvasBounds = () => {
-    if (nodes.length === 0) {
-      return { 
-        width: 1200, 
-        height: 800, 
-        minX: 0, 
-        minY: 0, 
-        maxX: 1200, 
-        maxY: 800 
-      };
-    }
-
-    const positions = nodes.map(n => ({
-      x: n.position_x || 0,
-      y: n.position_y || 0
-    }));
-
-    const minX = Math.min(...positions.map(p => p.x)) - 200;
-    const maxX = Math.max(...positions.map(p => p.x)) + 400;
-    const minY = Math.min(...positions.map(p => p.y)) - 200;
-    const maxY = Math.max(...positions.map(p => p.y)) + 300;
-    
-    const width = Math.max(1200, maxX - minX);
-    const height = Math.max(800, maxY - minY);
-    
-    console.log('Canvas bounds calculés:', { width, height, minX, minY, maxX, maxY });
-    
-    return { width, height, minX, minY, maxX, maxY };
-  };
-
   // Fonction pour créer les connexions
   const createConnectionElements = () => {
     const connectionElements: JSX.Element[] = [];
     
-    console.log('=== CRÉATION DES CONNEXIONS ===');
-    console.log('Nombre de connexions à traiter:', connections.length);
-    
     connections.forEach((connection, index) => {
-      // Recherche des nœuds
       const sourceNode = nodes.find(n => 
         n.node_id === connection.source_node_id || 
         n.id === connection.source_node_id
@@ -244,19 +202,15 @@ Réponds en français de manière professionnelle et accessible.`;
       );
 
       if (!sourceNode || !targetNode) {
-        console.warn(`Connexion ${index} ignorée - nœuds manquants`);
         return;
       }
 
-      // Positions des connexions
-      const x1 = (sourceNode.position_x || 0) + 120; // Sortie du nœud source
-      const y1 = (sourceNode.position_y || 0) + 40;  // Centre vertical
-      const x2 = (targetNode.position_x || 0);       // Entrée du nœud cible  
-      const y2 = (targetNode.position_y || 0) + 40;  // Centre vertical
+      // Calculer les positions réelles avec les offsets
+      const x1 = (sourceNode.position_x || 0) + 500 + 120; // Sortie du nœud source
+      const y1 = (sourceNode.position_y || 0) + 300 + 40;  // Centre vertical
+      const x2 = (targetNode.position_x || 0) + 500;       // Entrée du nœud cible  
+      const y2 = (targetNode.position_y || 0) + 300 + 40;  // Centre vertical
 
-      console.log(`Connexion ${index}: ${sourceNode.name} (${x1},${y1}) → ${targetNode.name} (${x2},${y2})`);
-
-      // Ligne de connexion
       connectionElements.push(
         <g key={`connection-${connection.id}-${index}`}>
           <line
@@ -264,20 +218,16 @@ Réponds en français de manière professionnelle et accessible.`;
             y1={y1}
             x2={x2}
             y2={y2}
-            stroke="#ff0000"
-            strokeWidth="4"
+            stroke="#ff4444"
+            strokeWidth="3"
             markerEnd="url(#arrowhead)"
           />
         </g>
       );
     });
     
-    console.log(`${connectionElements.length} connexion(s) créée(s) avec succès`);
     return connectionElements;
   };
-
-  // Calcul des bounds du canvas - CORRIGÉ
-  const canvasBounds = getCanvasBounds();
 
   // Affichage de débogage si pas de données
   if (!workflow || nodes.length === 0) {
@@ -428,69 +378,65 @@ Réponds en français de manière professionnelle et accessible.`;
               userSelect: 'none' 
             }}
           >
-            {/* Conteneur avec transformation */}
-            <div 
+            {/* SVG avec dimensions fixes et zoom simple */}
+            <svg
+              ref={svgRef}
+              width="100%"
+              height="100%"
+              viewBox="0 0 2000 1400"
+              className="bg-white"
               style={{
                 transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
                 transformOrigin: 'center center',
-                transition: isDragging ? 'none' : 'transform 0.1s ease-out',
-                width: '100%',
-                height: '100%'
+                transition: isDragging ? 'none' : 'transform 0.1s ease-out'
               }}
             >
-              {/* SVG CANVAS */}
-              <svg
-                ref={svgRef}
-                width="100%"
-                height="100%"
-                viewBox={`0 0 ${canvasBounds.width} ${canvasBounds.height}`}
-                className="bg-white"
-                style={{ 
-                  minWidth: canvasBounds.width, 
-                  minHeight: canvasBounds.height 
-                }}
-              >
-                {/* Définitions des marqueurs */}
-                <defs>
-                  <marker
-                    id="arrowhead"
-                    markerWidth="10"
-                    markerHeight="7"
-                    refX="9"
-                    refY="3.5"
-                    orient="auto"
-                    markerUnits="strokeWidth"
-                  >
-                    <polygon
-                      points="0 0, 10 3.5, 0 7"
-                      fill="#ff0000"
-                      stroke="#000000"
-                      strokeWidth="1"
-                    />
-                  </marker>
-                </defs>
+              {/* Définitions des marqueurs */}
+              <defs>
+                <marker
+                  id="arrowhead"
+                  markerWidth="10"
+                  markerHeight="7"
+                  refX="9"
+                  refY="3.5"
+                  orient="auto"
+                  markerUnits="strokeWidth"
+                >
+                  <polygon
+                    points="0 0, 10 3.5, 0 7"
+                    fill="#ff4444"
+                    stroke="#000000"
+                    strokeWidth="1"
+                  />
+                </marker>
+              </defs>
 
-                {/* Grille de fond */}
-                <defs>
-                  <pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse">
-                    <path d="M 50 0 L 0 0 0 50" fill="none" stroke="#e5e7eb" strokeWidth="1"/>
-                  </pattern>
-                </defs>
-                <rect width="100%" height="100%" fill="url(#grid)" />
+              {/* Grille de fond */}
+              <defs>
+                <pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse">
+                  <path d="M 50 0 L 0 0 0 50" fill="none" stroke="#e5e7eb" strokeWidth="1"/>
+                </pattern>
+              </defs>
+              <rect width="100%" height="100%" fill="url(#grid)" />
 
-                {/* CONNEXIONS EN PREMIER */}
-                <g id="connections-layer">
-                  {createConnectionElements()}
-                </g>
+              {/* CONNEXIONS */}
+              <g id="connections-layer">
+                {createConnectionElements()}
+              </g>
 
-                {/* NŒUDS EN SECOND */}
-                <g id="nodes-layer">
-                  {nodes.map((node, index) => (
+              {/* NŒUDS */}
+              <g id="nodes-layer">
+                {nodes.map((node, index) => {
+                  // Position avec offset pour centrer le workflow
+                  const nodeX = (node.position_x || 0) + 500;
+                  const nodeY = (node.position_y || 0) + 300;
+                  
+                  return (
                     <g key={`node-${node.id || node.node_id}-${index}`}>
                       {/* Rectangle du nœud */}
                       <rect
-                        x={node.position_x || 0}
-                        y={node.position_y || 0}
+                        x={nodeX}
+                        y={nodeY}
                         width="120"
                         height="80"
                         rx="8"
@@ -502,28 +448,28 @@ Réponds en français de manière professionnelle et accessible.`;
                       
                       {/* Point de connexion d'entrée */}
                       <circle
-                        cx={(node.position_x || 0)}
-                        cy={(node.position_y || 0) + 40}
+                        cx={nodeX}
+                        cy={nodeY + 40}
                         r="5"
-                        fill="#0000ff"
+                        fill="#0066ff"
                         stroke="#ffffff"
                         strokeWidth="2"
                       />
                       
                       {/* Point de connexion de sortie */}
                       <circle
-                        cx={(node.position_x || 0) + 120}
-                        cy={(node.position_y || 0) + 40}
+                        cx={nodeX + 120}
+                        cy={nodeY + 40}
                         r="5"
-                        fill="#ff0000"
+                        fill="#ff4444"
                         stroke="#ffffff"
                         strokeWidth="2"
                       />
                       
                       {/* Icône du nœud */}
                       <text
-                        x={(node.position_x || 0) + 20}
-                        y={(node.position_y || 0) + 45}
+                        x={nodeX + 20}
+                        y={nodeY + 45}
                         fontSize="16"
                         fill="white"
                         textAnchor="middle"
@@ -534,8 +480,8 @@ Réponds en français de manière professionnelle et accessible.`;
                       
                       {/* Nom du nœud */}
                       <text
-                        x={(node.position_x || 0) + 70}
-                        y={(node.position_y || 0) + 35}
+                        x={nodeX + 70}
+                        y={nodeY + 35}
                         fontSize="11"
                         fill="white"
                         textAnchor="middle"
@@ -547,8 +493,8 @@ Réponds en français de manière professionnelle et accessible.`;
                       
                       {/* Type du nœud */}
                       <text
-                        x={(node.position_x || 0) + 70}
-                        y={(node.position_y || 0) + 55}
+                        x={nodeX + 70}
+                        y={nodeY + 55}
                         fontSize="8"
                         fill="rgba(255,255,255,0.8)"
                         textAnchor="middle"
@@ -557,10 +503,10 @@ Réponds en français de manière professionnelle et accessible.`;
                         {node.node_type.split('.').pop()?.substring(0, 12)}
                       </text>
                     </g>
-                  ))}
-                </g>
-              </svg>
-            </div>
+                  );
+                })}
+              </g>
+            </svg>
             
             {/* Instructions d'utilisation */}
             <div className="absolute top-4 left-4 bg-white/95 backdrop-blur-sm p-3 rounded-lg shadow-lg text-xs space-y-1 border">
@@ -576,7 +522,6 @@ Réponds en français de manière professionnelle et accessible.`;
               <div className="text-gray-600">Nœuds: {nodes.length}</div>
               <div className="text-gray-600">Connexions: {connections.length}</div>
               <div className="text-gray-600">Zoom: {Math.round(zoom * 100)}%</div>
-              <div className="text-gray-600">Canvas: {canvasBounds.width}x{canvasBounds.height}</div>
             </div>
           </div>
         </CardContent>
