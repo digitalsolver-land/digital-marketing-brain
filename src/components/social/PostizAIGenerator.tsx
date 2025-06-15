@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { Sparkles, Copy, RefreshCw, Plus } from 'lucide-react';
 import { aiService } from '@/services/aiService';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface PostizAIGeneratorProps {
   onContentGenerated: (content: string, type: string) => void;
@@ -68,12 +69,34 @@ const contentTemplates: ContentTemplate[] = [
 ];
 
 export const PostizAIGenerator = ({ onContentGenerated }: PostizAIGeneratorProps) => {
+  const { user } = useAuth();
   const [selectedType, setSelectedType] = useState<ContentType>('social');
   const [customPrompt, setCustomPrompt] = useState('');
   const [seoKeywords, setSeoKeywords] = useState('');
   const [generatedContent, setGeneratedContent] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isAIConfigured, setIsAIConfigured] = useState(false);
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (user) {
+      initializeAI();
+    }
+  }, [user]);
+
+  const initializeAI = async () => {
+    if (!user) return;
+    
+    try {
+      console.log('Initializing AI service for user:', user.id);
+      await aiService.initialize(user.id);
+      setIsAIConfigured(true);
+      console.log('AI service initialized successfully');
+    } catch (error) {
+      console.error('Error initializing AI service:', error);
+      setIsAIConfigured(false);
+    }
+  };
 
   const handleGenerate = async (prompt?: string) => {
     const finalPrompt = prompt || customPrompt;
@@ -86,10 +109,21 @@ export const PostizAIGenerator = ({ onContentGenerated }: PostizAIGeneratorProps
       return;
     }
 
+    if (!isAIConfigured) {
+      toast({
+        title: "IA non configurée",
+        description: "Veuillez configurer votre clé API OpenRouter dans les paramètres",
+        variant: "destructive"
+      });
+      return;
+    }
+
     setLoading(true);
     try {
+      console.log('Generating content with prompt:', finalPrompt);
       const keywords = seoKeywords.split(',').map(k => k.trim()).filter(Boolean);
       const content = await aiService.generateContent(finalPrompt, selectedType, keywords);
+      console.log('Content generated successfully:', content.substring(0, 100) + '...');
       setGeneratedContent(content);
       
       toast({
@@ -97,9 +131,10 @@ export const PostizAIGenerator = ({ onContentGenerated }: PostizAIGeneratorProps
         description: "Le contenu a été généré avec succès"
       });
     } catch (error) {
+      console.error('Error generating content:', error);
       toast({
         title: "Erreur",
-        description: "Impossible de générer le contenu",
+        description: error instanceof Error ? error.message : "Impossible de générer le contenu",
         variant: "destructive"
       });
     } finally {
@@ -131,9 +166,24 @@ export const PostizAIGenerator = ({ onContentGenerated }: PostizAIGeneratorProps
         <CardTitle className="flex items-center space-x-2">
           <Sparkles className="w-5 h-5 text-purple-500" />
           <span>Générateur de Contenu IA</span>
+          {!isAIConfigured && (
+            <Badge variant="destructive">Non configuré</Badge>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
+        {!isAIConfigured && (
+          <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+            <div className="flex items-center space-x-2 text-orange-800">
+              <Sparkles className="w-4 h-4" />
+              <span className="font-medium">Configuration requise</span>
+            </div>
+            <p className="text-sm text-orange-700 mt-1">
+              Configurez votre clé API OpenRouter dans les paramètres pour utiliser l'IA.
+            </p>
+          </div>
+        )}
+
         {/* Type de contenu */}
         <div className="space-y-2">
           <Label>Type de contenu</Label>
@@ -169,7 +219,7 @@ export const PostizAIGenerator = ({ onContentGenerated }: PostizAIGeneratorProps
                     size="sm"
                     variant="ghost"
                     onClick={() => handleGenerate(prompt)}
-                    disabled={loading}
+                    disabled={loading || !isAIConfigured}
                   >
                     <Sparkles className="w-3 h-3" />
                   </Button>
@@ -206,7 +256,7 @@ export const PostizAIGenerator = ({ onContentGenerated }: PostizAIGeneratorProps
         {/* Bouton de génération */}
         <Button 
           onClick={() => handleGenerate()}
-          disabled={loading || !customPrompt.trim()}
+          disabled={loading || !customPrompt.trim() || !isAIConfigured}
           className="w-full"
         >
           {loading ? (
