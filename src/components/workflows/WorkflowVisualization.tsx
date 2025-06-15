@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -54,25 +53,42 @@ export const WorkflowVisualization: React.FC<WorkflowVisualizationProps> = ({
   const [analysis, setAnalysis] = useState<string>('');
   const { toast } = useToast();
 
-  // Debug: Log connections avec plus de détails
+  // Debug complet des connexions
   useEffect(() => {
-    console.log('=== DEBUGGING CONNECTIONS ===');
-    console.log('Total nodes:', nodes.length);
-    console.log('Total connections:', connections.length);
+    console.log('=== ANALYSE COMPLÈTE DES CONNEXIONS ===');
+    console.log('Nombre de nœuds:', nodes.length);
+    console.log('Nombre de connexions:', connections.length);
     
+    // Vérifier chaque nœud
+    nodes.forEach((node, index) => {
+      console.log(`Nœud ${index}:`, {
+        id: node.id,
+        node_id: node.node_id,
+        name: node.name,
+        type: node.node_type,
+        position: { x: node.position_x, y: node.position_y }
+      });
+    });
+    
+    // Vérifier chaque connexion
     connections.forEach((conn, index) => {
       const sourceNode = nodes.find(n => n.node_id === conn.source_node_id);
       const targetNode = nodes.find(n => n.node_id === conn.target_node_id);
       
-      console.log(`Connection ${index}:`, {
+      console.log(`Connexion ${index}:`, {
         id: conn.id,
-        source_id: conn.source_node_id,
-        target_id: conn.target_node_id,
-        source_exists: !!sourceNode,
-        target_exists: !!targetNode,
-        source_position: sourceNode ? { x: sourceNode.position_x, y: sourceNode.position_y } : 'NOT FOUND',
-        target_position: targetNode ? { x: targetNode.position_x, y: targetNode.position_y } : 'NOT FOUND'
+        source_node_id: conn.source_node_id,
+        target_node_id: conn.target_node_id,
+        source_found: !!sourceNode,
+        target_found: !!targetNode,
+        connection_type: conn.connection_type
       });
+      
+      if (sourceNode && targetNode) {
+        console.log(`  -> Connexion VALIDE: ${sourceNode.name} → ${targetNode.name}`);
+      } else {
+        console.log(`  -> Connexion INVALIDE: nœud source ou cible introuvable`);
+      }
     });
   }, [nodes, connections]);
 
@@ -196,64 +212,119 @@ Réponds en français de manière professionnelle et accessible.`;
     return '⚡';
   };
 
+  // Fonction pour créer les connexions - VERSION SIMPLIFIÉE ET GARANTIE
+  const createConnectionElements = () => {
+    const connectionElements: JSX.Element[] = [];
+    
+    console.log('=== CRÉATION DES CONNEXIONS ===');
+    
+    connections.forEach((connection, index) => {
+      // Recherche des nœuds avec plusieurs critères
+      const sourceNode = nodes.find(n => 
+        n.node_id === connection.source_node_id || 
+        n.id === connection.source_node_id
+      );
+      
+      const targetNode = nodes.find(n => 
+        n.node_id === connection.target_node_id || 
+        n.id === connection.target_node_id
+      );
+
+      if (!sourceNode || !targetNode) {
+        console.warn(`Connexion ${index} ignorée - nœuds manquants:`, {
+          source_id: connection.source_node_id,
+          target_id: connection.target_node_id,
+          source_found: !!sourceNode,
+          target_found: !!targetNode
+        });
+        return;
+      }
+
+      // Calcul des positions SIMPLES
+      const x1 = sourceNode.position_x + 140; // Sortie du nœud source
+      const y1 = sourceNode.position_y + 40;  // Centre vertical
+      const x2 = targetNode.position_x;       // Entrée du nœud cible  
+      const y2 = targetNode.position_y + 40;  // Centre vertical
+
+      console.log(`Connexion ${index} créée:`, {
+        from: `${sourceNode.name} (${x1}, ${y1})`,
+        to: `${targetNode.name} (${x2}, ${y2})`
+      });
+
+      // Couleur selon le type
+      const isMainConnection = !connection.connection_type || connection.connection_type === 'main';
+      const strokeColor = isMainConnection ? '#ff0000' : '#0000ff'; // Rouge vif ou bleu vif
+      
+      // Élément de connexion
+      connectionElements.push(
+        <g key={`connection-${connection.id}-${index}`}>
+          {/* Ligne de fond noire pour contraste */}
+          <line
+            x1={x1}
+            y1={y1}
+            x2={x2}
+            y2={y2}
+            stroke="#000000"
+            strokeWidth="8"
+            opacity="0.3"
+          />
+          
+          {/* Ligne principale colorée */}
+          <line
+            x1={x1}
+            y1={y1}
+            x2={x2}
+            y2={y2}
+            stroke={strokeColor}
+            strokeWidth="4"
+            strokeDasharray={isMainConnection ? "none" : "10,5"}
+            markerEnd="url(#arrowhead)"
+          />
+          
+          {/* Ligne d'animation blanche */}
+          <line
+            x1={x1}
+            y1={y1}
+            x2={x2}
+            y2={y2}
+            stroke="#ffffff"
+            strokeWidth="2"
+            strokeDasharray="8,12"
+            opacity="0.8"
+          >
+            <animate
+              attributeName="stroke-dashoffset"
+              values="20;0"
+              dur="2s"
+              repeatCount="indefinite"
+            />
+          </line>
+        </g>
+      );
+    });
+    
+    console.log(`${connectionElements.length} connexion(s) créée(s)`);
+    return connectionElements;
+  };
+
   // Calcul des dimensions du canvas
   const getCanvasBounds = () => {
     if (nodes.length === 0) {
-      return { minX: 0, maxX: 1200, minY: 0, maxY: 800, width: 1200, height: 800 };
+      return { width: 1200, height: 800 };
     }
 
-    const minX = Math.min(...nodes.map(n => n.position_x)) - 300;
-    const maxX = Math.max(...nodes.map(n => n.position_x)) + 500;
-    const minY = Math.min(...nodes.map(n => n.position_y)) - 300;
-    const maxY = Math.max(...nodes.map(n => n.position_y)) + 500;
+    const minX = Math.min(...nodes.map(n => n.position_x)) - 100;
+    const maxX = Math.max(...nodes.map(n => n.position_x)) + 300;
+    const minY = Math.min(...nodes.map(n => n.position_y)) - 100;
+    const maxY = Math.max(...nodes.map(n => n.position_y)) + 200;
     
     return {
-      minX,
-      maxX,
-      minY,
-      maxY,
       width: maxX - minX,
       height: maxY - minY
     };
   };
 
   const canvasBounds = getCanvasBounds();
-
-  // Fonction SIMPLIFIÉE pour créer les chemins de connexion
-  const createConnectionPath = (connection: WorkflowConnection): string | null => {
-    // Recherche robuste des nœuds
-    const sourceNode = nodes.find(n => 
-      n.node_id === connection.source_node_id || 
-      n.id === connection.source_node_id
-    );
-    
-    const targetNode = nodes.find(n => 
-      n.node_id === connection.target_node_id || 
-      n.id === connection.target_node_id
-    );
-
-    if (!sourceNode || !targetNode) {
-      console.warn(`Nœuds manquants pour connexion ${connection.id}:`, {
-        source: connection.source_node_id,
-        target: connection.target_node_id,
-        sourceFound: !!sourceNode,
-        targetFound: !!targetNode
-      });
-      return null;
-    }
-
-    // Points de connexion SIMPLIFIÉS
-    const startX = sourceNode.position_x + 140; // Sortie à droite du nœud
-    const startY = sourceNode.position_y + 40;  // Centre vertical
-    const endX = targetNode.position_x;         // Entrée à gauche du nœud
-    const endY = targetNode.position_y + 40;    // Centre vertical
-
-    // LIGNE DROITE pour test - pas de courbe complexe
-    const path = `M ${startX} ${startY} L ${endX} ${endY}`;
-    
-    console.log(`Connexion ${connection.id} path:`, path);
-    return path;
-  };
 
   const transformStyle = {
     transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
@@ -393,107 +464,37 @@ Réponds en français de manière professionnelle et accessible.`;
                 ref={svgRef}
                 width={canvasBounds.width}
                 height={canvasBounds.height}
-                viewBox={`${canvasBounds.minX} ${canvasBounds.minY} ${canvasBounds.width} ${canvasBounds.height}`}
-                className="w-full h-full"
-                style={{ 
-                  background: 'white',
-                  border: '1px solid #e2e8f0'
-                }}
+                className="w-full h-full bg-white border border-gray-300"
+                style={{ minWidth: '100%', minHeight: '100%' }}
               >
-                {/* Définitions des marqueurs pour les flèches */}
+                {/* Définition des marqueurs de flèches */}
                 <defs>
                   <marker
-                    id="arrowhead-red"
-                    markerWidth="12"
-                    markerHeight="8"
-                    refX="12"
-                    refY="4"
+                    id="arrowhead"
+                    markerWidth="10"
+                    markerHeight="7"
+                    refX="9"
+                    refY="3.5"
                     orient="auto"
-                    markerUnits="strokeWidth"
                   >
-                    <path
-                      d="M0,0 L0,8 L12,4 z"
-                      fill="#dc2626"
-                      stroke="#dc2626"
-                      strokeWidth="1"
-                    />
-                  </marker>
-                  
-                  <marker
-                    id="arrowhead-blue"
-                    markerWidth="12"
-                    markerHeight="8"
-                    refX="12"
-                    refY="4"
-                    orient="auto"
-                    markerUnits="strokeWidth"
-                  >
-                    <path
-                      d="M0,0 L0,8 L12,4 z"
-                      fill="#2563eb"
-                      stroke="#2563eb"
+                    <polygon
+                      points="0 0, 10 3.5, 0 7"
+                      fill="#ff0000"
+                      stroke="#000000"
                       strokeWidth="1"
                     />
                   </marker>
                 </defs>
 
-                {/* RENDU DES CONNEXIONS EN PREMIER */}
+                {/* RENDU DES CONNEXIONS */}
                 <g id="connections-layer">
-                  {connections.map((connection, index) => {
-                    const path = createConnectionPath(connection);
-                    if (!path) return null;
-                    
-                    const isMainConnection = !connection.connection_type || connection.connection_type === 'main';
-                    const strokeColor = isMainConnection ? '#dc2626' : '#2563eb'; // Rouge ou bleu
-                    const markerId = isMainConnection ? 'arrowhead-red' : 'arrowhead-blue';
-                    
-                    return (
-                      <g key={`connection-${connection.id}-${index}`}>
-                        {/* Ligne de fond pour contraste */}
-                        <path
-                          d={path}
-                          stroke="#000000"
-                          strokeWidth="8"
-                          fill="none"
-                          opacity="0.3"
-                        />
-                        
-                        {/* Ligne principale */}
-                        <path
-                          d={path}
-                          stroke={strokeColor}
-                          strokeWidth="4"
-                          fill="none"
-                          strokeDasharray={isMainConnection ? "none" : "8,4"}
-                          markerEnd={`url(#${markerId})`}
-                          opacity="0.9"
-                        />
-                        
-                        {/* Ligne d'animation */}
-                        <path
-                          d={path}
-                          stroke="#ffffff"
-                          strokeWidth="2"
-                          fill="none"
-                          strokeDasharray="6,12"
-                          opacity="0.7"
-                        >
-                          <animate
-                            attributeName="stroke-dashoffset"
-                            values="18;0"
-                            dur="2s"
-                            repeatCount="indefinite"
-                          />
-                        </path>
-                      </g>
-                    );
-                  })}
+                  {createConnectionElements()}
                 </g>
 
-                {/* RENDU DES NŒUDS EN SECOND */}
+                {/* RENDU DES NŒUDS */}
                 <g id="nodes-layer">
                   {nodes.map((node, index) => (
-                    <g key={`node-${node.id}-${index}`}>
+                    <g key={`node-${node.id || node.node_id}-${index}`}>
                       {/* Rectangle du nœud */}
                       <rect
                         x={node.position_x}
@@ -504,27 +505,25 @@ Réponds en français de manière professionnelle et accessible.`;
                         fill={getNodeColor(node.node_type)}
                         stroke="#ffffff"
                         strokeWidth="3"
-                        style={{
-                          filter: 'drop-shadow(2px 4px 8px rgba(0,0,0,0.3))'
-                        }}
+                        filter="drop-shadow(2px 4px 8px rgba(0,0,0,0.3))"
                       />
                       
-                      {/* Points de connexion d'entrée (gauche) */}
+                      {/* Point de connexion d'entrée (gauche) */}
                       <circle
                         cx={node.position_x}
                         cy={node.position_y + 40}
                         r="6"
-                        fill="#2563eb"
+                        fill="#0000ff"
                         stroke="#ffffff"
                         strokeWidth="2"
                       />
                       
-                      {/* Points de connexion de sortie (droite) */}
+                      {/* Point de connexion de sortie (droite) */}
                       <circle
                         cx={node.position_x + 140}
                         cy={node.position_y + 40}
                         r="6"
-                        fill="#dc2626"
+                        fill="#ff0000"
                         stroke="#ffffff"
                         strokeWidth="2"
                       />
@@ -536,7 +535,7 @@ Réponds en français de manière professionnelle et accessible.`;
                         fontSize="18"
                         fill="white"
                         textAnchor="middle"
-                        style={{ pointerEvents: 'none' }}
+                        dominantBaseline="middle"
                       >
                         {getNodeIcon(node.node_type)}
                       </text>
@@ -549,7 +548,7 @@ Réponds en français de manière professionnelle et accessible.`;
                         fill="white"
                         textAnchor="middle"
                         fontWeight="bold"
-                        style={{ pointerEvents: 'none' }}
+                        dominantBaseline="middle"
                       >
                         {node.name.length > 12 ? `${node.name.substring(0, 12)}...` : node.name}
                       </text>
@@ -561,7 +560,7 @@ Réponds en français de manière professionnelle et accessible.`;
                         fontSize="9"
                         fill="rgba(255,255,255,0.8)"
                         textAnchor="middle"
-                        style={{ pointerEvents: 'none' }}
+                        dominantBaseline="middle"
                       >
                         {node.node_type.split('.').pop()?.replace(/([A-Z])/g, ' $1').trim().substring(0, 15)}
                       </text>
