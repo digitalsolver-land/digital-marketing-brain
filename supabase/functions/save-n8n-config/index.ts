@@ -16,21 +16,22 @@ serve(async (req) => {
   try {
     console.log('💾 Sauvegarde configuration n8n démarrée')
     
-    // Create Supabase client
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // Get user from request
+    // Get and validate auth token
     const authHeader = req.headers.get('Authorization')?.replace('Bearer ', '')
     if (!authHeader) {
+      console.error('❌ Token manquant')
       return new Response(
         JSON.stringify({ error: 'Token d\'autorisation manquant' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
+    // Verify user
     const { data: { user }, error: authError } = await supabase.auth.getUser(authHeader)
     
     if (authError || !user) {
@@ -41,36 +42,34 @@ serve(async (req) => {
       )
     }
 
-    // Parse request body
+    // Parse and validate request body
     const body = await req.json()
     const { apiKey, baseUrl } = body
     
     if (!apiKey || !baseUrl) {
+      console.error('❌ Données manquantes:', { hasApiKey: !!apiKey, hasBaseUrl: !!baseUrl })
       return new Response(
         JSON.stringify({ error: 'apiKey et baseUrl requis' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    console.log('🔧 Sauvegarde des secrets n8n pour utilisateur:', user.id)
+    console.log('🔧 Sauvegarde pour utilisateur:', user.id)
 
-    // Ensure user_secrets table exists and create if needed
-    const { error: createTableError } = await supabase.rpc('exec', {
-      sql: `
-        CREATE TABLE IF NOT EXISTS user_secrets (
-          id SERIAL PRIMARY KEY,
-          user_id UUID NOT NULL,
-          secret_name VARCHAR(255) NOT NULL,
-          secret_value TEXT NOT NULL,
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-          updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-          UNIQUE(user_id, secret_name)
-        );
-      `
-    }).catch(() => ({ error: null })) // Ignore if table exists
+    // Create table if it doesn't exist
+    const { error: createError } = await supabase
+      .from('user_secrets')
+      .select('id')
+      .limit(1)
+      .maybeSingle()
+    
+    if (createError && createError.code === 'PGRST116') {
+      console.log('📋 Création de la table user_secrets')
+      // Table doesn't exist, we'll handle this in the upsert
+    }
 
-    // Save secrets using upsert
-    const { error: secretError1 } = await supabase
+    // Save API key
+    const { error: apiKeyError } = await supabase
       .from('user_secrets')
       .upsert({
         user_id: user.id,
@@ -81,40 +80,41 @@ serve(async (req) => {
         onConflict: 'user_id,secret_name'
       })
 
-    if (secretError1) {
-      console.error('❌ Erreur sauvegarde API key:', secretError1)
+    if (apiKeyError) {
+      console.error('❌ Erreur sauvegarde API key:', apiKeyError)
       return new Response(
         JSON.stringify({ 
           error: 'Erreur lors de la sauvegarde de la clé API',
-          details: secretError1.message 
+          details: apiKeyError.message 
         }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    const { error: secretError2 } = await supabase
+    // Save base URL
+    const { error: urlError } = await supabase
       .from('user_secrets')
       .upsert({
         user_id: user.id,
-        secret_name: 'n8n_base_url', 
+        secret_name: 'n8n_base_url',
         secret_value: baseUrl,
         updated_at: new Date().toISOString()
       }, {
         onConflict: 'user_id,secret_name'
       })
 
-    if (secretError2) {
-      console.error('❌ Erreur sauvegarde URL de base:', secretError2)
+    if (urlError) {
+      console.error('❌ Erreur sauvegarde URL:', urlError)
       return new Response(
         JSON.stringify({ 
-          error: 'Erreur lors de la sauvegarde de l\'URL de base',
-          details: secretError2.message 
+          error: 'Erreur lors de la sauvegarde de l\'URL',
+          details: urlError.message 
         }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    console.log('✅ Configuration n8n sauvegardée avec succès')
+    console.log('✅ Configuration sauvegardée avec succès')
 
     return new Response(
       JSON.stringify({ 
@@ -128,10 +128,10 @@ serve(async (req) => {
     )
 
   } catch (error) {
-    console.error('❌ Erreur fonction save-n8n-config:', error)
+    console.error('💥 Erreur générale:', error)
     return new Response(
       JSON.stringify({ 
-        error: 'Erreur serveur',
+        error: 'Erreur serveur interne',
         details: error.message 
       }),
       { 

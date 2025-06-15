@@ -8,7 +8,6 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-  // Handle CORS
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -16,15 +15,15 @@ serve(async (req) => {
   try {
     console.log('🔑 Récupération des secrets n8n')
     
-    // Create Supabase client
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // Get user from request
+    // Verify authentication
     const authHeader = req.headers.get('Authorization')?.replace('Bearer ', '')
     if (!authHeader) {
+      console.error('❌ Token manquant')
       return new Response(
         JSON.stringify({ error: 'Token d\'autorisation manquant' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -41,16 +40,30 @@ serve(async (req) => {
       )
     }
 
-    // Get secrets from user_secrets table
+    // Get user secrets with error handling
     const { data: secrets, error: secretsError } = await supabase
       .from('user_secrets')
       .select('secret_name, secret_value')
       .eq('user_id', user.id)
       .in('secret_name', ['n8n_api_key', 'n8n_base_url'])
 
-    // If table doesn't exist or no secrets found, return defaults
-    if (secretsError || !secrets) {
-      console.log('📋 Aucun secret trouvé, utilisation des valeurs par défaut')
+    // Handle case where table doesn't exist or no secrets found
+    if (secretsError) {
+      console.log('📋 Table ou secrets non trouvés:', secretsError.code)
+      return new Response(
+        JSON.stringify({
+          n8n_api_key: null,
+          n8n_base_url: 'https://n8n.srv860213.hstgr.cloud/api/v1'
+        }),
+        { 
+          status: 200, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      )
+    }
+
+    if (!secrets || secrets.length === 0) {
+      console.log('📋 Aucun secret trouvé')
       return new Response(
         JSON.stringify({
           n8n_api_key: null,
@@ -69,10 +82,10 @@ serve(async (req) => {
       secretsMap[secret.secret_name] = secret.secret_value
     })
 
-    console.log('📋 Secrets disponibles:', {
+    console.log('📋 Secrets trouvés:', {
       hasApiKey: !!secretsMap.n8n_api_key,
       hasBaseUrl: !!secretsMap.n8n_base_url,
-      apiKeyPrefix: secretsMap.n8n_api_key ? secretsMap.n8n_api_key.substring(0, 10) + '...' : 'Aucune'
+      apiKeyLength: secretsMap.n8n_api_key?.length || 0
     })
 
     return new Response(
