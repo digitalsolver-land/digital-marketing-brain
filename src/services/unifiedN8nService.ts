@@ -1,4 +1,3 @@
-
 import { n8nConfigManager, N8nConfig } from '@/config/api';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -466,21 +465,35 @@ export class UnifiedN8nService {
   }
 
   // === MÉTHODES UTILITAIRES ===
-  async executeWorkflow(workflowId: string, inputData?: any): Promise<any> {
-    console.log(`🎯 Exécution workflow ${workflowId}...`);
-    
-    const executionData = inputData ? { data: inputData } : {};
-    
+  async executeWorkflow(workflowId: string, inputData: any = {}): Promise<any> {
     try {
-      const result = await this.makeRequest(`/workflows/${workflowId}/execute`, {
-        method: 'POST',
-        body: JSON.stringify(executionData),
-      });
+      console.log('🚀 Exécution du workflow:', workflowId);
       
-      console.log(`✅ Workflow ${workflowId} exécuté avec succès`);
-      return result;
+      const config = await this.getConfiguration();
+      
+      const response = await fetch(`${config.baseUrl}/executions`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${config.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          workflowId: workflowId,
+          runData: inputData
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Erreur HTTP ${response.status}: ${errorText}`);
+      }
+
+      const execution = await response.json();
+      console.log('✅ Workflow exécuté:', execution);
+      
+      return execution;
     } catch (error) {
-      console.error(`❌ Erreur exécution workflow ${workflowId}:`, error);
+      console.error('❌ Erreur exécution workflow:', error);
       throw error;
     }
   }

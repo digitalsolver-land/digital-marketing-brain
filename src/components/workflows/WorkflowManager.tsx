@@ -95,6 +95,7 @@ export const WorkflowManager: React.FC = () => {
     setLoading(true);
     try {
       const result = await unifiedN8nService.getWorkflows({ limit: 100 });
+      console.log('📋 Workflows n8n chargés:', result);
       
       if (result.data && result.data.length > 0) {
         setWorkflows(result.data);
@@ -230,6 +231,36 @@ export const WorkflowManager: React.FC = () => {
     }
   };
 
+  const executeWorkflow = async (workflow: N8nWorkflow) => {
+    if (!workflow.id) return;
+
+    setLoading(true);
+    try {
+      if (n8nConnected) {
+        await unifiedN8nService.executeWorkflow(workflow.id, {});
+        toast({
+          title: "Workflow exécuté",
+          description: `Le workflow "${workflow.name}" a été exécuté avec succès`,
+        });
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Connexion n8n requise",
+          description: "Connectez-vous à n8n pour exécuter les workflows",
+        });
+      }
+    } catch (error) {
+      console.error('❌ Erreur exécution workflow:', error);
+      toast({
+        variant: "destructive",
+        title: "Erreur d'exécution",
+        description: "Impossible d'exécuter le workflow",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const deleteWorkflow = async (workflow: N8nWorkflow) => {
     if (!workflow.id) return;
 
@@ -303,6 +334,12 @@ export const WorkflowManager: React.FC = () => {
       title: "Workflow exporté",
       description: `Le workflow "${workflow.name}" a été exporté en JSON`,
     });
+  };
+
+  const handleViewWorkflow = (workflow: N8nWorkflow) => {
+    console.log('👁️ Visualisation du workflow:', workflow);
+    setSelectedWorkflow(workflow);
+    setActiveTab('visualization');
   };
 
   const filteredWorkflows = workflows.filter(workflow => {
@@ -442,7 +479,7 @@ export const WorkflowManager: React.FC = () => {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => setSelectedWorkflow(workflow)}
+                          onClick={() => handleViewWorkflow(workflow)}
                           title="Visualiser"
                         >
                           <Eye className="w-4 h-4" />
@@ -467,6 +504,16 @@ export const WorkflowManager: React.FC = () => {
                             <Edit className="w-4 h-4" />
                           </Button>
                         )}
+                        
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => executeWorkflow(workflow)}
+                          disabled={loading}
+                          title="Exécuter"
+                        >
+                          <Play className="w-4 h-4" />
+                        </Button>
                         
                         <Button
                           variant="outline"
@@ -548,18 +595,18 @@ export const WorkflowManager: React.FC = () => {
                         tags: selectedWorkflow.tags || []
                       }
                     }}
-                    nodes={selectedWorkflow.nodes?.map(node => ({
-                      id: node.id || '',
+                    nodes={selectedWorkflow.nodes?.map((node, index) => ({
+                      id: node.id || `node_${index}`,
                       workflow_id: selectedWorkflow.id || '',
-                      node_id: node.id || '',
-                      node_type: node.type || '',
-                      name: node.name || '',
-                      position_x: Array.isArray(node.position) ? node.position[0] : 0,
-                      position_y: Array.isArray(node.position) ? node.position[1] : 0,
+                      node_id: node.id || `node_${index}`,
+                      node_type: node.type || 'unknown',
+                      name: node.name || 'Nœud sans nom',
+                      position_x: Array.isArray(node.position) ? node.position[0] || 0 : 0,
+                      position_y: Array.isArray(node.position) ? node.position[1] || 0 : 0,
                       parameters: node.parameters || {}
                     })) || []}
                     connections={[]}
-                    onExecute={() => toggleWorkflowStatus(selectedWorkflow)}
+                    onExecute={() => executeWorkflow(selectedWorkflow)}
                     onEdit={() => openWorkflowInN8n(selectedWorkflow)}
                     onDelete={() => deleteWorkflow(selectedWorkflow)}
                   />
@@ -568,6 +615,7 @@ export const WorkflowManager: React.FC = () => {
                 <div className="text-center py-8 text-slate-600">
                   <FileJson className="w-12 h-12 mx-auto mb-4 text-slate-400" />
                   <p>Sélectionnez un workflow pour le visualiser</p>
+                  <p className="text-sm mt-2">Cliquez sur l'icône "œil" dans la liste des workflows</p>
                 </div>
               )}
             </CardContent>
