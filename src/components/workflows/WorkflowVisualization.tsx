@@ -1,9 +1,9 @@
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Play, Settings, Trash2, Eye, ZoomIn, ZoomOut, RotateCcw, Brain, Maximize2, Minimize2 } from 'lucide-react';
+import { Play, Settings, Trash2, Eye, ZoomIn, ZoomOut, RotateCcw, Brain, Maximize2, Minimize2, Move, Hand } from 'lucide-react';
 import { aiService } from '@/services/aiService';
 import { useToast } from '@/hooks/use-toast';
 import { WorkflowCanvas } from './WorkflowCanvas';
@@ -52,50 +52,98 @@ export const WorkflowVisualization: React.FC<WorkflowVisualizationProps> = ({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<string>('');
+  const [selectedNode, setSelectedNode] = useState<WorkflowNode | null>(null);
   const { toast } = useToast();
 
-  // Debug des données
-  useEffect(() => {
-    console.log('=== WORKFLOW VISUALIZATION DEBUG ===');
-    console.log('Workflow:', workflow);
-    console.log('Nodes:', nodes);
-    console.log('Connections:', connections);
-    console.log('Nodes count:', nodes.length);
-    console.log('Connections count:', connections.length);
-  }, [workflow, nodes, connections]);
+  // Contrôles de zoom optimisés
+  const handleZoomIn = useCallback(() => {
+    setZoom(prev => Math.min(prev * 1.25, 3));
+  }, []);
 
-  const handleZoomIn = () => setZoom(prev => Math.min(prev * 1.2, 3));
-  const handleZoomOut = () => setZoom(prev => Math.max(prev / 1.2, 0.3));
-  const handleResetView = () => { 
-    setZoom(1); 
-    setPan({ x: 0, y: 0 }); 
-  };
+  const handleZoomOut = useCallback(() => {
+    setZoom(prev => Math.max(prev / 1.25, 0.25));
+  }, []);
 
-  const handleMouseDown = (e: React.MouseEvent) => {
-    setIsDragging(true);
-    setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
-  };
+  const handleResetView = useCallback(() => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+    setSelectedNode(null);
+  }, []);
 
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (isDragging) {
-      setPan({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y });
+  const handleFitToView = useCallback(() => {
+    if (nodes.length === 0) return;
+    
+    // Calculer les limites des nœuds
+    const minX = Math.min(...nodes.map(n => n.position_x));
+    const maxX = Math.max(...nodes.map(n => n.position_x));
+    const minY = Math.min(...nodes.map(n => n.position_y));
+    const maxY = Math.max(...nodes.map(n => n.position_y));
+    
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    
+    // Calculer le zoom pour que tout soit visible
+    const width = maxX - minX + 300; // margin
+    const height = maxY - minY + 200;
+    const containerWidth = 1000; // approximation
+    const containerHeight = 600;
+    
+    const zoomX = containerWidth / width;
+    const zoomY = containerHeight / height;
+    const newZoom = Math.min(zoomX, zoomY, 1.5);
+    
+    setZoom(newZoom);
+    setPan({ x: -centerX, y: -centerY });
+  }, [nodes]);
+
+  // Gestion du drag pour la navigation
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (e.button === 0) { // Clic gauche uniquement
+      setIsDragging(true);
+      setDragStart({ 
+        x: e.clientX - pan.x, 
+        y: e.clientY - pan.y 
+      });
     }
-  };
+  }, [pan]);
 
-  const handleMouseUp = () => setIsDragging(false);
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (isDragging) {
+      const newPanX = e.clientX - dragStart.x;
+      const newPanY = e.clientY - dragStart.y;
+      setPan({ x: newPanX, y: newPanY });
+    }
+  }, [isDragging, dragStart]);
 
-  const handleWheel = (e: React.WheelEvent) => {
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false);
+  }, []);
+
+  // Gestion du zoom avec la molette
+  const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    setZoom(prev => Math.max(0.3, Math.min(3, prev * delta)));
-  };
+    setZoom(prev => Math.max(0.25, Math.min(3, prev * delta)));
+  }, []);
 
-  const analyzeWorkflow = async () => {
+  // Gestion des clics sur les nœuds
+  const handleNodeClick = useCallback((node: WorkflowNode) => {
+    setSelectedNode(node);
+    console.log('Nœud sélectionné:', node);
+  }, []);
+
+  const handleCanvasClick = useCallback((x: number, y: number) => {
+    setSelectedNode(null);
+    console.log('Clic sur le canvas à:', x, y);
+  }, []);
+
+  // Analyse IA du workflow
+  const analyzeWorkflow = useCallback(async () => {
     setIsAnalyzing(true);
     try {
       const workflowDescription = `
         Workflow: ${workflow.name}
-        Description: ${workflow.description}
+        Description: ${workflow.description || 'Aucune description'}
         Nombre de nœuds: ${nodes.length}
         Nombre de connexions: ${connections.length}
         
@@ -106,7 +154,7 @@ export const WorkflowVisualization: React.FC<WorkflowVisualizationProps> = ({
         ${connections.map(conn => {
           const sourceNode = nodes.find(n => n.node_id === conn.source_node_id);
           const targetNode = nodes.find(n => n.node_id === conn.target_node_id);
-          return `- ${sourceNode?.name || 'Unknown'} → ${targetNode?.name || 'Unknown'}`;
+          return `- ${sourceNode?.name || 'Inconnu'} → ${targetNode?.name || 'Inconnu'}`;
         }).join('\n')}
       `;
 
@@ -139,23 +187,35 @@ Réponds en français de manière professionnelle et accessible.`;
     } finally {
       setIsAnalyzing(false);
     }
-  };
+  }, [workflow, nodes, connections, toast]);
 
-  // Affichage de débogage si pas de données
+  // Validation des données
   if (!workflow || nodes.length === 0) {
     return (
-      <Card>
+      <Card className="border-2 border-dashed border-gray-300">
         <CardHeader>
-          <CardTitle>⚠️ Aucune donnée de workflow</CardTitle>
+          <CardTitle className="flex items-center space-x-2 text-gray-600">
+            <Eye className="w-5 h-5" />
+            <span>Aucun workflow à visualiser</span>
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="text-center py-8">
-            <p className="text-gray-600 mb-4">
+          <div className="text-center py-12">
+            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Eye className="w-8 h-8 text-gray-400" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-700 mb-2">
+              Aucune donnée de workflow
+            </h3>
+            <p className="text-gray-500 mb-4">
               Workflow: {workflow ? '✅ Présent' : '❌ Manquant'}<br/>
               Nœuds: {nodes.length}<br/>
               Connexions: {connections.length}
             </p>
-            <Button onClick={() => window.location.reload()}>
+            <Button 
+              onClick={() => window.location.reload()}
+              variant="outline"
+            >
               Recharger la page
             </Button>
           </div>
@@ -165,30 +225,39 @@ Réponds en français de manière professionnelle et accessible.`;
   }
 
   return (
-    <div className="space-y-4">
-      {/* Header du workflow */}
+    <div className="space-y-6">
+      {/* En-tête du workflow */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-xl">{workflow.name}</CardTitle>
-              <p className="text-sm text-gray-600 mt-1">{workflow.description}</p>
+            <div className="flex-1">
+              <CardTitle className="text-xl font-bold">{workflow.name}</CardTitle>
+              {workflow.description && (
+                <p className="text-sm text-gray-600 mt-1">{workflow.description}</p>
+              )}
               <div className="flex items-center space-x-2 mt-2">
                 <Badge variant={workflow.status === 'active' ? 'default' : 'secondary'}>
                   {workflow.status}
                 </Badge>
+                <Badge variant="outline">
+                  {nodes.length} nœud{nodes.length > 1 ? 's' : ''}
+                </Badge>
+                <Badge variant="outline">
+                  {connections.length} connexion{connections.length > 1 ? 's' : ''}
+                </Badge>
                 {workflow.tags && workflow.tags.length > 0 && (
-                  <div className="flex space-x-1">
+                  <>
                     {workflow.tags.map((tag: string, index: number) => (
                       <Badge key={index} variant="outline" className="text-xs">
                         {tag}
                       </Badge>
                     ))}
-                  </div>
+                  </>
                 )}
               </div>
             </div>
-            <div className="flex space-x-2">
+            
+            <div className="flex items-center space-x-2">
               <Button 
                 size="sm" 
                 variant="outline" 
@@ -233,24 +302,100 @@ Réponds en français de manière professionnelle et accessible.`;
           <CardContent>
             <div className="prose prose-sm max-w-none text-purple-900">
               {analysis.split('\n').map((paragraph, index) => (
-                <p key={index} className="mb-2">{paragraph}</p>
+                paragraph.trim() && (
+                  <p key={index} className="mb-2">{paragraph}</p>
+                )
               ))}
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Visualisation du workflow avec Canvas */}
+      {/* Détails du nœud sélectionné */}
+      {selectedNode && (
+        <Card className="border-blue-200 bg-blue-50">
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2 text-blue-800">
+              <Settings className="w-5 h-5" />
+              <span>Détails du Nœud: {selectedNode.name}</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div>
+                <strong>ID:</strong> {selectedNode.node_id}
+              </div>
+              <div>
+                <strong>Type:</strong> {selectedNode.node_type}
+              </div>
+              <div>
+                <strong>Position:</strong> ({selectedNode.position_x}, {selectedNode.position_y})
+              </div>
+              <div>
+                <strong>Paramètres:</strong> {Object.keys(selectedNode.parameters || {}).length} éléments
+              </div>
+            </div>
+            {selectedNode.parameters && Object.keys(selectedNode.parameters).length > 0 && (
+              <details className="mt-4">
+                <summary className="cursor-pointer font-medium text-blue-800">
+                  Voir les paramètres
+                </summary>
+                <pre className="mt-2 p-3 bg-white rounded border text-xs overflow-auto">
+                  {JSON.stringify(selectedNode.parameters, null, 2)}
+                </pre>
+              </details>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Canvas de visualisation */}
       <Card className={isFullscreen ? 'fixed inset-0 z-50 rounded-none' : ''}>
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center space-x-2">
               <Eye className="w-5 h-5" />
-              <span>Visualisation du Workflow ({nodes.length} nœuds, {connections.length} connexions)</span>
+              <span>Visualisation Interactive</span>
+              {selectedNode && (
+                <Badge variant="secondary" className="ml-2">
+                  {selectedNode.name} sélectionné
+                </Badge>
+              )}
             </CardTitle>
             
-            {/* Contrôles de navigation */}
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-1">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleFitToView}
+                title="Ajuster à la vue"
+              >
+                <Move className="w-4 h-4" />
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleZoomIn}
+                title="Zoomer"
+              >
+                <ZoomIn className="w-4 h-4" />
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleZoomOut}
+                title="Dézoomer"
+              >
+                <ZoomOut className="w-4 h-4" />
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleResetView}
+                title="Réinitialiser"
+              >
+                <RotateCcw className="w-4 h-4" />
+              </Button>
               <Button
                 size="sm"
                 variant="outline"
@@ -259,26 +404,18 @@ Réponds en français de manière professionnelle et accessible.`;
               >
                 {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
               </Button>
-              <Button size="sm" variant="outline" onClick={handleZoomIn} title="Zoomer">
-                <ZoomIn className="w-4 h-4" />
-              </Button>
-              <Button size="sm" variant="outline" onClick={handleZoomOut} title="Dézoomer">
-                <ZoomOut className="w-4 h-4" />
-              </Button>
-              <Button size="sm" variant="outline" onClick={handleResetView} title="Réinitialiser la vue">
-                <RotateCcw className="w-4 h-4" />
-              </Button>
-              <Badge variant="secondary" className="text-xs">
+              <Badge variant="secondary" className="text-xs ml-2">
                 Zoom: {Math.round(zoom * 100)}%
               </Badge>
             </div>
           </div>
         </CardHeader>
-        <CardContent>
+        
+        <CardContent className="p-0">
           <div 
             ref={containerRef}
-            className={`bg-gray-100 rounded-lg overflow-hidden relative border-2 border-gray-300 ${
-              isFullscreen ? 'h-screen' : 'h-[600px]'
+            className={`relative overflow-hidden bg-gray-50 ${
+              isFullscreen ? 'h-screen' : 'h-[700px]'
             }`}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
@@ -286,8 +423,7 @@ Réponds en français de manière professionnelle et accessible.`;
             onMouseLeave={handleMouseUp}
             onWheel={handleWheel}
             style={{ 
-              cursor: isDragging ? 'grabbing' : 'grab',
-              userSelect: 'none' 
+              cursor: isDragging ? 'grabbing' : 'grab'
             }}
           >
             <WorkflowCanvas 
@@ -295,22 +431,29 @@ Réponds en français de manière professionnelle et accessible.`;
               connections={connections}
               zoom={zoom}
               pan={pan}
+              onNodeClick={handleNodeClick}
+              onCanvasClick={handleCanvasClick}
             />
             
-            {/* Instructions d'utilisation */}
-            <div className="absolute top-4 left-4 bg-white/95 backdrop-blur-sm p-3 rounded-lg shadow-lg text-xs space-y-1 border">
-              <div className="font-semibold text-gray-800">🎛️ Navigation:</div>
+            {/* Instructions de navigation */}
+            <div className="absolute top-4 left-4 bg-white/95 backdrop-blur-sm p-3 rounded-lg shadow-lg text-xs space-y-1 border max-w-xs">
+              <div className="font-semibold text-gray-800 flex items-center">
+                <Hand className="w-4 h-4 mr-1" />
+                Navigation:
+              </div>
               <div className="text-gray-600">• Glisser pour déplacer</div>
               <div className="text-gray-600">• Molette pour zoomer</div>
+              <div className="text-gray-600">• Clic sur nœud pour détails</div>
               <div className="text-gray-600">• Boutons pour contrôles</div>
             </div>
             
-            {/* Infos de debug */}
+            {/* Informations de debug */}
             <div className="absolute bottom-4 right-4 bg-white/95 backdrop-blur-sm p-3 rounded-lg shadow-lg text-xs border">
-              <div className="font-semibold text-gray-800">🔍 Debug:</div>
+              <div className="font-semibold text-gray-800 mb-1">Statistiques:</div>
               <div className="text-gray-600">Nœuds: {nodes.length}</div>
               <div className="text-gray-600">Connexions: {connections.length}</div>
               <div className="text-gray-600">Zoom: {Math.round(zoom * 100)}%</div>
+              <div className="text-gray-600">Pan: ({Math.round(pan.x)}, {Math.round(pan.y)})</div>
             </div>
           </div>
         </CardContent>

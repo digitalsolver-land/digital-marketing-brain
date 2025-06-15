@@ -126,8 +126,11 @@ export const WorkflowManager: React.FC = () => {
 
   const loadWorkflows = async () => {
     try {
+      console.log('Chargement des workflows...');
+      
       // Charger d'abord les workflows locaux
       const localWorkflows = await workflowService.getWorkflows();
+      console.log('Workflows locaux chargés:', localWorkflows.length);
       
       // Puis charger les workflows n8n si disponible
       let n8nWorkflows: Workflow[] = [];
@@ -137,14 +140,28 @@ export const WorkflowManager: React.FC = () => {
           name: searchTerm || undefined,
           limit: 100
         });
+        console.log('Workflows n8n chargés:', n8nWorkflows.length);
       } catch (error) {
         console.log('n8n non disponible, utilisation des workflows locaux uniquement');
       }
 
-      // Combiner les deux listes
-      const allWorkflows = [...localWorkflows, ...n8nWorkflows];
+      // Combiner les deux listes en évitant les doublons
+      const allWorkflows = [...localWorkflows];
+      
+      // Ajouter les workflows n8n qui ne sont pas déjà présents localement
+      n8nWorkflows.forEach(n8nWorkflow => {
+        const exists = localWorkflows.some(local => 
+          local.name === n8nWorkflow.name || local.id === n8nWorkflow.id
+        );
+        if (!exists) {
+          allWorkflows.push(n8nWorkflow);
+        }
+      });
+
+      console.log('Total workflows combinés:', allWorkflows.length);
       setWorkflows(allWorkflows);
     } catch (error) {
+      console.error('Erreur chargement workflows:', error);
       toast({
         title: "Erreur",
         description: "Impossible de charger les workflows",
@@ -483,15 +500,31 @@ export const WorkflowManager: React.FC = () => {
   };
 
   const viewWorkflowDetails = async (workflowId: string) => {
+    console.log('Affichage détails workflow:', workflowId);
     setIsLoadingDetails(true);
+    
     try {
       const details = await workflowService.getWorkflowWithDetails(workflowId);
       if (details) {
+        console.log('Détails chargés:', {
+          workflow: details.workflow.name,
+          nodes: details.nodes.length,
+          connections: details.connections.length
+        });
+        
         setWorkflowDetails(details);
         setSelectedWorkflow(details.workflow);
         setActiveTab('visualization');
+        
+        toast({
+          title: "Workflow chargé",
+          description: `${details.nodes.length} nœuds et ${details.connections.length} connexions`,
+        });
+      } else {
+        throw new Error('Aucun détail trouvé');
       }
     } catch (error) {
+      console.error('Erreur chargement détails:', error);
       toast({
         title: "Erreur",
         description: "Impossible de charger les détails du workflow",
