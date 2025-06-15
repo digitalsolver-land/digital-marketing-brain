@@ -35,24 +35,28 @@ interface WorkflowVisualizationProps {
   onDelete?: () => void;
 }
 
-// Add CSS styles at the top level
-const pulseAnimation = `
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.7; }
-  }
-  @keyframes flowAnimation {
-    0% { stroke-dashoffset: 20; }
-    100% { stroke-dashoffset: 0; }
-  }
-`;
-
-// Inject styles into document head
-if (typeof document !== 'undefined') {
-  const styleElement = document.createElement('style');
-  styleElement.textContent = pulseAnimation;
-  document.head.appendChild(styleElement);
-}
+// Inject CSS animations
+const injectStyles = () => {
+  const styleId = 'workflow-styles';
+  if (document.getElementById(styleId)) return;
+  
+  const style = document.createElement('style');
+  style.id = styleId;
+  style.textContent = `
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+    @keyframes connectionFlow {
+      0% { stroke-dashoffset: 20; }
+      100% { stroke-dashoffset: 0; }
+    }
+    .workflow-connection {
+      animation: connectionFlow 2s linear infinite;
+    }
+  `;
+  document.head.appendChild(style);
+};
 
 export const WorkflowVisualization: React.FC<WorkflowVisualizationProps> = ({
   workflow,
@@ -75,8 +79,11 @@ export const WorkflowVisualization: React.FC<WorkflowVisualizationProps> = ({
   const { toast } = useToast();
 
   useEffect(() => {
+    injectStyles();
+  }, []);
+
+  useEffect(() => {
     if (nodes.length > 0) {
-      // Calculate workflow bounds with generous padding
       const minX = Math.min(...nodes.map(n => n.position_x)) - 200;
       const maxX = Math.max(...nodes.map(n => n.position_x)) + 300;
       const minY = Math.min(...nodes.map(n => n.position_y)) - 200;
@@ -91,18 +98,22 @@ export const WorkflowVisualization: React.FC<WorkflowVisualizationProps> = ({
     }
   }, [nodes]);
 
-  const handleZoomIn = () => {
-    setZoom(prev => Math.min(prev * 1.3, 4));
-  };
+  // Debug: Log nodes and connections to understand the data structure
+  useEffect(() => {
+    console.log('=== DEBUG WORKFLOW VISUALIZATION ===');
+    console.log('Nodes:', nodes.map(n => ({ id: n.id, node_id: n.node_id, name: n.name, x: n.position_x, y: n.position_y })));
+    console.log('Connections:', connections.map(c => ({ 
+      id: c.id, 
+      source: c.source_node_id, 
+      target: c.target_node_id,
+      sourceExists: nodes.some(n => n.node_id === c.source_node_id),
+      targetExists: nodes.some(n => n.node_id === c.target_node_id)
+    })));
+  }, [nodes, connections]);
 
-  const handleZoomOut = () => {
-    setZoom(prev => Math.max(prev / 1.3, 0.3));
-  };
-
-  const handleResetView = () => {
-    setZoom(0.8);
-    setPan({ x: 0, y: 0 });
-  };
+  const handleZoomIn = () => setZoom(prev => Math.min(prev * 1.3, 4));
+  const handleZoomOut = () => setZoom(prev => Math.max(prev / 1.3, 0.3));
+  const handleResetView = () => { setZoom(0.8); setPan({ x: 0, y: 0 }); };
 
   const handleMouseDown = (e: React.MouseEvent) => {
     setIsDragging(true);
@@ -111,16 +122,11 @@ export const WorkflowVisualization: React.FC<WorkflowVisualizationProps> = ({
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (isDragging) {
-      setPan({
-        x: e.clientX - dragStart.x,
-        y: e.clientY - dragStart.y
-      });
+      setPan({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y });
     }
   };
 
-  const handleMouseUp = () => {
-    setIsDragging(false);
-  };
+  const handleMouseUp = () => setIsDragging(false);
 
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
@@ -225,23 +231,42 @@ Réponds en français de manière professionnelle et accessible.`;
     return '⚡';
   };
 
+  // Fonction améliorée pour calculer les chemins de connexion
   const getConnectionPath = (connection: WorkflowConnection): string => {
-    const sourceNode = nodes.find(n => n.node_id === connection.source_node_id);
-    const targetNode = nodes.find(n => n.node_id === connection.target_node_id);
+    // Recherche des nœuds par différents champs pour assurer la compatibilité
+    const sourceNode = nodes.find(n => 
+      n.node_id === connection.source_node_id || 
+      n.id === connection.source_node_id ||
+      n.node_id === connection.source_node_id.toString()
+    );
+    
+    const targetNode = nodes.find(n => 
+      n.node_id === connection.target_node_id || 
+      n.id === connection.target_node_id ||
+      n.node_id === connection.target_node_id.toString()
+    );
     
     if (!sourceNode || !targetNode) {
-      console.log('Missing nodes for connection:', connection);
+      console.warn('Nœud manquant pour la connexion:', {
+        connection,
+        sourceFound: !!sourceNode,
+        targetFound: !!targetNode,
+        availableNodes: nodes.map(n => ({ id: n.id, node_id: n.node_id }))
+      });
       return '';
     }
 
-    const sourceX = sourceNode.position_x + 140; // Sortie du nœud source (côté droit)
-    const sourceY = sourceNode.position_y + 40;  // Centre vertical du nœud
-    const targetX = targetNode.position_x;       // Entrée du nœud cible (côté gauche)
-    const targetY = targetNode.position_y + 40;  // Centre vertical du nœud
+    // Calcul des positions de connexion
+    const sourceX = sourceNode.position_x + 140; // Sortie du nœud (côté droit)
+    const sourceY = sourceNode.position_y + 40;  // Centre vertical
+    const targetX = targetNode.position_x;       // Entrée du nœud (côté gauche)
+    const targetY = targetNode.position_y + 40;  // Centre vertical
 
-    // Créer une courbe douce pour la connexion
-    const controlX1 = sourceX + Math.min(100, Math.abs(targetX - sourceX) / 2);
-    const controlX2 = targetX - Math.min(100, Math.abs(targetX - sourceX) / 2);
+    // Créer une courbe de Bézier pour un rendu fluide
+    const deltaX = targetX - sourceX;
+    const controlOffset = Math.min(Math.abs(deltaX) / 2, 150);
+    const controlX1 = sourceX + controlOffset;
+    const controlX2 = targetX - controlOffset;
     
     return `M ${sourceX} ${sourceY} C ${controlX1} ${sourceY} ${controlX2} ${targetY} ${targetX} ${targetY}`;
   };
@@ -251,18 +276,6 @@ Réponds en français de manière professionnelle et accessible.`;
     transformOrigin: 'center center',
     transition: isDragging ? 'none' : 'transform 0.2s ease-out'
   };
-
-  console.log('Rendering workflow visualization with:', { 
-    nodesCount: nodes.length, 
-    connectionsCount: connections.length,
-    connections: connections.map(c => ({
-      id: c.id,
-      source: c.source_node_id,
-      target: c.target_node_id,
-      sourceNode: nodes.find(n => n.node_id === c.source_node_id)?.name,
-      targetNode: nodes.find(n => n.node_id === c.target_node_id)?.name
-    }))
-  });
 
   return (
     <div className="space-y-4">
@@ -359,28 +372,13 @@ Réponds en français de manière professionnelle et accessible.`;
               >
                 {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
               </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleZoomIn}
-                title="Zoomer"
-              >
+              <Button size="sm" variant="outline" onClick={handleZoomIn} title="Zoomer">
                 <ZoomIn className="w-4 h-4" />
               </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleZoomOut}
-                title="Dézoomer"
-              >
+              <Button size="sm" variant="outline" onClick={handleZoomOut} title="Dézoomer">
                 <ZoomOut className="w-4 h-4" />
               </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleResetView}
-                title="Réinitialiser la vue"
-              >
+              <Button size="sm" variant="outline" onClick={handleResetView} title="Réinitialiser la vue">
                 <RotateCcw className="w-4 h-4" />
               </Button>
               <Badge variant="secondary" className="text-xs">
@@ -421,115 +419,97 @@ Réponds en français de manière professionnelle et accessible.`;
               >
                 {/* Définitions pour les marqueurs et effets */}
                 <defs>
-                  {/* Marqueur de flèche visible */}
                   <marker
-                    id="arrowhead-visible"
-                    markerWidth="12"
-                    markerHeight="10"
-                    refX="11"
-                    refY="5"
+                    id="arrowhead"
+                    markerWidth="10"
+                    markerHeight="7"
+                    refX="9"
+                    refY="3.5"
                     orient="auto"
-                    markerUnits="strokeWidth"
                   >
                     <polygon
-                      points="0 0, 12 5, 0 10"
-                      fill="#ff0000"
-                      stroke="#000000"
-                      strokeWidth="1"
+                      points="0 0, 10 3.5, 0 7"
+                      fill="#FF6B6B"
+                      stroke="#000"
+                      strokeWidth="0.5"
                     />
                   </marker>
                   
-                  {/* Marqueur de flèche secondaire */}
                   <marker
                     id="arrowhead-secondary"
                     markerWidth="10"
-                    markerHeight="8"
+                    markerHeight="7"
                     refX="9"
-                    refY="4"
+                    refY="3.5"
                     orient="auto"
-                    markerUnits="strokeWidth"
                   >
                     <polygon
-                      points="0 0, 10 4, 0 8"
-                      fill="#0066cc"
-                      stroke="#000000"
-                      strokeWidth="1"
+                      points="0 0, 10 3.5, 0 7"
+                      fill="#4ECDC4"
+                      stroke="#000"
+                      strokeWidth="0.5"
                     />
                   </marker>
                   
-                  {/* Filtre d'ombre pour les nœuds */}
-                  <filter id="nodeShadow" x="-20%" y="-20%" width="140%" height="140%">
-                    <feDropShadow dx="3" dy="5" stdDeviation="4" floodOpacity="0.3"/>
+                  <filter id="glow">
+                    <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+                    <feMerge> 
+                      <feMergeNode in="coloredBlur"/>
+                      <feMergeNode in="SourceGraphic"/>
+                    </feMerge>
                   </filter>
                 </defs>
 
-                {/* Dessiner les connexions avec des couleurs très visibles */}
+                {/* Rendu des connexions avec une logique robuste */}
                 {connections.map((connection, index) => {
                   const path = getConnectionPath(connection);
                   if (!path) return null;
                   
-                  const isMainConnection = connection.connection_type === 'main' || !connection.connection_type;
+                  const isMainConnection = !connection.connection_type || connection.connection_type === 'main';
+                  const connectionColor = isMainConnection ? '#FF6B6B' : '#4ECDC4';
                   
                   return (
                     <g key={`connection-${connection.id}-${index}`}>
-                      {/* Ligne de fond blanche pour contraste maximal */}
+                      {/* Ligne de fond pour le contraste */}
                       <path
                         d={path}
-                        stroke="white"
+                        stroke="#000"
                         strokeWidth="8"
                         fill="none"
-                        opacity="1"
+                        opacity="0.3"
                       />
                       
-                      {/* Ligne noire pour contraste */}
+                      {/* Ligne principale colorée */}
                       <path
                         d={path}
-                        stroke="black"
-                        strokeWidth="6"
+                        stroke={connectionColor}
+                        strokeWidth="5"
                         fill="none"
-                        opacity="0.8"
+                        strokeDasharray={isMainConnection ? "none" : "8,4"}
+                        markerEnd={isMainConnection ? "url(#arrowhead)" : "url(#arrowhead-secondary)"}
+                        filter="url(#glow)"
+                        className="workflow-connection"
+                        opacity="0.9"
                       />
                       
-                      {/* Ligne colorée principale - très visible */}
+                      {/* Ligne d'animation */}
                       <path
                         d={path}
-                        stroke={isMainConnection ? "#ff0000" : "#0066cc"}
-                        strokeWidth="4"
+                        stroke="#fff"
+                        strokeWidth="2"
                         fill="none"
-                        strokeDasharray={isMainConnection ? "none" : "10,5"}
-                        markerEnd={isMainConnection ? "url(#arrowhead-visible)" : "url(#arrowhead-secondary)"}
-                        opacity="1"
-                        style={{
-                          filter: 'drop-shadow(2px 2px 4px rgba(0,0,0,0.5))'
-                        }}
+                        strokeDasharray="10,20"
+                        opacity="0.6"
+                        className="workflow-connection"
                       />
-                      
-                      {/* Debug: points de connexion */}
-                      {(() => {
-                        const sourceNode = nodes.find(n => n.node_id === connection.source_node_id);
-                        const targetNode = nodes.find(n => n.node_id === connection.target_node_id);
-                        if (!sourceNode || !targetNode) return null;
-                        
-                        const sourceX = sourceNode.position_x + 140;
-                        const sourceY = sourceNode.position_y + 40;
-                        const targetX = targetNode.position_x;
-                        const targetY = targetNode.position_y + 40;
-                        
-                        return (
-                          <>
-                            <circle cx={sourceX} cy={sourceY} r="4" fill="green" stroke="black" strokeWidth="1" />
-                            <circle cx={targetX} cy={targetY} r="4" fill="blue" stroke="black" strokeWidth="1" />
-                          </>
-                        );
-                      })()}
                     </g>
                   );
                 })}
 
-                {/* Dessiner les nœuds */}
+                {/* Rendu des nœuds */}
                 {nodes.map((node, index) => (
                   <g key={`node-${node.id}-${index}`} transform={`translate(${node.position_x}, ${node.position_y})`}>
-                    {/* Rectangle du nœud avec ombre */}
+                    {/* Rectangle du nœud */}
                     <rect
                       width="140"
                       height="80"
@@ -537,63 +517,36 @@ Réponds en français de manière professionnelle et accessible.`;
                       fill={getNodeColor(node.node_type)}
                       stroke="#ffffff"
                       strokeWidth="3"
-                      filter="url(#nodeShadow)"
-                      className="transition-all duration-200 hover:stroke-width-4"
+                      style={{
+                        filter: 'drop-shadow(2px 4px 8px rgba(0,0,0,0.3))'
+                      }}
                     />
                     
-                    {/* Bordure intérieure pour l'effet de profondeur */}
-                    <rect
-                      x="3"
-                      y="3"
-                      width="134"
-                      height="74"
-                      rx="9"
-                      fill="none"
-                      stroke="rgba(255,255,255,0.3)"
-                      strokeWidth="1"
-                    />
-                    
-                    {/* Points de connexion gauche (entrée) - plus visibles */}
+                    {/* Points de connexion d'entrée (gauche) */}
                     <circle
                       cx="0"
                       cy="40"
-                      r="8"
-                      fill="#ffffff"
-                      stroke="#000000"
-                      strokeWidth="3"
-                      className="drop-shadow-lg"
-                    />
-                    <circle
-                      cx="0"
-                      cy="40"
-                      r="4"
-                      fill="#0066cc"
-                      stroke="none"
+                      r="6"
+                      fill="#4ECDC4"
+                      stroke="#000"
+                      strokeWidth="2"
                     />
                     
-                    {/* Points de connexion droite (sortie) - plus visibles */}
+                    {/* Points de connexion de sortie (droite) */}
                     <circle
                       cx="140"
                       cy="40"
-                      r="8"
-                      fill="#ffffff"
-                      stroke="#000000"
-                      strokeWidth="3"
-                      className="drop-shadow-lg"
-                    />
-                    <circle
-                      cx="140"
-                      cy="40"
-                      r="4"
-                      fill="#ff0000"
-                      stroke="none"
+                      r="6"
+                      fill="#FF6B6B"
+                      stroke="#000"
+                      strokeWidth="2"
                     />
                     
                     {/* Icône du nœud */}
                     <text
                       x="25"
-                      y="45"
-                      fontSize="20"
+                      y="50"
+                      fontSize="18"
                       fill="white"
                       textAnchor="middle"
                       style={{ pointerEvents: 'none' }}
@@ -601,42 +554,30 @@ Réponds en français de manière professionnelle et accessible.`;
                       {getNodeIcon(node.node_type)}
                     </text>
                     
-                    {/* Nom du nœud - ligne 1 */}
+                    {/* Nom du nœud */}
                     <text
                       x="85"
                       y="35"
-                      fontSize="13"
+                      fontSize="12"
                       fill="white"
                       textAnchor="middle"
-                      className="font-semibold"
+                      fontWeight="bold"
                       style={{ pointerEvents: 'none' }}
                     >
-                      {node.name.length > 10 ? `${node.name.substring(0, 10)}...` : node.name}
+                      {node.name.length > 12 ? `${node.name.substring(0, 12)}...` : node.name}
                     </text>
                     
-                    {/* Type du nœud - ligne 2 */}
+                    {/* Type du nœud */}
                     <text
                       x="85"
                       y="52"
-                      fontSize="10"
-                      fill="rgba(255,255,255,0.9)"
+                      fontSize="9"
+                      fill="rgba(255,255,255,0.8)"
                       textAnchor="middle"
                       style={{ pointerEvents: 'none' }}
                     >
-                      {node.node_type.split('.').pop()?.replace(/([A-Z])/g, ' $1').trim().substring(0, 12)}
+                      {node.node_type.split('.').pop()?.replace(/([A-Z])/g, ' $1').trim().substring(0, 15)}
                     </text>
-                    
-                    {/* Badge de status si actif */}
-                    {workflow.status === 'active' && (
-                      <circle
-                        cx="125"
-                        cy="15"
-                        r="4"
-                        fill="#10b981"
-                        stroke="white"
-                        strokeWidth="2"
-                      />
-                    )}
                   </g>
                 ))}
               </svg>
@@ -648,31 +589,24 @@ Réponds en français de manière professionnelle et accessible.`;
               <div className="text-gray-600 dark:text-gray-400">• 🖱️ Clic + glisser pour déplacer</div>
               <div className="text-gray-600 dark:text-gray-400">• 🔍 Molette pour zoomer/dézoomer</div>
               <div className="text-gray-600 dark:text-gray-400">• 🎯 Boutons pour contrôles précis</div>
-              <div className="text-gray-600 dark:text-gray-400">• 🔍 F11 ou bouton pour plein écran</div>
+              <div className="text-gray-600 dark:text-gray-400">• 📺 Plein écran disponible</div>
             </div>
             
-            {/* Légende des connexions - mise à jour */}
+            {/* Légende des connexions */}
             <div className="absolute bottom-4 left-4 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm p-4 rounded-lg shadow-lg text-xs space-y-3 border border-slate-200 dark:border-gray-700">
               <div className="font-semibold text-gray-800 dark:text-gray-200">🔗 Connexions:</div>
               <div className="flex items-center space-x-3">
-                <svg width="30" height="8">
-                  <line x1="0" y1="4" x2="25" y2="4" stroke="#ff0000" strokeWidth="4" markerEnd="url(#arrowhead-visible)" />
-                </svg>
-                <span className="text-gray-600 dark:text-gray-400">Flux principal (rouge)</span>
+                <div className="w-6 h-0.5 bg-red-400 rounded"></div>
+                <span className="text-gray-600 dark:text-gray-400">Flux principal</span>
               </div>
               <div className="flex items-center space-x-3">
-                <svg width="30" height="8">
-                  <line x1="0" y1="4" x2="25" y2="4" stroke="#0066cc" strokeWidth="4" strokeDasharray="10,5" markerEnd="url(#arrowhead-secondary)" />
-                </svg>
-                <span className="text-gray-600 dark:text-gray-400">Flux conditionnel (bleu)</span>
-              </div>
-              <div className="text-xs text-gray-500 mt-2">
-                🟢 Points verts = Sortie des nœuds | 🔵 Points bleus = Entrée des nœuds
+                <div className="w-6 h-0.5 bg-teal-400 rounded" style={{background: 'repeating-linear-gradient(to right, #4ECDC4 0, #4ECDC4 4px, transparent 4px, transparent 8px)'}}></div>
+                <span className="text-gray-600 dark:text-gray-400">Flux conditionnel</span>
               </div>
             </div>
           </div>
           
-          {/* Statistiques détaillées */}
+          {/* Statistiques */}
           <div className="grid grid-cols-4 gap-4 mt-6 p-4 bg-gradient-to-r from-slate-50 to-slate-100 dark:from-gray-800 dark:to-gray-900 rounded-lg border border-slate-200 dark:border-gray-700">
             <div className="text-center">
               <div className="text-3xl font-bold text-blue-600 mb-1">{nodes.length}</div>
