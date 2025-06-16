@@ -10,6 +10,7 @@ import { ContentGenerator } from '@/components/content/ContentGenerator';
 import { AnalyticsDashboard } from '@/components/analytics/AnalyticsDashboard';
 import { WhatsAppManager } from '@/components/whatsapp/WhatsAppManager';
 import { PostizDashboard } from '@/components/social/PostizDashboard';
+import { CampaignManager } from '@/components/campaigns/CampaignManager';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
