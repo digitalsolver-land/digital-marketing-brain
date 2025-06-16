@@ -1,3 +1,4 @@
+
 import { supabase } from '@/integrations/supabase/client';
 
 // Interfaces pour les réponses API n8n
@@ -42,12 +43,22 @@ export interface RequestOptions {
 
 export type ConnectionStatus = 'checking' | 'connected' | 'disconnected' | 'error';
 
+export interface N8nConfig {
+  apiKey: string;
+  baseUrl: string;
+}
+
 class N8nService {
   private static instance: N8nService;
   private connectionStatus: ConnectionStatus = 'disconnected';
   private lastError: string | null = null;
   private readonly REQUEST_TIMEOUT = 30000;
   private readonly MAX_RETRIES = 3;
+  private circuitBreakerOpen = false;
+  private circuitBreakerTimeout: NodeJS.Timeout | null = null;
+  private failureCount = 0;
+  private readonly CIRCUIT_BREAKER_THRESHOLD = 5;
+  private readonly CIRCUIT_BREAKER_TIMEOUT = 60000; // 1 minute
 
   public static getInstance(): N8nService {
     if (!N8nService.instance) {
@@ -56,7 +67,31 @@ class N8nService {
     return N8nService.instance;
   }
 
-  async updateConfig(config: { apiKey: string; baseUrl: string }): Promise<void> {
+  // Méthode pour obtenir la configuration depuis user_secrets
+  private async getN8nConfig(): Promise<N8nConfig | null> {
+    try {
+      const { data, error } = await supabase.functions.invoke('get-n8n-secrets');
+      
+      if (error) {
+        console.error('❌ Erreur récupération config n8n:', error);
+        return null;
+      }
+
+      if (data?.apiKey && data?.baseUrl) {
+        return {
+          apiKey: data.apiKey,
+          baseUrl: data.baseUrl
+        };
+      }
+
+      return null;
+    } catch (error) {
+      console.error('❌ Erreur récupération config n8n:', error);
+      return null;
+    }
+  }
+
+  async updateConfig(config: N8nConfig): Promise<void> {
     try {
       console.log('🔄 Mise à jour configuration n8n...');
       
@@ -71,14 +106,25 @@ class N8nService {
         throw new Error(`Erreur sauvegarde config: ${error.message}`);
       }
 
+      // Réinitialiser le circuit breaker en cas de succès
+      this.resetCircuitBreaker();
+      
       console.log('✅ Configuration n8n mise à jour avec succès');
     } catch (error) {
       console.error('❌ Erreur mise à jour config n8n:', error);
+      this.handleFailure();
       throw error;
     }
   }
 
   async checkConnection(): Promise<{ status: ConnectionStatus; error?: string }> {
+    if (this.circuitBreakerOpen) {
+      return { 
+        status: 'error', 
+        error: 'Service temporairement indisponible (circuit breaker ouvert)' 
+      };
+    }
+
     try {
       this.connectionStatus = 'checking';
       this.lastError = null;
@@ -91,22 +137,26 @@ class N8nService {
         console.error('❌ Erreur fonction edge:', error);
         this.connectionStatus = 'error';
         this.lastError = 'Erreur lors du test de connexion';
+        this.handleFailure();
         return { status: 'error', error: this.lastError };
       }
 
       if (data?.success) {
         this.connectionStatus = 'connected';
+        this.resetCircuitBreaker();
         console.log('✅ n8n connecté avec succès');
         return { status: 'connected' };
       } else {
         this.connectionStatus = 'error';
         this.lastError = data?.error || 'Test de connexion échoué';
+        this.handleFailure();
         console.error('❌ Test de connexion échoué:', data);
         return { status: 'error', error: this.lastError };
       }
     } catch (error) {
       this.connectionStatus = 'error';
       this.lastError = error instanceof Error ? error.message : 'Erreur de connexion inconnue';
+      this.handleFailure();
       console.error('❌ Erreur connexion n8n:', this.lastError);
       return { status: 'error', error: this.lastError };
     }
@@ -120,7 +170,34 @@ class N8nService {
   }
 
   isConnected(): boolean {
-    return this.connectionStatus === 'connected';
+    return this.connectionStatus === 'connected' && !this.circuitBreakerOpen;
+  }
+
+  // Circuit breaker methods
+  private handleFailure(): void {
+    this.failureCount++;
+    if (this.failureCount >= this.CIRCUIT_BREAKER_THRESHOLD) {
+      this.openCircuitBreaker();
+    }
+  }
+
+  private openCircuitBreaker(): void {
+    console.warn('🔒 Circuit breaker ouvert - Service n8n temporairement indisponible');
+    this.circuitBreakerOpen = true;
+    this.circuitBreakerTimeout = setTimeout(() => {
+      this.circuitBreakerOpen = false;
+      this.failureCount = 0;
+      console.log('🔓 Circuit breaker fermé - Service n8n disponible');
+    }, this.CIRCUIT_BREAKER_TIMEOUT);
+  }
+
+  private resetCircuitBreaker(): void {
+    this.failureCount = 0;
+    if (this.circuitBreakerTimeout) {
+      clearTimeout(this.circuitBreakerTimeout);
+      this.circuitBreakerTimeout = null;
+    }
+    this.circuitBreakerOpen = false;
   }
 
   private async makeRequest<T>(
@@ -128,6 +205,10 @@ class N8nService {
     options: RequestInit = {},
     retryCount = 0
   ): Promise<T> {
+    if (this.circuitBreakerOpen) {
+      throw new Error('Service n8n temporairement indisponible');
+    }
+
     try {
       console.log(`🌐 Requête n8n: ${options.method || 'GET'} ${endpoint}`);
       
@@ -149,17 +230,29 @@ class N8nService {
         throw new Error(data.error);
       }
 
+      // Réinitialiser le circuit breaker en cas de succès
+      this.resetCircuitBreaker();
       return data;
     } catch (error) {
       console.error(`❌ Erreur requête (tentative ${retryCount + 1}/${this.MAX_RETRIES}):`, error);
       
+      // Ne pas retry si c'est une erreur d'authentification ou de configuration
+      const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue';
+      if (errorMessage.includes('Authentication') || 
+          errorMessage.includes('API key') ||
+          errorMessage.includes('401')) {
+        this.handleFailure();
+        throw error;
+      }
+      
       if (retryCount < this.MAX_RETRIES - 1) {
-        const delay = Math.pow(2, retryCount) * 1000;
+        const delay = Math.min(Math.pow(2, retryCount) * 1000, 10000); // Max 10s
         console.log(`🔄 Nouvelle tentative dans ${delay}ms...`);
         await new Promise(resolve => setTimeout(resolve, delay));
         return this.makeRequest<T>(endpoint, options, retryCount + 1);
       }
       
+      this.handleFailure();
       throw error;
     }
   }
@@ -278,8 +371,10 @@ class N8nService {
     }
   }
 
-  getWorkflowUrl(workflowId: string): string {
-    return `https://n8n.srv860213.hstgr.cloud/workflow/${workflowId}`;
+  async getWorkflowUrl(workflowId: string): Promise<string> {
+    const config = await this.getN8nConfig();
+    const baseUrl = config?.baseUrl || 'https://n8n.srv860213.hstgr.cloud';
+    return `${baseUrl}/workflow/${workflowId}`;
   }
 
   async workflowExists(workflowId: string): Promise<boolean> {
@@ -394,6 +489,16 @@ class N8nService {
     return this.makeRequest<N8nCredential>(`/credentials/${id}`, {
       method: 'DELETE'
     });
+  }
+
+  // Méthodes pour le monitoring
+  getMetrics() {
+    return {
+      connectionStatus: this.connectionStatus,
+      circuitBreakerOpen: this.circuitBreakerOpen,
+      failureCount: this.failureCount,
+      lastError: this.lastError
+    };
   }
 }
 

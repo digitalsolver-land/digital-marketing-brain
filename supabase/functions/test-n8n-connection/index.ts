@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -12,71 +13,169 @@ serve(async (req) => {
   }
 
   try {
-    const authHeader = req.headers.get('Authorization')!
-    const supabaseClient = createClient(
+    const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { global: { headers: { Authorization: authHeader } } }
+      {
+        auth: { 
+          persistSession: false,
+          autoRefreshToken: false
+        }
+      }
     )
 
-    // Récupérer l'utilisateur depuis le token
-    const token = authHeader.replace('Bearer ', '')
-    const { data: { user } } = await supabaseClient.auth.getUser(token)
-
-    if (!user) {
-      return new Response(JSON.stringify({ success: false, error: 'Utilisateur non authentifié' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+    // Récupérer l'utilisateur depuis le token JWT
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) {
+      throw new Error('Token d\'authentification manquant')
     }
 
-    // Récupérer les paramètres utilisateur
-    const { data: settings, error: settingsError } = await supabaseClient
-      .from('app_settings')
-      .select('n8n_api_key, n8n_base_url')
+    const { data: { user }, error: authError } = await supabase.auth.getUser(
+      authHeader.replace('Bearer ', '')
+    )
+
+    if (authError || !user) {
+      console.error('❌ Erreur authentification:', authError)
+      throw new Error('Utilisateur non authentifié')
+    }
+
+    console.log('✅ Utilisateur authentifié:', user.id)
+
+    // Récupérer les secrets n8n depuis user_secrets
+    const { data: secrets, error: secretsError } = await supabase
+      .from('user_secrets')
+      .select('secret_name, secret_value')
       .eq('user_id', user.id)
-      .single()
+      .in('secret_name', ['n8n_api_key', 'n8n_base_url'])
 
-    if (settingsError || !settings?.n8n_api_key) {
+    if (secretsError) {
+      console.error('❌ Erreur récupération secrets:', secretsError)
       return new Response(JSON.stringify({ 
         success: false, 
-        error: 'Configuration n8n manquante. Configurez votre clé API dans les paramètres.' 
+        error: 'Erreur lors de la récupération de la configuration' 
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
 
-    // Tester la connexion n8n
-    const n8nUrl = settings.n8n_base_url || 'https://n8n.srv860213.hstgr.cloud'
-    const testResponse = await fetch(`${n8nUrl}/api/v1/workflows?limit=1`, {
-      headers: {
-        'X-N8N-API-KEY': settings.n8n_api_key,
-        'Content-Type': 'application/json',
+    // Convertir en objet pour faciliter l'utilisation
+    const secretsMap: Record<string, string> = {}
+    secrets?.forEach(secret => {
+      secretsMap[secret.secret_name] = secret.secret_value
+    })
+
+    // Vérifier si on a les clés nécessaires
+    if (!secretsMap.n8n_api_key) {
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: 'Clé API n8n non configurée. Veuillez configurer votre clé API dans les paramètres.' 
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    const n8nUrl = secretsMap.n8n_base_url || 'https://n8n.srv860213.hstgr.cloud'
+    const n8nApiKey = secretsMap.n8n_api_key
+
+    console.log(`🔍 Test connexion n8n: ${n8nUrl}`)
+
+    // Tests multiples pour vérifier la connexion
+    const tests = [
+      {
+        name: 'API Health Check',
+        url: `${n8nUrl}/api/v1/active-workflows`,
+        method: 'GET'
       },
-    })
+      {
+        name: 'Workflows Access',
+        url: `${n8nUrl}/api/v1/workflows?limit=1`,
+        method: 'GET'
+      },
+      {
+        name: 'User Info',
+        url: `${n8nUrl}/api/v1/me`,
+        method: 'GET'
+      }
+    ]
 
-    if (!testResponse.ok) {
+    const results = []
+    let allPassed = true
+
+    for (const test of tests) {
+      try {
+        console.log(`🧪 Test: ${test.name}`)
+        
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 10000) // 10s timeout per test
+
+        const testResponse = await fetch(test.url, {
+          method: test.method,
+          headers: {
+            'X-N8N-API-KEY': n8nApiKey,
+            'Content-Type': 'application/json',
+            'User-Agent': 'Replit-N8N-Test/1.0'
+          },
+          signal: controller.signal
+        })
+
+        clearTimeout(timeoutId)
+
+        const testResult = {
+          name: test.name,
+          success: testResponse.ok,
+          status: testResponse.status,
+          statusText: testResponse.statusText
+        }
+
+        if (!testResponse.ok) {
+          allPassed = false
+          const errorText = await testResponse.text()
+          testResult.error = errorText
+          console.error(`❌ ${test.name} échoué:`, testResponse.status, errorText)
+        } else {
+          console.log(`✅ ${test.name} réussi`)
+        }
+
+        results.push(testResult)
+
+      } catch (error) {
+        allPassed = false
+        const testResult = {
+          name: test.name,
+          success: false,
+          error: error.message
+        }
+        results.push(testResult)
+        console.error(`❌ ${test.name} erreur:`, error.message)
+      }
+    }
+
+    if (allPassed) {
+      return new Response(JSON.stringify({ 
+        success: true, 
+        message: 'Connexion n8n établie avec succès',
+        baseUrl: n8nUrl,
+        tests: results
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    } else {
       return new Response(JSON.stringify({ 
         success: false, 
-        error: `Erreur API n8n: ${testResponse.status} ${testResponse.statusText}` 
+        error: 'Certains tests de connexion ont échoué',
+        baseUrl: n8nUrl,
+        tests: results
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
-
-    return new Response(JSON.stringify({ 
-      success: true, 
-      message: 'Connexion n8n établie avec succès',
-      baseUrl: n8nUrl
-    }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
 
   } catch (error) {
-    console.error('Erreur test connexion n8n:', error)
+    console.error('❌ Erreur test connexion n8n:', error)
     return new Response(JSON.stringify({ 
       success: false, 
-      error: `Erreur interne: ${error.message}` 
+      error: `Erreur interne: ${error.message}`,
+      details: error.toString()
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
