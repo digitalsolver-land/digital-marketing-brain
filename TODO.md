@@ -1,12 +1,25 @@
 
 # TODO - Réparation Module Workflow n8n
 
-## 🚨 PROBLÈMES CRITIQUES IDENTIFIÉS
+## ✅ TÂCHES COMPLÉTÉES
 
-### 1. **Base de données - Tables manquantes**
-- [ ] Créer table `user_secrets` pour stocker les clés API de façon sécurisée
-- [ ] Vérifier/corriger le schéma de `app_settings`
-- [ ] Ajouter les index nécessaires pour les performances
+### 1. **Base de données - Tables créées**
+- [x] Table `user_secrets` créée et configurée avec RLS
+- [x] Table `app_settings` avec colonnes n8n ajoutées
+- [x] Index et triggers configurés
+
+## 🚨 PROBLÈMES CRITIQUES À CORRIGER
+
+### 1. **Retry Logic - Boucles infinies détectées**
+- [x] Corriger la logique de retry dans n8nService avec timeout
+- [x] Améliorer circuit breaker avec gestion d'erreurs spécifiques
+- [x] Ajouter debouncing dans EnhancedWorkflowManager
+
+### 2. **Optimisations effectuées**
+- [x] Timeout de 15s pour les requêtes n8n
+- [x] Pas de retry pour erreurs 401/403/404/timeout
+- [x] Backoff exponentiel amélioré (max 30s)
+- [x] Debouncing des appels API dans l'UI
 
 ### 2. **Configuration n8n - Incohérences**
 - [ ] Corriger l'incohérence entre `app_settings` et `user_secrets`

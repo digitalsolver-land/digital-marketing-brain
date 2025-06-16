@@ -104,7 +104,7 @@ export const EnhancedWorkflowManager: React.FC = () => {
     try {
       const status = await n8nService.checkConnection();
       setConnectionStatus(status.status);
-      
+
       if (status.status === 'connected') {
         await loadAllData();
         toast({
@@ -197,7 +197,7 @@ export const EnhancedWorkflowManager: React.FC = () => {
 
   const deleteWorkflow = async (id: string) => {
     if (!confirm("Êtes-vous sûr de vouloir supprimer ce workflow ?")) return;
-    
+
     setLoading(true);
     try {
       await n8nService.deleteWorkflow(id);
@@ -397,7 +397,7 @@ export const EnhancedWorkflowManager: React.FC = () => {
 
   const createTag = async () => {
     if (!newTag.trim()) return;
-    
+
     setLoading(true);
     try {
       // Implementation would use the create tag API
@@ -430,7 +430,7 @@ export const EnhancedWorkflowManager: React.FC = () => {
 
   const createVariable = async () => {
     if (!newVariable.key.trim()) return;
-    
+
     setLoading(true);
     try {
       // Implementation would use the create variable API
@@ -490,7 +490,7 @@ export const EnhancedWorkflowManager: React.FC = () => {
   // === ASSISTANCE IA ===
   const handleAiAssistance = async () => {
     if (!aiPrompt.trim()) return;
-    
+
     setLoading(true);
     try {
       const response = await aiService.processCommand(aiPrompt, {
@@ -518,7 +518,7 @@ export const EnhancedWorkflowManager: React.FC = () => {
     const matchesStatus = filterStatus === 'all' || 
       (filterStatus === 'active' && workflow.active) ||
       (filterStatus === 'inactive' && !workflow.active);
-    
+
     return matchesSearch && matchesStatus;
   });
 
@@ -540,6 +540,33 @@ export const EnhancedWorkflowManager: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadData = async () => {
+      if (connectionStatus === 'connected' && isMounted) {
+        try {
+          await Promise.allSettled([
+            loadWorkflows(),
+            loadTags(),
+            loadVariables(),
+            loadProjects()
+          ]);
+        } catch (error) {
+          console.error('❌ Erreur lors du chargement des données:', error);
+        }
+      }
+    };
+
+    // Débouncer le chargement pour éviter les appels répétés
+    const timeoutId = setTimeout(loadData, 1000);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timeoutId);
+    };
+  }, [connectionStatus]);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -551,13 +578,13 @@ export const EnhancedWorkflowManager: React.FC = () => {
             Gestion complète de votre instance n8n avec assistance IA
           </p>
         </div>
-        
+
         <div className="flex items-center space-x-4">
           <div className="flex items-center space-x-2">
             {getStatusIcon(connectionStatus)}
             <span className="text-sm font-medium">{getStatusText(connectionStatus)}</span>
           </div>
-          
+
           <Button 
             variant="outline" 
             size="sm" 
@@ -617,7 +644,7 @@ export const EnhancedWorkflowManager: React.FC = () => {
                     Gestion complète de vos workflows d'automatisation
                   </CardDescription>
                 </div>
-                
+
                 <div className="flex items-center space-x-2">
                   <Button onClick={() => createWorkflow({ name: 'Nouveau Workflow', nodes: [], connections: {}, settings: {} })}>
                     <Plus className="w-4 h-4 mr-2" />
@@ -630,7 +657,7 @@ export const EnhancedWorkflowManager: React.FC = () => {
                 </div>
               </div>
             </CardHeader>
-            
+
             <CardContent className="space-y-6">
               <div className="flex items-center space-x-4">
                 <div className="flex-1">
@@ -644,7 +671,7 @@ export const EnhancedWorkflowManager: React.FC = () => {
                     />
                   </div>
                 </div>
-                
+
                 <Select value={filterStatus} onValueChange={(value: any) => setFilterStatus(value)}>
                   <SelectTrigger className="w-40">
                     <SelectValue />
@@ -704,7 +731,7 @@ export const EnhancedWorkflowManager: React.FC = () => {
                             )}
                           </div>
                         </div>
-                        
+
                         <div className="flex items-center space-x-2">
                           <Button
                             size="sm"
@@ -713,7 +740,7 @@ export const EnhancedWorkflowManager: React.FC = () => {
                           >
                             <Play className="w-4 h-4" />
                           </Button>
-                          
+
                           <Button
                             size="sm"
                             variant="outline"
@@ -724,7 +751,7 @@ export const EnhancedWorkflowManager: React.FC = () => {
                           >
                             {workflow.active ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                           </Button>
-                          
+
                           <Button
                             size="sm"
                             variant="outline"
@@ -732,7 +759,7 @@ export const EnhancedWorkflowManager: React.FC = () => {
                           >
                             <Copy className="w-4 h-4" />
                           </Button>
-                          
+
                           <Button
                             size="sm"
                             variant="outline"
@@ -743,7 +770,7 @@ export const EnhancedWorkflowManager: React.FC = () => {
                           >
                             <ExternalLink className="w-4 h-4" />
                           </Button>
-                          
+
                           <Button
                             size="sm"
                             variant="outline"
@@ -751,7 +778,7 @@ export const EnhancedWorkflowManager: React.FC = () => {
                           >
                             <Activity className="w-4 h-4" />
                           </Button>
-                          
+
                           <Button
                             size="sm"
                             variant="destructive"
@@ -780,14 +807,14 @@ export const EnhancedWorkflowManager: React.FC = () => {
                     Historique et détails des exécutions
                   </CardDescription>
                 </div>
-                
+
                 <Button onClick={() => loadExecutions()} disabled={loading}>
                   <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
                   Actualiser
                 </Button>
               </div>
             </CardHeader>
-            
+
             <CardContent>
               <div className="space-y-3">
                 {executions.map((execution) => (
@@ -810,7 +837,7 @@ export const EnhancedWorkflowManager: React.FC = () => {
                           )}
                         </div>
                       </div>
-                      
+
                       <div className="flex items-center space-x-2">
                         <Button
                           size="sm"
@@ -819,7 +846,7 @@ export const EnhancedWorkflowManager: React.FC = () => {
                         >
                           <Eye className="w-4 h-4" />
                         </Button>
-                        
+
                         <Button
                           size="sm"
                           variant="destructive"
@@ -845,7 +872,7 @@ export const EnhancedWorkflowManager: React.FC = () => {
                 Organisez vos workflows avec des tags
               </CardDescription>
             </CardHeader>
-            
+
             <CardContent className="space-y-4">
               <div className="flex items-center space-x-2">
                 <Input
@@ -858,7 +885,7 @@ export const EnhancedWorkflowManager: React.FC = () => {
                   Créer
                 </Button>
               </div>
-              
+
               <div className="space-y-2">
                 {tags.map((tag) => (
                   <div key={tag.id} className="flex items-center justify-between p-2 border rounded">
@@ -882,7 +909,7 @@ export const EnhancedWorkflowManager: React.FC = () => {
                 Gérez les variables partagées entre workflows
               </CardDescription>
             </CardHeader>
-            
+
             <CardContent className="space-y-4">
               <div className="grid grid-cols-4 gap-2">
                 <Input
@@ -914,7 +941,7 @@ export const EnhancedWorkflowManager: React.FC = () => {
                   Créer
                 </Button>
               </div>
-              
+
               <div className="space-y-2">
                 {variables.map((variable) => (
                   <div key={variable.id} className="flex items-center justify-between p-2 border rounded">
@@ -944,14 +971,14 @@ export const EnhancedWorkflowManager: React.FC = () => {
                     Analyse de sécurité de votre instance n8n
                   </CardDescription>
                 </div>
-                
+
                 <Button onClick={generateSecurityAudit} disabled={loading}>
                   <BarChart3 className="w-4 h-4 mr-2" />
                   Générer Audit
                 </Button>
               </div>
             </CardHeader>
-            
+
             <CardContent>
               {auditResult ? (
                 <div className="space-y-4">
@@ -990,7 +1017,7 @@ export const EnhancedWorkflowManager: React.FC = () => {
                 Obtenez de l'aide pour créer, optimiser et déboguer vos workflows
               </CardDescription>
             </CardHeader>
-            
+
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="ai-prompt">Décrivez ce que vous voulez faire</Label>
@@ -1006,7 +1033,7 @@ export const EnhancedWorkflowManager: React.FC = () => {
                   Demander à l'IA
                 </Button>
               </div>
-              
+
               {aiResponse && (
                 <Card className="p-4 bg-blue-50 dark:bg-blue-900/20">
                   <h3 className="font-semibold mb-2">Réponse de l'Assistant IA</h3>

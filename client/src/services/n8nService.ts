@@ -1,4 +1,3 @@
-
 import { supabase } from '@/integrations/supabase/client';
 
 // Interfaces pour les réponses API n8n
@@ -71,7 +70,7 @@ class N8nService {
   private async getN8nConfig(): Promise<N8nConfig | null> {
     try {
       const { data, error } = await supabase.functions.invoke('get-n8n-secrets');
-      
+
       if (error) {
         console.error('❌ Erreur récupération config n8n:', error);
         return null;
@@ -94,7 +93,7 @@ class N8nService {
   async updateConfig(config: N8nConfig): Promise<void> {
     try {
       console.log('🔄 Mise à jour configuration n8n...');
-      
+
       const { error } = await supabase.functions.invoke('save-n8n-config', {
         body: {
           apiKey: config.apiKey,
@@ -108,7 +107,7 @@ class N8nService {
 
       // Réinitialiser le circuit breaker en cas de succès
       this.resetCircuitBreaker();
-      
+
       console.log('✅ Configuration n8n mise à jour avec succès');
     } catch (error) {
       console.error('❌ Erreur mise à jour config n8n:', error);
@@ -128,11 +127,11 @@ class N8nService {
     try {
       this.connectionStatus = 'checking';
       this.lastError = null;
-      
+
       console.log('🔍 Vérification connexion n8n...');
-      
+
       const { data, error } = await supabase.functions.invoke('test-n8n-connection');
-      
+
       if (error) {
         console.error('❌ Erreur fonction edge:', error);
         this.connectionStatus = 'error';
@@ -202,31 +201,61 @@ class N8nService {
 
   private async makeRequest<T>(
     endpoint: string, 
-    options: RequestInit = {},
-    retryCount = 0
+    options: RequestInit = {}, 
+    retryCount: number = 0
   ): Promise<T> {
+    // Vérifier le circuit breaker
     if (this.circuitBreakerOpen) {
-      throw new Error('Service n8n temporairement indisponible');
+      const now = Date.now();
+      if (now - this.lastFailureTime < this.circuitBreakerTimeout) {
+        throw new Error('Service temporairement indisponible (circuit breaker ouvert)');
+      } else {
+        this.circuitBreakerOpen = 'HALF_OPEN';
+      }
     }
 
+    const config = await this.getN8nConfig();
+    if (!config.apiKey || !config.baseUrl) {
+      throw new Error('Configuration n8n manquante. Veuillez configurer votre clé API et URL.');
+    }
+
+    const url = `${config.baseUrl}${endpoint}`;
+    console.log(`🌐 Requête n8n: ${options.method || 'GET'} ${endpoint}`);
+
+    // Controller pour timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
+
     try {
-      console.log(`🌐 Requête n8n: ${options.method || 'GET'} ${endpoint}`);
-      
-      const { data, error } = await supabase.functions.invoke('n8n-proxy', {
-        body: { 
-          path: endpoint,
-          method: options.method || 'GET',
-          body: options.body
-        }
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+        headers: {
+          'X-N8N-API-KEY': config.apiKey,
+          'Content-Type': 'application/json',
+          ...options.headers,
+        },
       });
 
-      if (error) {
-        console.error('❌ Erreur requête n8n:', error.message);
-        throw new Error(error.message || 'Configuration n8n manquante. Configurez votre clé API dans les paramètres.');
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`❌ Erreur n8n API (${response.status}):`, errorText);
+
+        // Erreurs qui ne nécessitent pas de retry
+        if (response.status === 401 || response.status === 403 || response.status === 404) {
+          this.handleFailure();
+          throw new Error(`n8n API Error: ${response.status} - ${errorText}`);
+        }
+
+        throw new Error(`n8n API Error: ${response.status} - ${errorText}`);
       }
 
-      if (data?.error) {
-        console.error('❌ Erreur API n8n:', data.error);
+      const data = await response.json();
+
+      if (data.error) {
+        console.error('❌ Erreur dans la réponse n8n:', data.error);
         throw new Error(data.error);
       }
 
@@ -234,24 +263,37 @@ class N8nService {
       this.resetCircuitBreaker();
       return data;
     } catch (error) {
+      clearTimeout(timeoutId);
+
+      // Gestion spécifique des erreurs
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.error('❌ Timeout de la requête n8n');
+        this.handleFailure();
+        throw new Error('Timeout: La requête n8n a pris trop de temps');
+      }
+
       console.error(`❌ Erreur requête (tentative ${retryCount + 1}/${this.MAX_RETRIES}):`, error);
-      
-      // Ne pas retry si c'est une erreur d'authentification ou de configuration
+
+      // Ne pas retry si c'est une erreur d'authentification, de configuration ou de timeout
       const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue';
       if (errorMessage.includes('Authentication') || 
           errorMessage.includes('API key') ||
-          errorMessage.includes('401')) {
+          errorMessage.includes('401') ||
+          errorMessage.includes('403') ||
+          errorMessage.includes('Timeout') ||
+          errorMessage.includes('Configuration n8n manquante')) {
         this.handleFailure();
         throw error;
       }
-      
+
+      // Retry avec backoff exponentiel seulement pour les erreurs temporaires
       if (retryCount < this.MAX_RETRIES - 1) {
-        const delay = Math.min(Math.pow(2, retryCount) * 1000, 10000); // Max 10s
+        const delay = Math.min(Math.pow(2, retryCount) * 2000, 30000); // Max 30s entre les tentatives
         console.log(`🔄 Nouvelle tentative dans ${delay}ms...`);
         await new Promise(resolve => setTimeout(resolve, delay));
         return this.makeRequest<T>(endpoint, options, retryCount + 1);
       }
-      
+
       this.handleFailure();
       throw error;
     }
@@ -259,7 +301,7 @@ class N8nService {
 
   private buildQueryParams(options: RequestOptions): string {
     const params = new URLSearchParams();
-    
+
     if (options.limit) params.append('limit', options.limit.toString());
     if (options.cursor) params.append('cursor', options.cursor);
     if (options.includeData !== undefined) params.append('includeData', options.includeData.toString());
@@ -268,7 +310,7 @@ class N8nService {
     if (options.name) params.append('name', options.name);
     if (options.projectId) params.append('projectId', options.projectId);
     if (options.workflowId) params.append('workflowId', options.workflowId);
-    
+
     return params.toString() ? `?${params.toString()}` : '';
   }
 
@@ -291,7 +333,7 @@ class N8nService {
 
   async updateWorkflow(id: string, workflow: Partial<N8nWorkflow>): Promise<N8nWorkflow> {
     if (!id) throw new Error('ID du workflow requis');
-    
+
     return this.makeRequest<N8nWorkflow>(`/workflows/${id}`, {
       method: 'PUT',
       body: JSON.stringify(workflow)
@@ -300,7 +342,7 @@ class N8nService {
 
   async deleteWorkflow(id: string): Promise<N8nWorkflow> {
     if (!id) throw new Error('ID du workflow requis');
-    
+
     return this.makeRequest<N8nWorkflow>(`/workflows/${id}`, {
       method: 'DELETE',
     });
@@ -308,7 +350,7 @@ class N8nService {
 
   async activateWorkflow(id: string): Promise<N8nWorkflow> {
     if (!id) throw new Error('ID du workflow requis');
-    
+
     return this.makeRequest<N8nWorkflow>(`/workflows/${id}/activate`, {
       method: 'POST',
     });
@@ -316,7 +358,7 @@ class N8nService {
 
   async deactivateWorkflow(id: string): Promise<N8nWorkflow> {
     if (!id) throw new Error('ID du workflow requis');
-    
+
     return this.makeRequest<N8nWorkflow>(`/workflows/${id}/deactivate`, {
       method: 'POST',
     });
@@ -335,7 +377,7 @@ class N8nService {
 
   async deleteExecution(id: string): Promise<N8nExecution> {
     if (!id) throw new Error('ID de l\'exécution requis');
-    
+
     return this.makeRequest<N8nExecution>(`/executions/${id}`, {
       method: 'DELETE',
     });
@@ -344,7 +386,7 @@ class N8nService {
   async executeWorkflow(workflowId: string, inputData: any = {}): Promise<any> {
     try {
       console.log(`🚀 Demande d'exécution du workflow: ${workflowId}`);
-      
+
       const workflow = await this.getWorkflow(workflowId);
       if (!workflow) {
         throw new Error('Workflow non trouvé');
@@ -356,7 +398,7 @@ class N8nService {
       }
 
       console.log('💡 Le workflow est maintenant actif et prêt à être déclenché');
-      
+
       return {
         success: true,
         message: `Workflow "${workflow.name}" est maintenant actif et prêt à être déclenché`,
@@ -388,29 +430,29 @@ class N8nService {
 
   async importAllWorkflows(): Promise<N8nWorkflow[]> {
     console.log('🔄 Importation complète des workflows depuis n8n...');
-    
+
     const allWorkflows: N8nWorkflow[] = [];
     let cursor: string | undefined;
     let hasMore = true;
-    
+
     while (hasMore) {
       try {
         const result = await this.getWorkflows({ 
           limit: 50, 
           cursor 
         });
-        
+
         allWorkflows.push(...result.data);
         cursor = result.nextCursor;
         hasMore = !!cursor;
-        
+
         console.log(`📊 ${allWorkflows.length} workflows importés jusqu'à présent...`);
       } catch (error) {
         console.error('❌ Erreur lors de l\'importation:', error);
         break;
       }
     }
-    
+
     console.log(`✅ Importation terminée: ${allWorkflows.length} workflows`);
     return allWorkflows;
   }
