@@ -171,10 +171,6 @@ class N8nService {
     };
   }
 
-  isConnected(): boolean {
-    return this.connectionStatus === 'connected' && !this.circuitBreakerOpen;
-  }
-
   // Circuit breaker methods
   private handleFailure(): void {
     this.failureCount++;
@@ -209,12 +205,7 @@ class N8nService {
   ): Promise<T> {
     // Vérifier le circuit breaker
     if (this.circuitBreakerOpen) {
-      const now = Date.now();
-      if (now - this.lastFailureTime < this.circuitBreakerTimeout) {
-        throw new Error('Service temporairement indisponible (circuit breaker ouvert)');
-      } else {
-        this.circuitBreakerOpen = 'HALF_OPEN';
-      }
+      throw new Error('Service temporairement indisponible (circuit breaker ouvert)');
     }
 
     const config = await this.getN8nConfig();
