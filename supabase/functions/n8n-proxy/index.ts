@@ -4,6 +4,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
 }
 
 serve(async (req) => {
@@ -24,7 +25,7 @@ serve(async (req) => {
     const { data: { user } } = await supabaseClient.auth.getUser(token)
 
     if (!user) {
-      return new Response(JSON.stringify({ success: false, error: 'Utilisateur non authentifié' }), {
+      return new Response(JSON.stringify({ error: 'Utilisateur non authentifié' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
@@ -39,43 +40,75 @@ serve(async (req) => {
 
     if (settingsError || !settings?.n8n_api_key) {
       return new Response(JSON.stringify({ 
-        success: false, 
         error: 'Configuration n8n manquante. Configurez votre clé API dans les paramètres.' 
       }), {
+        status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
 
-    // Tester la connexion n8n
+    // Extraire le chemin et les paramètres de requête
+    const url = new URL(req.url)
+    const path = url.searchParams.get('path') || '/workflows'
     const n8nUrl = settings.n8n_base_url || 'https://n8n.srv860213.hstgr.cloud'
-    const testResponse = await fetch(`${n8nUrl}/api/v1/workflows?limit=1`, {
-      headers: {
-        'X-N8N-API-KEY': settings.n8n_api_key,
-        'Content-Type': 'application/json',
+    
+    // Construire l'URL complète pour n8n
+    const targetUrl = `${n8nUrl}/api/v1${path}`
+    console.log(`🌐 Requête n8n: ${req.method} ${targetUrl}`)
+
+    // Préparer les headers pour n8n
+    const n8nHeaders: HeadersInit = {
+      'X-N8N-API-KEY': settings.n8n_api_key,
+      'Content-Type': 'application/json',
+    }
+
+    // Préparer les options de requête
+    const fetchOptions: RequestInit = {
+      method: req.method,
+      headers: n8nHeaders,
+    }
+
+    // Ajouter le body si nécessaire
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      try {
+        const body = await req.text()
+        if (body) {
+          fetchOptions.body = body
+        }
+      } catch (e) {
+        // Ignore si pas de body
+      }
+    }
+
+    // Faire l'appel à n8n
+    const response = await fetch(targetUrl, fetchOptions)
+    
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error(`❌ Erreur n8n ${response.status}:`, errorText)
+      return new Response(JSON.stringify({ 
+        error: `Erreur API n8n: ${response.status} ${response.statusText}`,
+        details: errorText
+      }), {
+        status: response.status,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    // Retourner la réponse de n8n
+    const responseData = await response.text()
+    
+    return new Response(responseData, {
+      status: response.status,
+      headers: { 
+        ...corsHeaders, 
+        'Content-Type': response.headers.get('content-type') || 'application/json' 
       },
     })
 
-    if (!testResponse.ok) {
-      return new Response(JSON.stringify({ 
-        success: false, 
-        error: `Erreur API n8n: ${testResponse.status} ${testResponse.statusText}` 
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
-    }
-
-    return new Response(JSON.stringify({ 
-      success: true, 
-      message: 'Connexion n8n établie avec succès',
-      baseUrl: n8nUrl
-    }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
-
   } catch (error) {
-    console.error('Erreur test connexion n8n:', error)
+    console.error('Erreur proxy n8n:', error)
     return new Response(JSON.stringify({ 
-      success: false, 
       error: `Erreur interne: ${error.message}` 
     }), {
       status: 500,
