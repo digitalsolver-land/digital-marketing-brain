@@ -144,11 +144,29 @@ export const EnhancedWorkflowManager: React.FC = () => {
 
   // === GESTION DES WORKFLOWS ===
   const loadWorkflows = async () => {
+    setLoading(true);
     try {
+      console.log('🔄 Chargement des workflows depuis n8n...');
       const result = await n8nService.getWorkflows({ limit: 100 });
+      console.log(`✅ ${result.data.length} workflows récupérés depuis n8n:`, result.data);
+      
       setWorkflows(result.data || []);
+      
+      if (result.data.length > 0) {
+        toast({
+          title: "Workflows chargés",
+          description: `${result.data.length} workflow(s) récupéré(s) depuis n8n`
+        });
+      }
     } catch (error) {
-      console.error('Erreur chargement workflows:', error);
+      console.error('❌ Erreur chargement workflows:', error);
+      toast({
+        variant: "destructive",
+        title: "Erreur de chargement",
+        description: "Impossible de charger les workflows depuis n8n"
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -658,6 +676,17 @@ export const EnhancedWorkflowManager: React.FC = () => {
                   <Button variant="outline" onClick={loadWorkflows} disabled={loading}>
                     <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
                     Actualiser
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    onClick={async () => {
+                      const N8nTestService = (await import('@/services/n8nTestService')).default;
+                      await N8nTestService.testAllEndpoints();
+                    }}
+                    disabled={loading}
+                  >
+                    <Shield className="w-4 h-4 mr-2" />
+                    Tester API
                   </Button>
                 </div>
               </div>
