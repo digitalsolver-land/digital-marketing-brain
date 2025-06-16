@@ -3,7 +3,7 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
 import { MetricsGrid } from '@/components/dashboard/MetricsGrid';
 import { PerformanceChart } from '@/components/dashboard/PerformanceChart';
-import { WorkflowManager } from '@/components/workflows/WorkflowManager';
+import { EnhancedWorkflowManager } from '@/components/workflows/EnhancedWorkflowManager';
 import { AIChat } from '@/components/ai/AIChat';
 import { ContentGenerator } from '@/components/content/ContentGenerator';
 import { AnalyticsDashboard } from '@/components/analytics/AnalyticsDashboard';
@@ -44,7 +44,7 @@ const Index = () => {
         );
 
       case 'workflows':
-        return <WorkflowManager />;
+        return <EnhancedWorkflowManager />;
 
       case 'ai-chat':
         return <AIChat />;

@@ -14,6 +14,19 @@ export interface N8nWorkflow {
     position: [number, number];
     parameters?: any;
     credentials?: any;
+    webhookId?: string;
+    disabled?: boolean;
+    notesInFlow?: boolean;
+    notes?: string;
+    executeOnce?: boolean;
+    alwaysOutputData?: boolean;
+    retryOnFail?: boolean;
+    maxTries?: number;
+    waitBetweenTries?: number;
+    continueOnFail?: boolean;
+    onError?: string;
+    createdAt?: string;
+    updatedAt?: string;
   }>;
   connections: {
     [key: string]: {
@@ -24,7 +37,16 @@ export interface N8nWorkflow {
       }>>;
     };
   };
-  settings?: any;
+  settings?: {
+    saveExecutionProgress?: boolean;
+    saveManualExecutions?: boolean;
+    saveDataErrorExecution?: 'all' | 'none';
+    saveDataSuccessExecution?: 'all' | 'none';
+    executionTimeout?: number;
+    errorWorkflow?: string;
+    timezone?: string;
+    executionOrder?: string;
+  };
   staticData?: any;
   tags?: Array<{ id: string; name: string }>;
   createdAt?: string;
@@ -436,6 +458,262 @@ class N8nService {
     console.log(`✅ Importation terminée: ${allWorkflows.length} workflows`);
     return allWorkflows;
   }
+
+  // === GESTION DES TAGS ===
+  async getTags(options: RequestOptions = {}): Promise<PaginatedResponse<N8nTag>> {
+    const queryParams = this.buildQueryParams(options);
+    return this.makeRequest<PaginatedResponse<N8nTag>>(`/tags${queryParams}`);
+  }
+
+  async getTag(id: string): Promise<N8nTag> {
+    return this.makeRequest<N8nTag>(`/tags/${id}`);
+  }
+
+  async createTag(tag: { name: string }): Promise<N8nTag> {
+    return this.makeRequest<N8nTag>('/tags', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(tag)
+    });
+  }
+
+  async updateTag(id: string, tag: { name: string }): Promise<N8nTag> {
+    return this.makeRequest<N8nTag>(`/tags/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(tag)
+    });
+  }
+
+  async deleteTag(id: string): Promise<N8nTag> {
+    return this.makeRequest<N8nTag>(`/tags/${id}`, {
+      method: 'DELETE'
+    });
+  }
+
+  async getWorkflowTags(workflowId: string): Promise<N8nTag[]> {
+    return this.makeRequest<N8nTag[]>(`/workflows/${workflowId}/tags`);
+  }
+
+  async updateWorkflowTags(workflowId: string, tagIds: Array<{ id: string }>): Promise<N8nTag[]> {
+    return this.makeRequest<N8nTag[]>(`/workflows/${workflowId}/tags`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(tagIds)
+    });
+  }
+
+  // === GESTION DES VARIABLES ===
+  async getVariables(options: RequestOptions = {}): Promise<PaginatedResponse<N8nVariable>> {
+    const queryParams = this.buildQueryParams(options);
+    return this.makeRequest<PaginatedResponse<N8nVariable>>(`/variables${queryParams}`);
+  }
+
+  async createVariable(variable: { key: string; value: string; type?: string }): Promise<void> {
+    await this.makeRequest<void>('/variables', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(variable)
+    });
+  }
+
+  async updateVariable(id: string, variable: { key: string; value: string; type?: string }): Promise<void> {
+    await this.makeRequest<void>(`/variables/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(variable)
+    });
+  }
+
+  async deleteVariable(id: string): Promise<void> {
+    await this.makeRequest<void>(`/variables/${id}`, {
+      method: 'DELETE'
+    });
+  }
+
+  // === GESTION DES PROJETS ===
+  async getProjects(options: RequestOptions = {}): Promise<PaginatedResponse<N8nProject>> {
+    const queryParams = this.buildQueryParams(options);
+    return this.makeRequest<PaginatedResponse<N8nProject>>(`/projects${queryParams}`);
+  }
+
+  async createProject(project: { name: string; type?: string }): Promise<void> {
+    await this.makeRequest<void>('/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(project)
+    });
+  }
+
+  async updateProject(projectId: string, project: { name: string; type?: string }): Promise<void> {
+    await this.makeRequest<void>(`/projects/${projectId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(project)
+    });
+  }
+
+  async deleteProject(projectId: string): Promise<void> {
+    await this.makeRequest<void>(`/projects/${projectId}`, {
+      method: 'DELETE'
+    });
+  }
+
+  async transferWorkflowToProject(workflowId: string, destinationProjectId: string): Promise<void> {
+    await this.makeRequest<void>(`/workflows/${workflowId}/transfer`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ destinationProjectId })
+    });
+  }
+
+  async addUsersToProject(projectId: string, relations: Array<{ userId: string; role: string }>): Promise<void> {
+    await this.makeRequest<void>(`/projects/${projectId}/users`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ relations })
+    });
+  }
+
+  async deleteUserFromProject(projectId: string, userId: string): Promise<void> {
+    await this.makeRequest<void>(`/projects/${projectId}/users/${userId}`, {
+      method: 'DELETE'
+    });
+  }
+
+  async changeUserRoleInProject(projectId: string, userId: string, role: string): Promise<void> {
+    await this.makeRequest<void>(`/projects/${projectId}/users/${userId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role })
+    });
+  }
+
+  // === GESTION DES CREDENTIALS ===
+  async createCredential(credential: { name: string; type: string; data: any }): Promise<N8nCredential> {
+    return this.makeRequest<N8nCredential>('/credentials', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(credential)
+    });
+  }
+
+  async deleteCredential(id: string): Promise<N8nCredential> {
+    return this.makeRequest<N8nCredential>(`/credentials/${id}`, {
+      method: 'DELETE'
+    });
+  }
+
+  async getCredentialSchema(credentialTypeName: string): Promise<any> {
+    return this.makeRequest<any>(`/credentials/schema/${credentialTypeName}`);
+  }
+
+  async transferCredentialToProject(credentialId: string, destinationProjectId: string): Promise<void> {
+    await this.makeRequest<void>(`/credentials/${credentialId}/transfer`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ destinationProjectId })
+    });
+  }
+
+  // === AUDIT DE SECURITE ===
+  async generateAudit(options?: { 
+    additionalOptions?: {
+      daysAbandonedWorkflow?: number;
+      categories?: Array<'credentials' | 'database' | 'nodes' | 'filesystem' | 'instance'>;
+    }
+  }): Promise<any> {
+    return this.makeRequest<any>('/audit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(options || {})
+    });
+  }
+
+  // === GESTION DES UTILISATEURS (Enterprise) ===
+  async getUsers(options: RequestOptions & { includeRole?: boolean } = {}): Promise<PaginatedResponse<N8nUser>> {
+    const queryParams = this.buildQueryParams(options);
+    return this.makeRequest<PaginatedResponse<N8nUser>>(`/users${queryParams}`);
+  }
+
+  async getUser(id: string, includeRole?: boolean): Promise<N8nUser> {
+    const queryParams = includeRole ? '?includeRole=true' : '';
+    return this.makeRequest<N8nUser>(`/users/${id}${queryParams}`);
+  }
+
+  async createUsers(users: Array<{ email: string; role: 'global:admin' | 'global:member' }>): Promise<any> {
+    return this.makeRequest<any>('/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(users)
+    });
+  }
+
+  async deleteUser(id: string): Promise<void> {
+    await this.makeRequest<void>(`/users/${id}`, {
+      method: 'DELETE'
+    });
+  }
+
+  async changeUserRole(id: string, newRoleName: 'global:admin' | 'global:member'): Promise<void> {
+    await this.makeRequest<void>(`/users/${id}/role`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ newRoleName })
+    });
+  }
+
+  // === CONTROLE DE SOURCE ===
+  async pullFromRepository(options: { force?: boolean; variables?: any }): Promise<any> {
+    return this.makeRequest<any>('/source-control/pull', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(options)
+    });
+  }
+}
+
+// Types additionnels pour les nouvelles fonctionnalités
+export interface N8nTag {
+  id: string;
+  name: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface N8nVariable {
+  id: string;
+  key: string;
+  value: string;
+  type?: string;
+}
+
+export interface N8nProject {
+  id: string;
+  name: string;
+  type: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface N8nCredential {
+  id: string;
+  name: string;
+  type: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface N8nUser {
+  id: string;
+  email: string;
+  firstName?: string;
+  lastName?: string;
+  role?: string;
+  isOwner?: boolean;
+  isPending?: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export const n8nService = N8nService.getInstance();
