@@ -7,12 +7,51 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AlertCircle, CheckCircle, Clock, Bot, Zap, Settings, BarChart, RefreshCw, Play, Pause, Stop } from 'lucide-react';
+import { 
+  AlertCircle, 
+  CheckCircle, 
+  Clock, 
+  Bot, 
+  Zap, 
+  Settings, 
+  BarChart, 
+  RefreshCw, 
+  Play, 
+  Pause, 
+  Stop,
+  Workflow,
+  Activity,
+  Shield,
+  Tag,
+  Database,
+  GitBranch,
+  BarChart3,
+  Plus,
+  Search,
+  Eye,
+  Trash2,
+  Copy,
+  ExternalLink,
+  XCircle,
+  AlertTriangle
+} from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from 'sonner';
+import { useToast } from '@/hooks/use-toast';
 
 import { n8nService } from '@/services/n8nService';
 import { useDebounce } from '@/hooks/useDebounce';
+import { aiService } from '@/services/aiService';
+import type { 
+  N8nWorkflow, 
+  N8nExecution, 
+  N8nCredential, 
+  N8nTag, 
+  N8nVariable, 
+  N8nProject,
+  PaginatedResponse,
+  RequestOptions
+} from '@/types/n8n';
 
 export const EnhancedWorkflowManager: React.FC = () => {
   const { toast } = useToast();
