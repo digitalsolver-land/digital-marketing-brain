@@ -132,13 +132,56 @@ export class N8nDiagnosticService {
       return { error };
     }
   }
+
+  static async migrateReplitSecretsToSupabase() {
+    console.log('🔄 Migration des secrets Replit vers Supabase...');
+    
+    try {
+      // Récupérer les secrets depuis les variables d'environnement Replit
+      const n8nApiKey = process.env.N8N_API_KEY;
+      const n8nBaseUrl = process.env.N8N_BASE_URL || 'https://n8n.srv860213.hstgr.cloud';
+
+      if (!n8nApiKey) {
+        console.error('❌ N8N_API_KEY non trouvée dans les secrets Replit');
+        return { 
+          success: false, 
+          error: 'N8N_API_KEY non configurée dans les secrets Replit. Allez dans Tools > Secrets et ajoutez N8N_API_KEY.' 
+        };
+      }
+
+      console.log('✅ Secrets Replit trouvés');
+      console.log('📋 N8N_API_KEY:', n8nApiKey.substring(0, 10) + '...');
+      console.log('📋 N8N_BASE_URL:', n8nBaseUrl);
+
+      // Sauvegarder dans Supabase via la fonction edge
+      const { data, error } = await supabase.functions.invoke('save-n8n-config', {
+        body: {
+          apiKey: n8nApiKey,
+          baseUrl: n8nBaseUrl
+        }
+      });
+
+      if (error) {
+        console.error('❌ Erreur sauvegarde Supabase:', error);
+        return { success: false, error };
+      }
+
+      console.log('✅ Secrets migrés avec succès vers Supabase');
+      return { success: true, data };
+
+    } catch (error) {
+      console.error('❌ Erreur migration:', error);
+      return { success: false, error };
+    }
+  }
 }
 
 // Ajouter à window pour tests manuels
 (window as any).testN8nDiagnostic = {
   full: () => N8nDiagnosticService.fullDiagnostic(),
   secrets: () => N8nDiagnosticService.testSecrets(),
-  config: () => n8nService.getN8nConfig()
+  config: () => n8nService.getN8nConfig(),
+  migrate: () => N8nDiagnosticService.migrateReplitSecretsToSupabase()
 };
 
 export default N8nDiagnosticService;

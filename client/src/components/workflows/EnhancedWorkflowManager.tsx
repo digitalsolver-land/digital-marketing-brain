@@ -701,6 +701,39 @@ export const EnhancedWorkflowManager: React.FC = () => {
           >
             🔍 Diagnostic
           </Button>
+              <Button
+                onClick={async () => {
+                  try {
+                    const { N8nDiagnosticService } = await import('@/services/n8nDiagnosticService');
+                    const result = await N8nDiagnosticService.migrateReplitSecretsToSupabase();
+                    if (result.success) {
+                      toast({
+                        title: "✅ Migration réussie",
+                        description: "Les secrets ont été migrés vers Supabase",
+                      });
+                      // Recharger les workflows après migration
+                      await loadWorkflows();
+                    } else {
+                      toast({
+                        title: "❌ Erreur migration",
+                        description: result.error?.message || "Erreur inconnue",
+                        variant: "destructive"
+                      });
+                    }
+                  } catch (error) {
+                    console.error('Erreur migration:', error);
+                    toast({
+                      title: "❌ Erreur migration",
+                      description: "Erreur lors de la migration des secrets",
+                      variant: "destructive"
+                    });
+                  }
+                }}
+                variant="outline"
+                size="sm"
+              >
+                🔄 Migrer Secrets
+              </Button>
                 </div>
               </div>
             </CardHeader>
