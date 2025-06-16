@@ -43,11 +43,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange
 
   return (
     <div className={cn(
-      "bg-gradient-to-b from-slate-900 to-slate-800 border-r border-slate-700 transition-all duration-300 relative",
+      "bg-gradient-to-b from-slate-900 to-slate-800 border-r border-slate-700 transition-all duration-300 flex flex-col h-full",
       isCollapsed ? "w-16" : "w-64"
     )}>
       {/* Header */}
-      <div className="p-4 border-b border-slate-700">
+      <div className="p-4 border-b border-slate-700 flex-shrink-0">
         <div className="flex items-center justify-between">
           {!isCollapsed && (
             <div className="flex items-center space-x-2">
@@ -67,7 +67,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange
       </div>
 
       {/* Navigation */}
-      <nav className="p-4 space-y-2">
+      <nav className="p-4 space-y-2 flex-1 overflow-y-auto">
         {menuItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeSection === item.id;
@@ -98,7 +98,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange
 
       {/* User Section */}
       {!isCollapsed && (
-        <div className="absolute bottom-4 left-4 right-4">
+        <div className="p-4 flex-shrink-0">
           <div className="bg-slate-800 rounded-lg p-3 border border-slate-700">
             <div className="flex items-center space-x-3">
               <div className="w-8 h-8 bg-gradient-to-r from-green-400 to-blue-500 rounded-full flex items-center justify-center">
