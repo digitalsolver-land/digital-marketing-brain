@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useToast } from '@/hooks/use-toast';
 import { CampaignList } from './CampaignList';
 import { CampaignCreator } from './CampaignCreator';
 import { CampaignAnalytics } from './CampaignAnalytics';
@@ -20,8 +21,10 @@ import {
 } from 'lucide-react';
 
 export const CampaignManager = () => {
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('overview');
   const [showCreator, setShowCreator] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState(null);
 
   // Données de démonstration pour les métriques principales
   const metrics = [
@@ -88,14 +91,45 @@ export const CampaignManager = () => {
     }
   ];
 
+  const handleCreateCampaign = (type?: string) => {
+    toast({
+      title: "Nouvelle campagne",
+      description: `Création d'une campagne ${type || 'personnalisée'}`,
+    });
+    setShowCreator(true);
+  };
+
+  const handleUseTemplate = (template: any) => {
+    setSelectedTemplate(template);
+    setShowCreator(true);
+  };
+
+  const handleSaveCampaign = (campaign: any) => {
+    toast({
+      title: "Campagne sauvegardée",
+      description: `${campaign.name} a été ${campaign.status === 'active' ? 'lancée' : 'sauvegardée'} avec succès`,
+    });
+    console.log('Nouvelle campagne:', campaign);
+    setShowCreator(false);
+    setSelectedTemplate(null);
+  };
+
+  const handleScheduleCampaign = () => {
+    toast({
+      title: "Planification",
+      description: "Ouverture du calendrier de planification",
+    });
+  };
+
   if (showCreator) {
     return (
       <CampaignCreator 
-        onBack={() => setShowCreator(false)}
-        onSave={(campaign) => {
-          console.log('Nouvelle campagne:', campaign);
+        onBack={() => {
           setShowCreator(false);
+          setSelectedTemplate(null);
         }}
+        onSave={handleSaveCampaign}
+        template={selectedTemplate}
       />
     );
   }
@@ -113,11 +147,11 @@ export const CampaignManager = () => {
           </p>
         </div>
         <div className="flex space-x-3">
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" onClick={handleScheduleCampaign}>
             <Calendar className="w-4 h-4 mr-2" />
             Planifier
           </Button>
-          <Button onClick={() => setShowCreator(true)}>
+          <Button onClick={() => handleCreateCampaign()}>
             <Plus className="w-4 h-4 mr-2" />
             Nouvelle Campagne
           </Button>
@@ -213,7 +247,7 @@ export const CampaignManager = () => {
 
           {/* Actions rapides */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setShowCreator(true)}>
+            <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => handleCreateCampaign('Email')}>
               <CardContent className="p-6 text-center">
                 <Mail className="w-12 h-12 text-blue-500 mx-auto mb-4" />
                 <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">
@@ -225,7 +259,7 @@ export const CampaignManager = () => {
               </CardContent>
             </Card>
 
-            <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setShowCreator(true)}>
+            <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => handleCreateCampaign('Social')}>
               <CardContent className="p-6 text-center">
                 <MessageSquare className="w-12 h-12 text-green-500 mx-auto mb-4" />
                 <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">
@@ -237,7 +271,7 @@ export const CampaignManager = () => {
               </CardContent>
             </Card>
 
-            <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setShowCreator(true)}>
+            <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => handleCreateCampaign('SEM')}>
               <CardContent className="p-6 text-center">
                 <Target className="w-12 h-12 text-purple-500 mx-auto mb-4" />
                 <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">
@@ -260,7 +294,7 @@ export const CampaignManager = () => {
         </TabsContent>
 
         <TabsContent value="templates">
-          <CampaignTemplates onUseTemplate={(template) => setShowCreator(true)} />
+          <CampaignTemplates onUseTemplate={handleUseTemplate} />
         </TabsContent>
       </Tabs>
     </div>

@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { useToast } from '@/hooks/use-toast';
 import { 
   Search, 
   Target, 
@@ -14,7 +15,8 @@ import {
   TrendingUp,
   Calendar,
   Star,
-  Play
+  Play,
+  Eye
 } from 'lucide-react';
 
 interface CampaignTemplatesProps {
@@ -22,6 +24,7 @@ interface CampaignTemplatesProps {
 }
 
 export const CampaignTemplates: React.FC<CampaignTemplatesProps> = ({ onUseTemplate }) => {
+  const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
 
@@ -139,6 +142,22 @@ export const CampaignTemplates: React.FC<CampaignTemplatesProps> = ({ onUseTempl
     const matchesCategory = selectedCategory === 'all' || template.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
+
+  const handleUseTemplate = (template: any) => {
+    toast({
+      title: "Modèle sélectionné",
+      description: `Création d'une nouvelle campagne basée sur "${template.name}"`,
+    });
+    onUseTemplate(template);
+  };
+
+  const handlePreviewTemplate = (template: any) => {
+    toast({
+      title: "Aperçu du modèle",
+      description: `Affichage de l'aperçu pour "${template.name}"`,
+    });
+    console.log('Aperçu du modèle:', template);
+  };
 
   return (
     <div className="space-y-6">
@@ -268,13 +287,17 @@ export const CampaignTemplates: React.FC<CampaignTemplatesProps> = ({ onUseTempl
                   <Button 
                     size="sm" 
                     className="flex-1"
-                    onClick={() => onUseTemplate(template)}
+                    onClick={() => handleUseTemplate(template)}
                   >
                     <Play className="w-4 h-4 mr-2" />
                     Utiliser ce modèle
                   </Button>
-                  <Button variant="outline" size="sm">
-                    Aperçu
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => handlePreviewTemplate(template)}
+                  >
+                    <Eye className="w-4 h-4" />
                   </Button>
                 </div>
               </CardContent>

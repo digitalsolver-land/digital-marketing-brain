@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { useToast } from '@/hooks/use-toast';
 import { 
   Search, 
   Filter, 
@@ -25,10 +26,10 @@ import {
 } from '@/components/ui/dropdown-menu';
 
 export const CampaignList = () => {
+  const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
-
-  const campaigns = [
+  const [campaigns, setCampaigns] = useState([
     {
       id: 1,
       name: "Black Friday 2024",
@@ -109,7 +110,7 @@ export const CampaignList = () => {
       endDate: "2024-12-31",
       platforms: ["LinkedIn", "Email", "Webinar"]
     }
-  ];
+  ]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -129,6 +130,49 @@ export const CampaignList = () => {
       case 'scheduled': return 'Programmé';
       default: return status;
     }
+  };
+
+  const handleCampaignAction = (campaignId: number, action: string) => {
+    setCampaigns(prev => prev.map(campaign => {
+      if (campaign.id === campaignId) {
+        switch (action) {
+          case 'pause':
+            toast({
+              title: "Campagne mise en pause",
+              description: `${campaign.name} a été mise en pause avec succès.`,
+            });
+            return { ...campaign, status: 'paused' };
+          case 'activate':
+            toast({
+              title: "Campagne activée",
+              description: `${campaign.name} a été activée avec succès.`,
+            });
+            return { ...campaign, status: 'active' };
+          case 'view':
+            toast({
+              title: "Ouverture des détails",
+              description: `Affichage des détails de ${campaign.name}`,
+            });
+            return campaign;
+          case 'edit':
+            toast({
+              title: "Mode édition",
+              description: `Édition de ${campaign.name}`,
+            });
+            return campaign;
+          case 'delete':
+            toast({
+              title: "Campagne supprimée",
+              description: `${campaign.name} a été supprimée`,
+              variant: "destructive"
+            });
+            return null;
+          default:
+            return campaign;
+        }
+      }
+      return campaign;
+    }).filter(Boolean));
   };
 
   const filteredCampaigns = campaigns.filter(campaign => {
@@ -213,26 +257,29 @@ export const CampaignList = () => {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleCampaignAction(campaign.id, 'view')}>
                         <Eye className="w-4 h-4 mr-2" />
                         Voir détails
                       </DropdownMenuItem>
-                      <DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleCampaignAction(campaign.id, 'edit')}>
                         <Edit className="w-4 h-4 mr-2" />
                         Modifier
                       </DropdownMenuItem>
                       {campaign.status === 'active' ? (
-                        <DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleCampaignAction(campaign.id, 'pause')}>
                           <Pause className="w-4 h-4 mr-2" />
                           Mettre en pause
                         </DropdownMenuItem>
                       ) : (
-                        <DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleCampaignAction(campaign.id, 'activate')}>
                           <Play className="w-4 h-4 mr-2" />
                           Activer
                         </DropdownMenuItem>
                       )}
-                      <DropdownMenuItem className="text-red-600">
+                      <DropdownMenuItem 
+                        className="text-red-600"
+                        onClick={() => handleCampaignAction(campaign.id, 'delete')}
+                      >
                         <Trash2 className="w-4 h-4 mr-2" />
                         Supprimer
                       </DropdownMenuItem>
@@ -281,7 +328,6 @@ export const CampaignList = () => {
                 </div>
               </div>
 
-              {/* Plateformes et période */}
               <div className="flex items-center justify-between text-sm">
                 <div className="flex items-center space-x-2">
                   <Target className="w-4 h-4 text-slate-400" />
@@ -306,7 +352,6 @@ export const CampaignList = () => {
                 </div>
               </div>
 
-              {/* Barre de progression du budget */}
               <div className="mt-4">
                 <div className="flex justify-between text-sm text-slate-600 dark:text-slate-400 mb-1">
                   <span>Progression du budget</span>
