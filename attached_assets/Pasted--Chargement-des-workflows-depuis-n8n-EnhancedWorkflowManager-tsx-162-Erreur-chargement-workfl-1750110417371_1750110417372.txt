@@ -1,0 +1,161 @@
+🔄 Chargement des workflows depuis n8n...
+EnhancedWorkflowManager.tsx:162 ❌ Erreur chargement workflows: TypeError: Cannot read properties of null (reading 'apiKey')
+    at N8nService.makeRequest (n8nService.ts:212:17)
+    at async loadWorkflows (EnhancedWorkflowManager.tsx:150:22)
+loadWorkflows @ EnhancedWorkflowManager.tsx:162
+await in loadWorkflows
+callCallback2 @ chunk-UPELNCPK.js?v=858afcb1:3674
+invokeGuardedCallbackDev @ chunk-UPELNCPK.js?v=858afcb1:3699
+invokeGuardedCallback @ chunk-UPELNCPK.js?v=858afcb1:3733
+invokeGuardedCallbackAndCatchFirstError @ chunk-UPELNCPK.js?v=858afcb1:3736
+executeDispatch @ chunk-UPELNCPK.js?v=858afcb1:7014
+processDispatchQueueItemsInOrder @ chunk-UPELNCPK.js?v=858afcb1:7034
+processDispatchQueue @ chunk-UPELNCPK.js?v=858afcb1:7043
+dispatchEventsForPlugins @ chunk-UPELNCPK.js?v=858afcb1:7051
+(anonymous) @ chunk-UPELNCPK.js?v=858afcb1:7174
+batchedUpdates$1 @ chunk-UPELNCPK.js?v=858afcb1:18913
+batchedUpdates @ chunk-UPELNCPK.js?v=858afcb1:3579
+dispatchEventForPluginEventSystem @ chunk-UPELNCPK.js?v=858afcb1:7173
+dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay @ chunk-UPELNCPK.js?v=858afcb1:5478
+dispatchEvent @ chunk-UPELNCPK.js?v=858afcb1:5472
+dispatchDiscreteEvent @ chunk-UPELNCPK.js?v=858afcb1:5449
+n8nTestService.ts:17 🧪 Démarrage des tests complets n8n...
+n8nTestService.ts:21 🔍 Test connexion...
+n8nService.ts:134 🔍 Vérification connexion n8n...
+n8nService.ts:149 ✅ n8n connecté avec succès
+n8nTestService.ts:33 📋 Test récupération workflows...
+n8nTestService.ts:41 ❌ Erreur workflows: TypeError: Cannot read properties of null (reading 'apiKey')
+    at N8nService.makeRequest (n8nService.ts:212:17)
+    at async N8nTestService.testAllEndpoints (n8nTestService.ts:34:31)
+    at async onClick (EnhancedWorkflowManager.tsx:684:23)
+testAllEndpoints @ n8nTestService.ts:41
+await in testAllEndpoints
+onClick @ EnhancedWorkflowManager.tsx:684
+await in onClick
+callCallback2 @ chunk-UPELNCPK.js?v=858afcb1:3674
+invokeGuardedCallbackDev @ chunk-UPELNCPK.js?v=858afcb1:3699
+invokeGuardedCallback @ chunk-UPELNCPK.js?v=858afcb1:3733
+invokeGuardedCallbackAndCatchFirstError @ chunk-UPELNCPK.js?v=858afcb1:3736
+executeDispatch @ chunk-UPELNCPK.js?v=858afcb1:7014
+processDispatchQueueItemsInOrder @ chunk-UPELNCPK.js?v=858afcb1:7034
+processDispatchQueue @ chunk-UPELNCPK.js?v=858afcb1:7043
+dispatchEventsForPlugins @ chunk-UPELNCPK.js?v=858afcb1:7051
+(anonymous) @ chunk-UPELNCPK.js?v=858afcb1:7174
+batchedUpdates$1 @ chunk-UPELNCPK.js?v=858afcb1:18913
+batchedUpdates @ chunk-UPELNCPK.js?v=858afcb1:3579
+dispatchEventForPluginEventSystem @ chunk-UPELNCPK.js?v=858afcb1:7173
+dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay @ chunk-UPELNCPK.js?v=858afcb1:5478
+dispatchEvent @ chunk-UPELNCPK.js?v=858afcb1:5472
+dispatchDiscreteEvent @ chunk-UPELNCPK.js?v=858afcb1:5449
+n8nTestService.ts:46 ⚡ Test récupération exécutions...
+n8nTestService.ts:52 ❌ Erreur exécutions: TypeError: Cannot read properties of null (reading 'apiKey')
+    at N8nService.makeRequest (n8nService.ts:212:17)
+    at async N8nTestService.testAllEndpoints (n8nTestService.ts:47:32)
+    at async onClick (EnhancedWorkflowManager.tsx:684:23)
+testAllEndpoints @ n8nTestService.ts:52
+await in testAllEndpoints
+onClick @ EnhancedWorkflowManager.tsx:684
+await in onClick
+callCallback2 @ chunk-UPELNCPK.js?v=858afcb1:3674
+invokeGuardedCallbackDev @ chunk-UPELNCPK.js?v=858afcb1:3699
+invokeGuardedCallback @ chunk-UPELNCPK.js?v=858afcb1:3733
+invokeGuardedCallbackAndCatchFirstError @ chunk-UPELNCPK.js?v=858afcb1:3736
+executeDispatch @ chunk-UPELNCPK.js?v=858afcb1:7014
+processDispatchQueueItemsInOrder @ chunk-UPELNCPK.js?v=858afcb1:7034
+processDispatchQueue @ chunk-UPELNCPK.js?v=858afcb1:7043
+dispatchEventsForPlugins @ chunk-UPELNCPK.js?v=858afcb1:7051
+(anonymous) @ chunk-UPELNCPK.js?v=858afcb1:7174
+batchedUpdates$1 @ chunk-UPELNCPK.js?v=858afcb1:18913
+batchedUpdates @ chunk-UPELNCPK.js?v=858afcb1:3579
+dispatchEventForPluginEventSystem @ chunk-UPELNCPK.js?v=858afcb1:7173
+dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay @ chunk-UPELNCPK.js?v=858afcb1:5478
+dispatchEvent @ chunk-UPELNCPK.js?v=858afcb1:5472
+dispatchDiscreteEvent @ chunk-UPELNCPK.js?v=858afcb1:5449
+n8nTestService.ts:57 🏷️ Test récupération tags...
+n8nTestService.ts:63 ❌ Erreur tags: TypeError: Cannot read properties of null (reading 'apiKey')
+    at N8nService.makeRequest (n8nService.ts:212:17)
+    at async N8nTestService.testAllEndpoints (n8nTestService.ts:58:26)
+    at async onClick (EnhancedWorkflowManager.tsx:684:23)
+testAllEndpoints @ n8nTestService.ts:63
+await in testAllEndpoints
+onClick @ EnhancedWorkflowManager.tsx:684
+await in onClick
+callCallback2 @ chunk-UPELNCPK.js?v=858afcb1:3674
+invokeGuardedCallbackDev @ chunk-UPELNCPK.js?v=858afcb1:3699
+invokeGuardedCallback @ chunk-UPELNCPK.js?v=858afcb1:3733
+invokeGuardedCallbackAndCatchFirstError @ chunk-UPELNCPK.js?v=858afcb1:3736
+executeDispatch @ chunk-UPELNCPK.js?v=858afcb1:7014
+processDispatchQueueItemsInOrder @ chunk-UPELNCPK.js?v=858afcb1:7034
+processDispatchQueue @ chunk-UPELNCPK.js?v=858afcb1:7043
+dispatchEventsForPlugins @ chunk-UPELNCPK.js?v=858afcb1:7051
+(anonymous) @ chunk-UPELNCPK.js?v=858afcb1:7174
+batchedUpdates$1 @ chunk-UPELNCPK.js?v=858afcb1:18913
+batchedUpdates @ chunk-UPELNCPK.js?v=858afcb1:3579
+dispatchEventForPluginEventSystem @ chunk-UPELNCPK.js?v=858afcb1:7173
+dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay @ chunk-UPELNCPK.js?v=858afcb1:5478
+dispatchEvent @ chunk-UPELNCPK.js?v=858afcb1:5472
+dispatchDiscreteEvent @ chunk-UPELNCPK.js?v=858afcb1:5449
+n8nTestService.ts:68 🔧 Test récupération variables...
+n8nTestService.ts:74 ❌ Erreur variables: TypeError: Cannot read properties of null (reading 'apiKey')
+    at N8nService.makeRequest (n8nService.ts:212:17)
+    at async N8nTestService.testAllEndpoints (n8nTestService.ts:69:31)
+    at async onClick (EnhancedWorkflowManager.tsx:684:23)
+testAllEndpoints @ n8nTestService.ts:74
+await in testAllEndpoints
+onClick @ EnhancedWorkflowManager.tsx:684
+await in onClick
+callCallback2 @ chunk-UPELNCPK.js?v=858afcb1:3674
+invokeGuardedCallbackDev @ chunk-UPELNCPK.js?v=858afcb1:3699
+invokeGuardedCallback @ chunk-UPELNCPK.js?v=858afcb1:3733
+invokeGuardedCallbackAndCatchFirstError @ chunk-UPELNCPK.js?v=858afcb1:3736
+executeDispatch @ chunk-UPELNCPK.js?v=858afcb1:7014
+processDispatchQueueItemsInOrder @ chunk-UPELNCPK.js?v=858afcb1:7034
+processDispatchQueue @ chunk-UPELNCPK.js?v=858afcb1:7043
+dispatchEventsForPlugins @ chunk-UPELNCPK.js?v=858afcb1:7051
+(anonymous) @ chunk-UPELNCPK.js?v=858afcb1:7174
+batchedUpdates$1 @ chunk-UPELNCPK.js?v=858afcb1:18913
+batchedUpdates @ chunk-UPELNCPK.js?v=858afcb1:3579
+dispatchEventForPluginEventSystem @ chunk-UPELNCPK.js?v=858afcb1:7173
+dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay @ chunk-UPELNCPK.js?v=858afcb1:5478
+dispatchEvent @ chunk-UPELNCPK.js?v=858afcb1:5472
+dispatchDiscreteEvent @ chunk-UPELNCPK.js?v=858afcb1:5449
+n8nTestService.ts:79 📁 Test récupération projets...
+n8nTestService.ts:85 ❌ Erreur projets: TypeError: Cannot read properties of null (reading 'apiKey')
+    at N8nService.makeRequest (n8nService.ts:212:17)
+    at async N8nTestService.testAllEndpoints (n8nTestService.ts:80:30)
+    at async onClick (EnhancedWorkflowManager.tsx:684:23)
+testAllEndpoints @ n8nTestService.ts:85
+await in testAllEndpoints
+onClick @ EnhancedWorkflowManager.tsx:684
+await in onClick
+callCallback2 @ chunk-UPELNCPK.js?v=858afcb1:3674
+invokeGuardedCallbackDev @ chunk-UPELNCPK.js?v=858afcb1:3699
+invokeGuardedCallback @ chunk-UPELNCPK.js?v=858afcb1:3733
+invokeGuardedCallbackAndCatchFirstError @ chunk-UPELNCPK.js?v=858afcb1:3736
+executeDispatch @ chunk-UPELNCPK.js?v=858afcb1:7014
+processDispatchQueueItemsInOrder @ chunk-UPELNCPK.js?v=858afcb1:7034
+processDispatchQueue @ chunk-UPELNCPK.js?v=858afcb1:7043
+dispatchEventsForPlugins @ chunk-UPELNCPK.js?v=858afcb1:7051
+(anonymous) @ chunk-UPELNCPK.js?v=858afcb1:7174
+batchedUpdates$1 @ chunk-UPELNCPK.js?v=858afcb1:18913
+batchedUpdates @ chunk-UPELNCPK.js?v=858afcb1:3579
+dispatchEventForPluginEventSystem @ chunk-UPELNCPK.js?v=858afcb1:7173
+dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay @ chunk-UPELNCPK.js?v=858afcb1:5478
+dispatchEvent @ chunk-UPELNCPK.js?v=858afcb1:5472
+dispatchDiscreteEvent @ chunk-UPELNCPK.js?v=858afcb1:5449
+n8nTestService.ts:89 
+📊 RÉSULTATS DES TESTS:
+n8nTestService.ts:90 ======================
+n8nTestService.ts:91 🔌 Connexion: ✅
+n8nTestService.ts:92 📋 Workflows: ❌
+n8nTestService.ts:93 ⚡ Exécutions: ❌
+n8nTestService.ts:94 🏷️ Tags: ❌
+n8nTestService.ts:95 🔧 Variables: ❌
+n8nTestService.ts:96 📁 Projets: ❌
+n8nTestService.ts:99 
+❌ ERREURS DÉTECTÉES:
+n8nTestService.ts:100   - Workflows: TypeError: Cannot read properties of null (reading 'apiKey')
+n8nTestService.ts:100   - Executions: TypeError: Cannot read properties of null (reading 'apiKey')
+n8nTestService.ts:100   - Tags: TypeError: Cannot read properties of null (reading 'apiKey')
+n8nTestService.ts:100   - Variables: TypeError: Cannot read properties of null (reading 'apiKey')
+n8nTestService.ts:100   - Projects: TypeError: Cannot read properties of null (reading 'apiKey')
