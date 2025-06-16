@@ -70,7 +70,7 @@ class N8nService {
   }
 
   // Méthode pour obtenir la configuration depuis user_secrets
-  private async getN8nConfig(): Promise<N8nConfig | null> {
+  async getN8nConfig(): Promise<N8nConfig | null> {
     try {
       const { data, error } = await supabase.functions.invoke('get-n8n-secrets');
 
@@ -209,7 +209,7 @@ class N8nService {
     }
 
     const config = await this.getN8nConfig();
-    if (!config.apiKey || !config.baseUrl) {
+    if (!config || !config.apiKey || !config.baseUrl) {
       throw new Error('Configuration n8n manquante. Veuillez configurer votre clé API et URL.');
     }
 

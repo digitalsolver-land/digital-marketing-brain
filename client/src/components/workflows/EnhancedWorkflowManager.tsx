@@ -149,9 +149,9 @@ export const EnhancedWorkflowManager: React.FC = () => {
       console.log('🔄 Chargement des workflows depuis n8n...');
       const result = await n8nService.getWorkflows({ limit: 100 });
       console.log(`✅ ${result.data.length} workflows récupérés depuis n8n:`, result.data);
-      
+
       setWorkflows(result.data || []);
-      
+
       if (result.data.length > 0) {
         toast({
           title: "Workflows chargés",
@@ -688,6 +688,19 @@ export const EnhancedWorkflowManager: React.FC = () => {
                     <Shield className="w-4 h-4 mr-2" />
                     Tester API
                   </Button>
+
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={async () => {
+              console.log('🔍 Lancement diagnostic complet...');
+              const { N8nDiagnosticService } = await import('@/services/n8nDiagnosticService');
+              await N8nDiagnosticService.fullDiagnostic();
+            }}
+            disabled={loading}
+          >
+            🔍 Diagnostic
+          </Button>
                 </div>
               </div>
             </CardHeader>

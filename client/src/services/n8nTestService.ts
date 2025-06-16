@@ -16,6 +16,21 @@ export class N8nTestService {
 
     console.log('🧪 Démarrage des tests complets n8n...');
 
+    // Diagnostic de configuration
+    console.log('🔧 Diagnostic configuration...');
+    try {
+      const configResult = await n8nService.getN8nConfig();
+      console.log('📋 Config récupérée:', {
+        hasConfig: !!configResult,
+        hasApiKey: !!(configResult?.apiKey),
+        hasBaseUrl: !!(configResult?.baseUrl),
+        apiKeyLength: configResult?.apiKey?.length || 0
+      });
+    } catch (error) {
+      console.error('❌ Erreur diagnostic config:', error);
+      results.errors.push(`Config: ${error}`);
+    }
+
     // Test 1: Connexion
     try {
       console.log('🔍 Test connexion...');
