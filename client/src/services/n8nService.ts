@@ -58,6 +58,9 @@ class N8nService {
   private failureCount = 0;
   private readonly CIRCUIT_BREAKER_THRESHOLD = 5;
   private readonly CIRCUIT_BREAKER_TIMEOUT = 60000; // 1 minute
+  private lastConnectionCheck: number = 0;
+  private connectionCacheTime: number = 30000; // 30 secondes
+  private isConnected: boolean | null = null;
 
   public static getInstance(): N8nService {
     if (!N8nService.instance) {
@@ -541,6 +544,30 @@ class N8nService {
       failureCount: this.failureCount,
       lastError: this.lastError
     };
+  }
+
+  async testConnection(): Promise<boolean> {
+    const now = Date.now();
+
+    // Utiliser le cache si disponible et récent
+    if (this.isConnected !== null && (now - this.lastConnectionCheck) < this.connectionCacheTime) {
+      return this.isConnected;
+    }
+
+    try {
+      console.log('🔍 Vérification connexion n8n...');
+      await this.makeRequest('/workflows', { method: 'GET' });
+      console.log('✅ n8n connecté avec succès');
+
+      this.isConnected = true;
+      this.lastConnectionCheck = now;
+      return true;
+    } catch (error) {
+      console.error('❌ Erreur connexion n8n:', error);
+      this.isConnected = false;
+      this.lastConnectionCheck = now;
+      return false;
+    }
   }
 }
 

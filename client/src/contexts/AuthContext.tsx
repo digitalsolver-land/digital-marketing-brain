@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
@@ -48,6 +47,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [userRoles, setUserRoles] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
+  const [isInitialized, setIsInitialized] = useState(false);
 
   // Computed properties based on roles
   const isAdmin = userRoles.includes('admin');
@@ -55,41 +55,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const isClient = userRoles.includes('client');
 
   useEffect(() => {
-    // Écouter les changements d'état d'authentification
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        console.log('Auth state changed:', event, session);
-        setSession(session);
-        setUser(session?.user ?? null);
-        
-        // Récupérer le profil utilisateur si connecté
-        if (session?.user) {
-          setTimeout(() => {
-            fetchUserProfile(session.user.id);
-            fetchUserRoles(session.user.id);
-          }, 100);
-        } else {
-          setProfile(null);
-          setUserRoles([]);
-          setLoading(false);
-        }
-      }
-    );
+    let isMounted = true;
 
-    // Vérifier la session existante
+    // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
+      if (!isMounted) return;
+
+      console.log('Auth state changed:', session ? 'INITIAL_SESSION' : 'SIGNED_OUT', session);
       setUser(session?.user ?? null);
-      if (session?.user) {
+      setLoading(false);
+      setIsInitialized(true);
+
+      if (session?.user && !profile) {
         fetchUserProfile(session.user.id);
         fetchUserRoles(session.user.id);
-      } else {
-        setLoading(false);
       }
     });
 
-    return () => subscription.unsubscribe();
-  }, []);
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!isMounted || !isInitialized) return;
+
+      console.log('Auth state changed:', event, session);
+      setUser(session?.user ?? null);
+      setLoading(false);
+
+      if (session?.user && !profile) {
+        fetchUserProfile(session.user.id);
+        fetchUserRoles(session.user.id);
+      } else if (!session?.user) {
+        setProfile(null);
+        setUserRoles([]);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, [profile, isInitialized]);
 
   const createProfile = async (userId: string, email: string, firstName?: string, lastName?: string) => {
     try {
@@ -110,7 +114,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.error('Error creating profile:', error);
         throw error;
       }
-      
+
       console.log('Profile created successfully:', data);
       return data;
     } catch (error) {
@@ -120,6 +124,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const fetchUserProfile = async (userId: string) => {
+    if (profile?.id === userId) return; // Éviter les appels en double
+
     try {
       console.log('Fetching profile for user:', userId);
       const { data, error } = await supabase
@@ -152,7 +158,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.log('Profile found:', data);
         setProfile(data);
       }
-      
+
       setLoading(false);
     } catch (error) {
       console.error('Error in fetchUserProfile:', error);
@@ -161,6 +167,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const fetchUserRoles = async (userId: string) => {
+    if (userRoles.length > 0 && user?.id === userId) return; // Éviter les appels en double
+
     try {
       console.log('Fetching roles for user:', userId);
       const { data, error } = await supabase
@@ -211,7 +219,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signUp = async (email: string, password: string, firstName?: string, lastName?: string) => {
     try {
       const redirectUrl = `${window.location.origin}/`;
-      
+
       const { error } = await supabase.auth.signUp({
         email,
         password,
@@ -264,7 +272,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     try {
       console.log('Updating profile with:', updates);
-      
+
       const { data, error } = await supabase
         .from('profiles')
         .update(updates)
@@ -279,7 +287,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       console.log('Profile updated successfully:', data);
       setProfile(data);
-      
+
       return { error: null };
     } catch (error: any) {
       console.error('Error in updateProfile:', error);

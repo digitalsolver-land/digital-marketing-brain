@@ -1,60 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
-import { Separator } from '@/components/ui/separator';
-import { useToast } from '@/hooks/use-toast';
-import { 
-  Play, 
-  Pause, 
-  Square,
-  Download, 
-  Upload,
-  RefreshCw, 
-  CheckCircle,
-  XCircle,
-  AlertTriangle,
-  FileJson,
-  Eye,
-  Edit,
-  Trash2,
-  Search,
-  ExternalLink,
-  Copy,
-  Tag,
-  Users,
-  Settings,
-  Activity,
-  Clock,
-  Zap,
-  Globe,
-  Shield,
-  Database,
-  GitBranch,
-  BarChart3,
-  Plus,
-  Import,
-  ArrowLeftRight,
-  Workflow,
-  Bot
-} from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { AlertCircle, CheckCircle, Clock, Bot, Zap, Settings, BarChart, RefreshCw, Play, Pause, Stop } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { toast } from 'sonner';
 
-import { 
-  n8nService, 
-  N8nWorkflow, 
-  N8nExecution, 
-  N8nCredential, 
-  N8nTag, 
-  N8nVariable, 
-  N8nProject 
-} from '@/services/n8nService';
-import { aiService } from '@/services/aiService';
+import { n8nService } from '@/services/n8nService';
+import { useDebounce } from '@/hooks/useDebounce';
 
 export const EnhancedWorkflowManager: React.FC = () => {
   const { toast } = useToast();
@@ -566,6 +524,14 @@ export const EnhancedWorkflowManager: React.FC = () => {
       clearTimeout(timeoutId);
     };
   }, [connectionStatus]);
+
+  const checkN8nConnection = useDebounce(async () => {
+    if (connectionStatus === 'checking') return;
+
+    setConnectionStatus('checking');
+    const isConnected = await n8nService.testConnection();
+    setConnectionStatus(isConnected ? 'connected' : 'disconnected');
+  }, 1000);
 
   return (
     <div className="space-y-6">
