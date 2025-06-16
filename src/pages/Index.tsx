@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Sidebar } from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
@@ -56,32 +55,7 @@ const Index = () => {
         return <WhatsAppManager />;
 
       case 'campaigns':
-        return (
-          <div className="space-y-6">
-            <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
-              Gestion des Campagnes
-            </h2>
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <Target className="w-5 h-5 text-red-500" />
-                  <span>Campagnes Actives</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-12">
-                  <Target className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-slate-600 mb-2">
-                    Module en développement
-                  </h3>
-                  <p className="text-slate-500">
-                    Le gestionnaire de campagnes sera bientôt disponible
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        );
+        return <CampaignManager />;
 
       case 'social':
         return (
