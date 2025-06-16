@@ -78,61 +78,10 @@ const Index = () => {
         return <MarketingCalendar />;
 
       case 'data':
-        return (
-          <div className="space-y-6">
-            <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
-              Base de Données
-            </h2>
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <Database className="w-5 h-5 text-gray-500" />
-                  <span>Gestion des Données</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-12">
-                  <Database className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-slate-600 mb-2">
-                    Module en développement
-                  </h3>
-                  <p className="text-slate-500">
-                    La gestion des données sera bientôt disponible
-                  </p>
-                  <Button className="mt-4">Connecter Supabase</Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        );
+        return <DatabaseManager />;
 
       case 'settings':
-        return (
-          <div className="space-y-6">
-            <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
-              Paramètres
-            </h2>
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <Settings className="w-5 h-5 text-slate-500" />
-                  <span>Configuration</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-12">
-                  <Settings className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-slate-600 mb-2">
-                    Module en développement
-                  </h3>
-                  <p className="text-slate-500">
-                    Les paramètres de configuration seront bientôt disponibles
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        );
+        return <AdvancedSettings />;
 
       default:
         return (
