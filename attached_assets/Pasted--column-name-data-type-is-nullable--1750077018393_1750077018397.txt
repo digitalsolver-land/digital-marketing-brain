@@ -1,0 +1,32 @@
+| column_name               | data_type                | is_nullable |
+| ------------------------- | ------------------------ | ----------- |
+| id                        | uuid                     | NO          |
+| user_id                   | uuid                     | NO          |
+| n8n_api_key               | text                     | YES         |
+| openrouter_api_key        | text                     | YES         |
+| google_analytics_api      | text                     | YES         |
+| google_search_console_api | text                     | YES         |
+| google_ads_api            | text                     | YES         |
+| facebook_api              | text                     | YES         |
+| twitter_api               | text                     | YES         |
+| linkedin_api              | text                     | YES         |
+| instagram_api             | text                     | YES         |
+| default_language          | text                     | YES         |
+| timezone                  | text                     | YES         |
+| email_notifications       | boolean                  | YES         |
+| sms_notifications         | boolean                  | YES         |
+| auto_backup               | boolean                  | YES         |
+| backup_frequency          | text                     | YES         |
+| max_workflows             | integer                  | YES         |
+| data_retention_days       | integer                  | YES         |
+| created_at                | timestamp with time zone | YES         |
+| updated_at                | timestamp with time zone | YES         |
+| postiz_api_key            | text                     | YES         |
+| postiz_api_url            | text                     | YES         |
+| whatsapp_api_token        | text                     | YES         |
+| whatsapp_phone_number_id  | text                     | YES         |
+| whatsapp_verify_token     | text                     | YES         |
+| whatsapp_ai_enabled       | boolean                  | YES         |
+| whatsapp_ai_instructions  | text                     | YES         |
+| whatsapp_response_mode    | text                     | YES         |
+| n8n_base_url              | text                     | YES         |
