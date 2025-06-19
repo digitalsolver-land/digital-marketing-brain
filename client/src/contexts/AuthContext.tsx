@@ -150,11 +150,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             user.user_metadata?.last_name
           );
           const profileData: Profile = {
-            ...newProfile,
-            first_name: newProfile.first_name || null,
-            last_name: newProfile.last_name || null,
-            company: newProfile.company || null,
-            avatar_url: newProfile.avatar_url || null
+            id: newProfile.id,
+            email: newProfile.email,
+            first_name: newProfile.first_name || undefined,
+            last_name: newProfile.last_name || undefined,
+            company: newProfile.company || undefined,
+            avatar_url: newProfile.avatar_url || undefined,
+            preferences: newProfile.preferences || {},
+            created_at: newProfile.created_at || new Date().toISOString(),
+            updated_at: newProfile.updated_at || new Date().toISOString()
           };
           setProfile(profileData);
         } catch (createError) {
@@ -163,11 +167,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else if (data) {
         console.log('Profile found:', data);
         const profileData: Profile = {
-          ...data,
-          first_name: data.first_name || null,
-          last_name: data.last_name || null,
-          company: data.company || null,
-          avatar_url: data.avatar_url || null
+          id: data.id,
+          email: data.email,
+          first_name: data.first_name || undefined,
+          last_name: data.last_name || undefined,
+          company: data.company || undefined,
+          avatar_url: data.avatar_url || undefined,
+          preferences: data.preferences || {},
+          created_at: data.created_at || new Date().toISOString(),
+          updated_at: data.updated_at || new Date().toISOString()
         };
         setProfile(profileData);
       }
@@ -299,7 +307,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       console.log('Profile updated successfully:', data);
-      setProfile(data);
+      const profileData: Profile = {
+        id: data.id,
+        email: data.email,
+        first_name: data.first_name || undefined,
+        last_name: data.last_name || undefined,
+        company: data.company || undefined,
+        avatar_url: data.avatar_url || undefined,
+        preferences: data.preferences || {},
+        created_at: data.created_at || new Date().toISOString(),
+        updated_at: data.updated_at || new Date().toISOString()
+      };
+      setProfile(profileData);
 
       return { error: null };
     } catch (error: any) {

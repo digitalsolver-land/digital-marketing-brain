@@ -98,9 +98,10 @@ export const N8nConfigurationPanel: React.FC<N8nConfigurationPanelProps> = ({
         });
       }
     } catch (error) {
-      console.error('❌ Erreur test connexion:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue';
+      console.error('❌ Erreur test connexion:', errorMessage);
       setConnectionStatus('error');
-      setConnectionDetails({ error: error.message });
+      setConnectionDetails({ error: errorMessage });
       toast({
         variant: "destructive",
         title: "Erreur de test",

@@ -81,7 +81,7 @@ const Header = () => {
               <Button variant="ghost" className="flex items-center space-x-3 p-2">
                 <Avatar className="w-8 h-8">
                   <AvatarImage 
-                    src={profile?.avatar_url} 
+                    src={profile?.avatar_url || undefined} 
                     alt={getDisplayName()} 
                     key={profile?.updated_at} // Force re-render when profile updates
                   />
