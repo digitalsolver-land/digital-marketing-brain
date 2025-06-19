@@ -21,30 +21,8 @@ export class N8nDiagnosticService {
       return { success: false, step: 'auth', error };
     }
 
-    // 2. Test fonction edge get-n8n-secrets
-    console.log('2️⃣ Test fonction get-n8n-secrets...');
-    try {
-      const { data, error } = await supabase.functions.invoke('get-n8n-secrets');
-      console.log('📋 Réponse get-n8n-secrets:', { data, error });
-      
-      if (error) {
-        console.error('❌ Erreur get-n8n-secrets:', error);
-        return { success: false, step: 'get-secrets', error };
-      }
-
-      if (!data?.apiKey) {
-        console.warn('⚠️ Pas de clé API dans les secrets');
-        return { success: false, step: 'no-api-key', data };
-      }
-
-      console.log('✅ Clé API trouvée, longueur:', data.apiKey.length);
-    } catch (error) {
-      console.error('❌ Erreur get-n8n-secrets:', error);
-      return { success: false, step: 'get-secrets', error };
-    }
-
-    // 3. Test configuration service
-    console.log('3️⃣ Test configuration service...');
+    // 2. Test configuration service consolidé
+    console.log('2️⃣ Test configuration service...');
     try {
       const config = await n8nService.getN8nConfig();
       console.log('📋 Configuration service:', {
@@ -71,8 +49,8 @@ export class N8nDiagnosticService {
       return { success: false, step: 'service-config', error };
     }
 
-    // 4. Test connexion n8n
-    console.log('4️⃣ Test connexion n8n...');
+    // 3. Test connexion n8n
+    console.log('3️⃣ Test connexion n8n...');
     try {
       const connectionResult = await n8nService.checkConnection();
       console.log('📋 Résultat connexion:', connectionResult);
@@ -88,8 +66,8 @@ export class N8nDiagnosticService {
       return { success: false, step: 'n8n-connection', error };
     }
 
-    // 5. Test endpoint workflows
-    console.log('5️⃣ Test endpoint workflows...');
+    // 4. Test endpoint workflows
+    console.log('4️⃣ Test endpoint workflows...');
     try {
       const workflows = await n8nService.getWorkflows({ limit: 1 });
       console.log('📋 Test workflows:', {

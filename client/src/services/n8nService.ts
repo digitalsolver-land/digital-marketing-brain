@@ -69,8 +69,19 @@ class N8nService {
     return N8nService.instance;
   }
 
-  // Méthode pour obtenir la configuration depuis user_secrets
+  private configCache: N8nConfig | null = null;
+  private configCacheTime: number = 0;
+  private readonly CONFIG_CACHE_DURATION = 60000; // 1 minute
+
+  // Méthode pour obtenir la configuration depuis user_secrets avec cache
   async getN8nConfig(): Promise<N8nConfig | null> {
+    const now = Date.now();
+    
+    // Utiliser le cache si disponible et récent
+    if (this.configCache && (now - this.configCacheTime) < this.CONFIG_CACHE_DURATION) {
+      return this.configCache;
+    }
+
     try {
       const { data, error } = await supabase.functions.invoke('get-n8n-secrets');
 
@@ -80,12 +91,16 @@ class N8nService {
       }
 
       if (data?.apiKey && data?.baseUrl) {
-        return {
+        this.configCache = {
           apiKey: data.apiKey,
           baseUrl: data.baseUrl
         };
+        this.configCacheTime = now;
+        return this.configCache;
       }
 
+      this.configCache = null;
+      this.configCacheTime = now;
       return null;
     } catch (error) {
       console.error('❌ Erreur récupération config n8n:', error);
@@ -107,6 +122,12 @@ class N8nService {
       if (error) {
         throw new Error(`Erreur sauvegarde config: ${error.message}`);
       }
+
+      // Invalider le cache de configuration
+      this.configCache = null;
+      this.configCacheTime = 0;
+      this.isConnected = null;
+      this.lastConnectionCheck = 0;
 
       // Réinitialiser le circuit breaker en cas de succès
       this.resetCircuitBreaker();
@@ -133,28 +154,23 @@ class N8nService {
 
       console.log('🔍 Vérification connexion n8n...');
 
-      const { data, error } = await supabase.functions.invoke('test-n8n-connection');
-
-      if (error) {
-        console.error('❌ Erreur fonction edge:', error);
+      // Utiliser la même méthode que makeRequest pour la cohérence
+      const config = await this.getN8nConfig();
+      if (!config || !config.apiKey || !config.baseUrl) {
         this.connectionStatus = 'error';
-        this.lastError = 'Erreur lors du test de connexion';
+        this.lastError = 'Configuration n8n manquante. Veuillez configurer votre clé API et URL.';
         this.handleFailure();
         return { status: 'error', error: this.lastError };
       }
 
-      if (data?.success) {
-        this.connectionStatus = 'connected';
-        this.resetCircuitBreaker();
-        console.log('✅ n8n connecté avec succès');
-        return { status: 'connected' };
-      } else {
-        this.connectionStatus = 'error';
-        this.lastError = data?.error || 'Test de connexion échoué';
-        this.handleFailure();
-        console.error('❌ Test de connexion échoué:', data);
-        return { status: 'error', error: this.lastError };
-      }
+      // Test simple avec l'API workflows
+      await this.makeRequest('/workflows', { method: 'GET' });
+
+      this.connectionStatus = 'connected';
+      this.resetCircuitBreaker();
+      console.log('✅ n8n connecté avec succès');
+      return { status: 'connected' };
+
     } catch (error) {
       this.connectionStatus = 'error';
       this.lastError = error instanceof Error ? error.message : 'Erreur de connexion inconnue';
@@ -545,20 +561,11 @@ class N8nService {
       return this.isConnected;
     }
 
-    try {
-      console.log('🔍 Vérification connexion n8n...');
-      await this.makeRequest('/workflows', { method: 'GET' });
-      console.log('✅ n8n connecté avec succès');
-
-      this.isConnected = true;
-      this.lastConnectionCheck = now;
-      return true;
-    } catch (error) {
-      console.error('❌ Erreur connexion n8n:', error);
-      this.isConnected = false;
-      this.lastConnectionCheck = now;
-      return false;
-    }
+    // Utiliser checkConnection pour éviter la redondance
+    const result = await this.checkConnection();
+    this.isConnected = result.status === 'connected';
+    this.lastConnectionCheck = now;
+    return this.isConnected;
   }
 }
 
