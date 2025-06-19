@@ -30,6 +30,18 @@ interface ColumnInfo {
   column_default: string | null;
 }
 
+// Available public tables from our schema
+const PUBLIC_TABLES = [
+  'workflows',
+  'workflow_nodes', 
+  'workflow_connections',
+  'workflow_executions',
+  'profiles',
+  'user_roles',
+  'user_secrets',
+  'app_settings'
+];
+
 export const DatabaseManager: React.FC = () => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
@@ -41,47 +53,23 @@ export const DatabaseManager: React.FC = () => {
   const loadTables = async () => {
     setLoading(true);
     try {
-      // Get all tables from information_schema
-      const { data: tablesData, error } = await supabase
-        .from('information_schema.tables')
-        .select('table_name')
-        .eq('table_schema', 'public')
-        .neq('table_type', 'VIEW');
-
-      if (error) {
-        console.error('Erreur chargement tables:', error);
-        toast({
-          variant: "destructive",
-          title: "Erreur",
-          description: "Impossible de charger les tables",
-        });
-        return;
-      }
-
-      // For each table, get additional info
-      const tableInfoPromises = (tablesData || []).map(async (table: any) => {
+      const tableInfoPromises = PUBLIC_TABLES.map(async (tableName) => {
         try {
-          // Get column count
-          const { data: columnsData } = await supabase
-            .from('information_schema.columns')
-            .select('column_name')
-            .eq('table_schema', 'public')
-            .eq('table_name', table.table_name);
-
-          // Try to get row count (this might fail for some tables due to RLS)
+          // Get row count for each table
           const { count } = await supabase
-            .from(table.table_name)
+            .from(tableName as any)
             .select('*', { count: 'exact', head: true });
 
           return {
-            table_name: table.table_name,
-            column_count: columnsData?.length || 0,
+            table_name: tableName,
+            column_count: 0, // We'll get this when table is selected
             row_count: count || 0,
-            table_size: 'N/A' // Size calculation would require more complex queries
+            table_size: 'N/A'
           };
         } catch (error) {
+          console.warn(`Could not access table ${tableName}:`, error);
           return {
-            table_name: table.table_name,
+            table_name: tableName,
             column_count: 0,
             row_count: 0,
             table_size: 'N/A'
@@ -109,41 +97,49 @@ export const DatabaseManager: React.FC = () => {
     setSelectedTable(tableName);
     
     try {
-      // Get column information
-      const { data: columnsData, error: columnsError } = await supabase
-        .from('information_schema.columns')
-        .select('column_name, data_type, is_nullable, column_default')
-        .eq('table_schema', 'public')
-        .eq('table_name', tableName)
-        .order('ordinal_position');
+      // For column information, we'll use a simpler approach
+      // Get sample data first to infer column structure
+      const { data: sampleData, error: dataError } = await supabase
+        .from(tableName as any)
+        .select('*')
+        .limit(1);
 
-      if (columnsError) {
-        console.error('Erreur colonnes:', columnsError);
+      if (dataError) {
+        console.error('Erreur données:', dataError);
+        setTableData([]);
+        setColumns([]);
         toast({
           variant: "destructive",
-          title: "Erreur",
-          description: "Impossible de charger les colonnes",
+          title: "Accès restreint",
+          description: `Impossible d'accéder aux données de la table ${tableName}`,
         });
         return;
       }
 
-      setColumns(columnsData || []);
-
-      // Get sample data (limit to 10 rows)
-      try {
-        const { data: sampleData, error: dataError } = await supabase
-          .from(tableName)
+      // Infer columns from sample data
+      if (sampleData && sampleData.length > 0) {
+        const sampleRow = sampleData[0];
+        const inferredColumns: ColumnInfo[] = Object.keys(sampleRow).map(key => ({
+          column_name: key,
+          data_type: typeof sampleRow[key] === 'number' ? 'number' : 
+                     typeof sampleRow[key] === 'boolean' ? 'boolean' :
+                     Array.isArray(sampleRow[key]) ? 'array' :
+                     typeof sampleRow[key] === 'object' ? 'jsonb' : 'text',
+          is_nullable: sampleRow[key] === null ? 'YES' : 'NO',
+          column_default: null
+        }));
+        
+        setColumns(inferredColumns);
+        
+        // Get more sample data
+        const { data: moreData } = await supabase
+          .from(tableName as any)
           .select('*')
           .limit(10);
-
-        if (dataError) {
-          console.error('Erreur données:', dataError);
-          setTableData([]);
-        } else {
-          setTableData(sampleData || []);
-        }
-      } catch (error) {
-        console.error('Erreur accès données:', error);
+          
+        setTableData(moreData || []);
+      } else {
+        setColumns([]);
         setTableData([]);
       }
 
@@ -255,7 +251,9 @@ export const DatabaseManager: React.FC = () => {
                       <Badge variant="outline">{table.row_count}</Badge>
                     </div>
                     <div className="text-sm text-slate-600 mt-1">
-                      {table.column_count} colonnes
+                      {columns.length > 0 && selectedTable === table.table_name 
+                        ? `${columns.length} colonnes`
+                        : 'Cliquez pour voir les détails'}
                     </div>
                   </div>
                 ))
@@ -286,36 +284,40 @@ export const DatabaseManager: React.FC = () => {
                 {/* Structure des colonnes */}
                 <div>
                   <h3 className="text-lg font-semibold mb-4">Structure</h3>
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Colonne</TableHead>
-                          <TableHead>Type</TableHead>
-                          <TableHead>Nullable</TableHead>
-                          <TableHead>Défaut</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {columns.map((column) => (
-                          <TableRow key={column.column_name}>
-                            <TableCell className="font-medium">
-                              {column.column_name}
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant="outline">{column.data_type}</Badge>
-                            </TableCell>
-                            <TableCell>
-                              {column.is_nullable === 'YES' ? 'Oui' : 'Non'}
-                            </TableCell>
-                            <TableCell>
-                              {column.column_default || 'Aucun'}
-                            </TableCell>
+                  {columns.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Colonne</TableHead>
+                            <TableHead>Type</TableHead>
+                            <TableHead>Nullable</TableHead>
+                            <TableHead>Défaut</TableHead>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
+                        </TableHeader>
+                        <TableBody>
+                          {columns.map((column) => (
+                            <TableRow key={column.column_name}>
+                              <TableCell className="font-medium">
+                                {column.column_name}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline">{column.data_type}</Badge>
+                              </TableCell>
+                              <TableCell>
+                                {column.is_nullable === 'YES' ? 'Oui' : 'Non'}
+                              </TableCell>
+                              <TableCell>
+                                {column.column_default || 'Aucun'}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  ) : (
+                    <p className="text-slate-600">Aucune information de colonne disponible</p>
+                  )}
                 </div>
 
                 {/* Données d'exemple */}

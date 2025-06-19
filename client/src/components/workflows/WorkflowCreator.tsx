@@ -87,7 +87,7 @@ export const WorkflowCreator: React.FC<WorkflowCreatorProps> = ({
         if (!formData.name && parsed.name) {
           setFormData(prev => ({ ...prev, name: parsed.name }));
         }
-        if (n8nWorkflowAnalyzer?.analyzeWorkflow) {
+        if (n8nWorkflowAnalyzer && typeof n8nWorkflowAnalyzer.analyzeWorkflow === 'function') {
           await analyzeWorkflow(parsed);
         }
       } else {
@@ -100,7 +100,7 @@ export const WorkflowCreator: React.FC<WorkflowCreatorProps> = ({
   };
 
   const analyzeWorkflow = async (workflowData: N8nWorkflowJSON) => {
-    if (!n8nWorkflowAnalyzer?.analyzeWorkflow) return;
+    if (!n8nWorkflowAnalyzer || typeof n8nWorkflowAnalyzer.analyzeWorkflow !== 'function') return;
     
     setAnalyzing(true);
     try {
@@ -153,7 +153,7 @@ export const WorkflowCreator: React.FC<WorkflowCreatorProps> = ({
 
       setJsonInput(JSON.stringify(enhancedWorkflow, null, 2));
       setParsedWorkflow(enhancedWorkflow);
-      if (n8nWorkflowAnalyzer?.analyzeWorkflow) {
+      if (n8nWorkflowAnalyzer && typeof n8nWorkflowAnalyzer.analyzeWorkflow === 'function') {
         await analyzeWorkflow(enhancedWorkflow);
       }
       
@@ -204,7 +204,8 @@ export const WorkflowCreator: React.FC<WorkflowCreatorProps> = ({
         const workflowData = {
           ...parsedWorkflow,
           name: formData.name,
-          active: formData.active
+          active: formData.active,
+          tags: parsedWorkflow.tags?.map((tag, index) => ({ id: index.toString(), name: tag.name })) || []
         };
 
         if (connected && unifiedN8nService?.createWorkflow) {

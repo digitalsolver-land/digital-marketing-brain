@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -208,7 +209,7 @@ export const WorkflowJsonImporter: React.FC<WorkflowJsonImporterProps> = ({
       toast({
         title: "Erreur",
         description: "Échec de la sauvegarde du workflow",
-        variant: "descriptive"
+        variant: "destructive"
       });
     } finally {
       setIsSaving(false);

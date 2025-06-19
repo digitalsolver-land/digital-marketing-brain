@@ -26,12 +26,16 @@ interface WorkflowTemplateSelectorProps {
   onTemplateCreated?: () => void;
 }
 
-// Mock workflow templates data
+// Mock workflow templates data with all required properties
 const mockWorkflowTemplates: WorkflowTemplate[] = [
   {
+    id: 'email-marketing-campaign',
     name: "Email Marketing Campaign",
     description: "Automated email campaign workflow with lead scoring",
     category: "Marketing",
+    tags: ["email", "marketing", "automation"],
+    complexity: "medium",
+    estimatedTime: 30,
     workflow: {
       name: "Email Marketing Campaign",
       nodes: [
@@ -62,9 +66,13 @@ const mockWorkflowTemplates: WorkflowTemplate[] = [
     }
   },
   {
+    id: 'website-monitor',
     name: "Website Monitor",
     description: "Monitor website uptime and send alerts",
     category: "Monitoring",
+    tags: ["monitoring", "alerts", "uptime"],
+    complexity: "easy",
+    estimatedTime: 15,
     workflow: {
       name: "Website Monitor",
       nodes: [

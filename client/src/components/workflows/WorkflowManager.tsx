@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -24,7 +23,7 @@ import {
 } from 'lucide-react';
 
 import { unifiedN8nService, N8nWorkflow } from '@/services/unifiedN8nService';
-import { workflowService } from '@/services/workflowService';
+import { workflowService, Workflow } from '@/services/workflowService';
 import { WorkflowVisualization } from './WorkflowVisualization';
 import { WorkflowCreator } from './WorkflowCreator';
 
@@ -139,23 +138,23 @@ export const WorkflowManager: React.FC = () => {
           };
 
           try {
-            const existingWorkflows = await workflowService.getWorkflows();
-            const existingWorkflow = existingWorkflows.find(w => w.n8nWorkflowId === workflow.id);
+            const existingWorkflows = await workflowService.getAllWorkflows();
+            const existingWorkflow = existingWorkflows.find((w: Workflow) => w.n8n_workflow_id === workflow.id);
 
             if (existingWorkflow) {
               await workflowService.updateWorkflow(existingWorkflow.id, {
                 name: workflow.name,
                 description: `Workflow n8n synchronisé - ${workflow.nodes?.length || 0} nœuds`,
                 status: workflow.active ? 'active' : 'inactive',
-                jsonData: workflowData
+                json_data: workflowData
               });
             } else {
               await workflowService.createWorkflow({
                 name: workflow.name,
                 description: `Workflow n8n synchronisé - ${workflow.nodes?.length || 0} nœuds`,
                 status: workflow.active ? 'active' : 'inactive',
-                n8nWorkflowId: workflow.id,
-                jsonData: workflowData
+                n8n_workflow_id: workflow.id,
+                json_data: workflowData
               });
             }
           } catch (syncError) {
@@ -170,12 +169,12 @@ export const WorkflowManager: React.FC = () => {
 
   const loadLocalWorkflows = async () => {
     try {
-      const localWorkflows = await workflowService.getWorkflows();
+      const localWorkflows = await workflowService.getAllWorkflows();
       
-      const n8nFormattedWorkflows: N8nWorkflow[] = localWorkflows.map(workflow => {
-        const jsonData = workflow.jsonData as any;
+      const n8nFormattedWorkflows: N8nWorkflow[] = localWorkflows.map((workflow: Workflow) => {
+        const jsonData = workflow.json_data as any;
         return {
-          id: workflow.n8nWorkflowId || workflow.id,
+          id: workflow.n8n_workflow_id || workflow.id,
           name: workflow.name,
           active: workflow.status === 'active',
           nodes: jsonData?.nodes || [],
@@ -183,8 +182,8 @@ export const WorkflowManager: React.FC = () => {
           settings: jsonData?.settings || {},
           staticData: jsonData?.staticData || {},
           tags: jsonData?.tags?.map((tag: string, index: number) => ({ id: index.toString(), name: tag })) || [],
-          createdAt: workflow.createdAt || new Date().toISOString(),
-          updatedAt: workflow.updatedAt || new Date().toISOString()
+          createdAt: workflow.created_at || new Date().toISOString(),
+          updatedAt: workflow.updated_at || new Date().toISOString()
         };
       });
       
@@ -208,7 +207,7 @@ export const WorkflowManager: React.FC = () => {
         }
       } else {
         const newStatus = workflow.active ? 'inactive' : 'active';
-        await workflowService.updateWorkflowStatus(workflow.id, newStatus);
+        await workflowService.updateWorkflow(workflow.id, { status: newStatus });
       }
 
       setWorkflows(prev => 
@@ -311,11 +310,20 @@ export const WorkflowManager: React.FC = () => {
     }
   };
 
-  const openWorkflowInN8n = (workflow: N8nWorkflow) => {
+  const openWorkflowInN8n = async (workflow: N8nWorkflow) => {
     if (workflow.id && n8nConnected) {
-      const n8nUrl = unifiedN8nService.getWorkflowUrl(workflow.id);
-      console.log('🔗 Ouverture workflow dans n8n:', n8nUrl);
-      window.open(n8nUrl, '_blank');
+      try {
+        const n8nUrl = await unifiedN8nService.getWorkflowUrl(workflow.id);
+        console.log('🔗 Ouverture workflow dans n8n:', n8nUrl);
+        window.open(n8nUrl, '_blank');
+      } catch (error) {
+        console.error('❌ Erreur URL workflow:', error);
+        toast({
+          variant: "destructive",
+          title: "Erreur",
+          description: "Impossible d'obtenir l'URL du workflow",
+        });
+      }
     } else {
       toast({
         variant: "destructive",
@@ -467,7 +475,7 @@ export const WorkflowManager: React.FC = () => {
                 {loading ? (
                   <div className="text-center py-8">
                     <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />
-                    <p className="text-slate-600">Chargement des workflows...</p>
+                    <p className="text-sm text-slate-600">Chargement des workflows...</p>
                   </div>
                 ) : filteredWorkflows.length === 0 ? (
                   <div className="text-center py-8 text-slate-600">
@@ -476,83 +484,90 @@ export const WorkflowManager: React.FC = () => {
                   </div>
                 ) : (
                   filteredWorkflows.map((workflow) => (
-                    <div key={workflow.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-slate-50">
-                      <div className="flex-1">
-                        <h4 className="font-medium">{workflow.name}</h4>
-                        <div className="flex items-center space-x-2 mt-1">
-                          <Badge variant={workflow.active ? "default" : "secondary"}>
-                            {workflow.active ? 'Actif' : 'Inactif'}
-                          </Badge>
-                          <span className="text-sm text-slate-600">
-                            {workflow.nodes?.length || 0} nœud(s)
-                          </span>
-                          {workflow.id && (
-                            <span className="text-xs text-slate-400">
-                              ID: {workflow.id}
-                            </span>
-                          )}
+                    <div key={workflow.id} className="border rounded-lg p-4 hover:bg-slate-50 transition-colors">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-3">
+                            <h3 className="font-medium">{workflow.name}</h3>
+                            <Badge variant={workflow.active ? "default" : "secondary"}>
+                              {workflow.active ? "Actif" : "Inactif"}
+                            </Badge>
+                            {workflow.tags && workflow.tags.length > 0 && (
+                              <div className="flex space-x-1">
+                                {workflow.tags.slice(0, 2).map((tag, index) => (
+                                  <Badge key={index} variant="outline" className="text-xs">
+                                    {tag.name}
+                                  </Badge>
+                                ))}
+                                {workflow.tags.length > 2 && (
+                                  <Badge variant="outline" className="text-xs">
+                                    +{workflow.tags.length - 2}
+                                  </Badge>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                          
+                          <div className="text-sm text-slate-600 mt-1">
+                            {workflow.nodes?.length || 0} nœuds • {
+                              Object.keys(workflow.connections || {}).length
+                            } connexions
+                          </div>
                         </div>
-                      </div>
-                      
-                      <div className="flex items-center space-x-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleViewWorkflow(workflow)}
-                          title="Visualiser"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </Button>
                         
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => exportWorkflowToJson(workflow)}
-                          title="Exporter JSON"
-                        >
-                          <Download className="w-4 h-4" />
-                        </Button>
-                        
-                        {n8nConnected && (
+                        <div className="flex items-center space-x-2">
                           <Button
-                            variant="outline"
                             size="sm"
+                            variant="outline"
+                            onClick={() => handleViewWorkflow(workflow)}
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                          
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => toggleWorkflowStatus(workflow)}
+                            disabled={loading}
+                          >
+                            {workflow.active ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                          </Button>
+                          
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => executeWorkflow(workflow)}
+                            disabled={loading || !n8nConnected}
+                          >
+                            <Play className="w-4 h-4" />
+                          </Button>
+                          
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => exportWorkflowToJson(workflow)}
+                          >
+                            <Download className="w-4 h-4" />
+                          </Button>
+                          
+                          <Button
+                            size="sm"
+                            variant="outline"
                             onClick={() => openWorkflowInN8n(workflow)}
-                            title="Ouvrir dans n8n"
+                            disabled={!n8nConnected}
                           >
                             <ExternalLink className="w-4 h-4" />
                           </Button>
-                        )}
-                        
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => executeWorkflow(workflow)}
-                          disabled={loading}
-                          title="Activer/Préparer exécution"
-                        >
-                          <Play className="w-4 h-4" />
-                        </Button>
-                        
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => toggleWorkflowStatus(workflow)}
-                          disabled={loading}
-                          title={workflow.active ? 'Désactiver' : 'Activer'}
-                        >
-                          {workflow.active ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                        </Button>
-                        
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => deleteWorkflow(workflow)}
-                          disabled={loading}
-                          title="Supprimer"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                          
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => deleteWorkflow(workflow)}
+                            disabled={loading}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   ))
@@ -576,69 +591,16 @@ export const WorkflowManager: React.FC = () => {
         </TabsContent>
 
         <TabsContent value="visualization" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Visualisation des workflows</CardTitle>
-              <CardDescription>
-                Interface graphique pour visualiser vos workflows
-              </CardDescription>
-            </CardHeader>
-            
-            <CardContent>
-              {selectedWorkflow ? (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-medium">Workflow: {selectedWorkflow.name}</h3>
-                    <Button 
-                      variant="outline" 
-                      onClick={() => setSelectedWorkflow(null)}
-                    >
-                      Fermer
-                    </Button>
-                  </div>
-                  
-                  <WorkflowVisualization 
-                    workflow={{
-                      id: selectedWorkflow.id,
-                      name: selectedWorkflow.name,
-                      description: `Workflow n8n avec ${selectedWorkflow.nodes?.length || 0} nœuds`,
-                      status: selectedWorkflow.active ? 'active' : 'inactive',
-                      n8n_workflow_id: selectedWorkflow.id,
-                      json_data: {
-                        name: selectedWorkflow.name,
-                        nodes: selectedWorkflow.nodes || [],
-                        connections: selectedWorkflow.connections || {},
-                        active: selectedWorkflow.active,
-                        settings: selectedWorkflow.settings || {},
-                        staticData: selectedWorkflow.staticData || {},
-                        tags: selectedWorkflow.tags || []
-                      }
-                    }}
-                    nodes={selectedWorkflow.nodes?.map((node, index) => ({
-                      id: node.id || `node_${index}`,
-                      workflow_id: selectedWorkflow.id || '',
-                      node_id: node.id || `node_${index}`,
-                      node_type: node.type || 'unknown',
-                      name: node.name || 'Nœud sans nom',
-                      position_x: Array.isArray(node.position) ? node.position[0] || 0 : 0,
-                      position_y: Array.isArray(node.position) ? node.position[1] || 0 : 0,
-                      parameters: node.parameters || {}
-                    })) || []}
-                    connections={[]}
-                    onExecute={() => executeWorkflow(selectedWorkflow)}
-                    onEdit={() => openWorkflowInN8n(selectedWorkflow)}
-                    onDelete={() => deleteWorkflow(selectedWorkflow)}
-                  />
-                </div>
-              ) : (
-                <div className="text-center py-8 text-slate-600">
-                  <FileJson className="w-12 h-12 mx-auto mb-4 text-slate-400" />
-                  <p>Sélectionnez un workflow pour le visualiser</p>
-                  <p className="text-sm mt-2">Cliquez sur l'icône "œil" dans la liste des workflows</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          {selectedWorkflow ? (
+            <WorkflowVisualization workflow={selectedWorkflow} />
+          ) : (
+            <Card>
+              <CardContent className="text-center py-8">
+                <FileJson className="w-12 h-12 mx-auto mb-4 text-slate-400" />
+                <p className="text-slate-600">Sélectionnez un workflow pour le visualiser</p>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
       </Tabs>
     </div>
