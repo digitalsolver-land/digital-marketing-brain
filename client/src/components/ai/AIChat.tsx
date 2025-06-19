@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,7 +15,7 @@ interface AIAction {
   type: 'workflow_creation' | 'content_generation' | 'api_call' | 'general';
   payload: {
     description?: string;
-    type?: string;
+    type?: 'blog' | 'social' | 'email' | 'ad' | 'whatsapp' | 'workflow';
     keywords?: string[];
     endpoint?: string;
     method?: string;
@@ -66,7 +67,6 @@ Comment puis-je vous aider aujourd'hui ?`,
     setIsLoading(true);
 
     try {
-      // Simuler la détection d'action basée sur le message
       const action: AIAction = determineActionFromMessage(inputMessage);
 
       let response = '';
@@ -84,9 +84,10 @@ Comment puis-je vous aider aujourd'hui ?`,
           break;
 
         case 'content_generation':
+          const contentType = action.payload.type || 'blog';
           response = await aiService.generateContent(
             inputMessage,
-            action.payload.type || 'blog',
+            contentType,
             action.payload.keywords || []
           );
           break;
@@ -127,7 +128,7 @@ Comment puis-je vous aider aujourd'hui ?`,
     if (lowerMessage.includes('workflow') || lowerMessage.includes('automatiser') || lowerMessage.includes('n8n')) {
       return {
         type: 'workflow_creation',
-        payload: { description: message }
+        payload: { description: message, type: 'workflow' }
       };
     }
     

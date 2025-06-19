@@ -6,10 +6,10 @@ import { useToast } from '@/hooks/use-toast';
 interface Profile {
   id: string;
   email: string;
-  first_name?: string;
-  last_name?: string;
-  company?: string;
-  avatar_url?: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  company?: string | null;
+  avatar_url?: string | null;
   preferences: any;
   created_at: string;
   updated_at: string;
@@ -103,8 +103,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .insert({
           id: userId,
           email: email,
-          first_name: firstName || '',
-          last_name: lastName || '',
+          first_name: firstName || null,
+          last_name: lastName || null,
           preferences: {}
         })
         .select()
@@ -124,7 +124,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const fetchUserProfile = async (userId: string) => {
-    if (profile?.id === userId) return; // Éviter les appels en double
+    if (profile?.id === userId) return;
 
     try {
       console.log('Fetching profile for user:', userId);
@@ -141,7 +141,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       if (!data && user) {
-        // Si le profil n'existe pas, le créer
         console.log('Profile not found, creating one...');
         try {
           const newProfile = await createProfile(
@@ -150,13 +149,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             user.user_metadata?.first_name,
             user.user_metadata?.last_name
           );
-          setProfile(newProfile);
+          const profileData: Profile = {
+            ...newProfile,
+            first_name: newProfile.first_name || null,
+            last_name: newProfile.last_name || null,
+            company: newProfile.company || null,
+            avatar_url: newProfile.avatar_url || null
+          };
+          setProfile(profileData);
         } catch (createError) {
           console.error('Error creating profile:', createError);
         }
       } else if (data) {
         console.log('Profile found:', data);
-        setProfile(data);
+        const profileData: Profile = {
+          ...data,
+          first_name: data.first_name || null,
+          last_name: data.last_name || null,
+          company: data.company || null,
+          avatar_url: data.avatar_url || null
+        };
+        setProfile(profileData);
       }
 
       setLoading(false);
@@ -167,7 +180,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const fetchUserRoles = async (userId: string) => {
-    if (userRoles.length > 0 && user?.id === userId) return; // Éviter les appels en double
+    if (userRoles.length > 0 && user?.id === userId) return;
 
     try {
       console.log('Fetching roles for user:', userId);
