@@ -1,3 +1,4 @@
+
 export type Json =
   | string
   | number
@@ -161,6 +162,39 @@ export type Database = {
           created_at?: string | null
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_secrets: {
+        Row: {
+          created_at: string | null
+          encrypted_value: string | null
+          id: string
+          is_encrypted: boolean | null
+          secret_name: string
+          secret_value: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          encrypted_value?: string | null
+          id?: string
+          is_encrypted?: boolean | null
+          secret_name: string
+          secret_value: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          encrypted_value?: string | null
+          id?: string
+          is_encrypted?: boolean | null
+          secret_name?: string
+          secret_value?: string
+          updated_at?: string | null
           user_id?: string
         }
         Relationships: []
@@ -335,6 +369,52 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_app_setting: {
+        Args: { p_key: string }
+        Returns: Json
+      }
+      get_n8n_secrets: {
+        Args: { input_user_id: string }
+        Returns: {
+          api_key: string
+          base_url: string
+        }[]
+      }
+      get_or_create_user_settings: {
+        Args: { input_user_id: string }
+        Returns: {
+          id: string
+          user_id: string
+          n8n_api_key: string
+          n8n_base_url: string
+          openrouter_api_key: string
+          google_analytics_api: string
+          google_search_console_api: string
+          google_ads_api: string
+          facebook_api: string
+          twitter_api: string
+          linkedin_api: string
+          instagram_api: string
+          postiz_api_key: string
+          postiz_api_url: string
+          whatsapp_api_token: string
+          whatsapp_phone_number_id: string
+          whatsapp_verify_token: string
+          whatsapp_ai_enabled: boolean
+          whatsapp_ai_instructions: string
+          whatsapp_response_mode: string
+          default_language: string
+          timezone: string
+          email_notifications: boolean
+          sms_notifications: boolean
+          auto_backup: boolean
+          backup_frequency: string
+          max_workflows: number
+          data_retention_days: number
+          created_at: string
+          updated_at: string
+        }[]
+      }
       has_role: {
         Args: {
           _user_id: string
@@ -344,6 +424,10 @@ export type Database = {
       }
       is_admin: {
         Args: Record<PropertyKey, never>
+        Returns: boolean
+      }
+      save_n8n_secrets: {
+        Args: { input_user_id: string; api_key: string; base_url?: string }
         Returns: boolean
       }
     }

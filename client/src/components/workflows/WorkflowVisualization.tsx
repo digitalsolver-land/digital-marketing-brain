@@ -22,27 +22,7 @@ import {
 import { WorkflowCanvas } from './WorkflowCanvas';
 import { WorkflowAnalysisPanel } from './WorkflowAnalysisPanel';
 import { unifiedN8nService } from '@/services/unifiedN8nService';
-
-interface WorkflowNode {
-  id: string;
-  workflow_id: string;
-  node_id: string;
-  node_type: string;
-  name: string;
-  position_x: number;
-  position_y: number;
-  parameters: any;
-}
-
-interface WorkflowConnection {
-  id: string;
-  workflow_id: string;
-  source_node_id: string;
-  target_node_id: string;
-  source_index: number;
-  target_index: number;
-  connection_type: string;
-}
+import { WorkflowNode, WorkflowConnection } from '@/types/workflow';
 
 interface WorkflowVisualizationProps {
   workflow: any;
@@ -308,7 +288,7 @@ export const WorkflowVisualization: React.FC<WorkflowVisualizationProps> = ({
                   <div><strong>Type :</strong> {selectedNode.node_type}</div>
                   <div><strong>ID :</strong> {selectedNode.node_id}</div>
                   <div><strong>Position :</strong> ({selectedNode.position_x}, {selectedNode.position_y})</div>
-                  {Object.keys(selectedNode.parameters).length > 0 && (
+                  {Object.keys(selectedNode.parameters || {}).length > 0 && (
                     <div>
                       <strong>Paramètres :</strong>
                       <pre className="mt-2 p-2 bg-slate-100 rounded text-sm overflow-auto">

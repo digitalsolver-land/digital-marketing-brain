@@ -1,747 +1,438 @@
 
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { 
   Settings as SettingsIcon, 
-  Save, 
-  Key, 
-  Globe, 
-  Bell, 
-  Users, 
-  Shield,
+  User, 
+  Shield, 
+  Database,
+  Save,
+  RefreshCw,
+  Bell,
+  Globe,
   Trash2,
-  ArrowLeft,
-  MessageCircle,
-  Share2
+  UserPlus
 } from 'lucide-react';
+import { N8nConfigurationPanel } from '@/components/workflows/N8nConfigurationPanel';
+import { AppSettings, UserWithRoles, AppRole } from '@/types/workflow';
+import { convertAppSettings, convertUserWithRoles } from '@/lib/typeHelpers';
 
-interface AppSettings {
-  n8n_api_key?: string;
-  openrouter_api_key?: string;
-  postiz_api_key?: string;
-  postiz_api_url?: string;
-  google_analytics_api?: string;
-  google_search_console_api?: string;
-  google_ads_api?: string;
-  facebook_api?: string;
-  twitter_api?: string;
-  linkedin_api?: string;
-  instagram_api?: string;
-  whatsapp_api_token?: string;
-  whatsapp_phone_number_id?: string;
-  whatsapp_verify_token?: string;
-  whatsapp_ai_enabled?: boolean;
-  whatsapp_ai_instructions?: string;
-  whatsapp_response_mode?: string;
-  default_language?: string;
-  timezone?: string;
-  email_notifications?: boolean;
-  sms_notifications?: boolean;
-  auto_backup?: boolean;
-  backup_frequency?: string;
-  max_workflows?: number;
-  data_retention_days?: number;
-}
-
-interface UserWithRoles {
-  id: string;
-  email: string;
-  first_name?: string;
-  last_name?: string;
-  roles: string[];
-}
-
-type AppRole = 'admin' | 'moderator' | 'user' | 'commercial' | 'client';
-
-const Settings = () => {
-  const navigate = useNavigate();
+const Settings: React.FC = () => {
   const { user, isAdmin } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [settings, setSettings] = useState<AppSettings>({
-    default_language: 'fr',
-    timezone: 'Europe/Paris',
-    email_notifications: true,
-    sms_notifications: false,
-    auto_backup: true,
-    backup_frequency: 'daily',
-    max_workflows: 50,
-    data_retention_days: 90,
-    whatsapp_ai_enabled: false,
-    whatsapp_response_mode: 'auto',
-    whatsapp_ai_instructions: 'Tu es un assistant professionnel qui répond aux questions des clients de manière courtoise et utile.',
-    postiz_api_url: 'https://api.postiz.com/public/v1',
-    openrouter_api_key: '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'
-  });
+  const [settings, setSettings] = useState<AppSettings>({});
   const [users, setUsers] = useState<UserWithRoles[]>([]);
-
-  const handleBackToDashboard = () => {
-    navigate('/');
-  };
 
   useEffect(() => {
     if (user) {
-      fetchSettings();
-    }
-    if (isAdmin) {
-      fetchUsers();
+      loadSettings();
+      if (isAdmin) {
+        loadUsers();
+      }
     }
   }, [user, isAdmin]);
 
-  const fetchSettings = async () => {
-    if (!user) return;
-
+  const loadSettings = async () => {
     try {
       const { data, error } = await supabase
         .from('app_settings')
         .select('*')
-        .eq('user_id', user.id)
-        .maybeSingle();
+        .eq('user_id', user?.id)
+        .single();
 
       if (error && error.code !== 'PGRST116') {
-        console.error('Error fetching settings:', error);
+        console.error('Erreur chargement paramètres:', error);
         return;
       }
 
       if (data) {
-        setSettings(data);
+        setSettings(convertAppSettings(data));
       }
     } catch (error) {
-      console.error('Error fetching settings:', error);
+      console.error('Erreur:', error);
     }
   };
 
-  const fetchUsers = async () => {
+  const loadUsers = async () => {
     try {
-      const { data: profiles, error: profilesError } = await supabase
+      const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
         .select('id, email, first_name, last_name');
 
-      if (profilesError) throw profilesError;
+      if (profilesError) {
+        console.error('Erreur chargement profils:', profilesError);
+        return;
+      }
 
-      const { data: userRoles, error: rolesError } = await supabase
+      const { data: rolesData, error: rolesError } = await supabase
         .from('user_roles')
         .select('user_id, role');
 
-      if (rolesError) throw rolesError;
+      if (rolesError) {
+        console.error('Erreur chargement rôles:', rolesError);
+        return;
+      }
 
-      const usersWithRoles = profiles.map(profile => ({
+      const usersWithRoles = profilesData?.map(profile => ({
         ...profile,
-        roles: userRoles
-          .filter(role => role.user_id === profile.id)
-          .map(role => role.role)
-      }));
+        roles: rolesData?.filter(role => role.user_id === profile.id).map(r => r.role) || []
+      })) || [];
 
-      setUsers(usersWithRoles);
+      setUsers(convertUserWithRoles(usersWithRoles));
     } catch (error) {
-      console.error('Error fetching users:', error);
-      toast({
-        variant: "destructive",
-        title: "Erreur",
-        description: "Impossible de charger la liste des utilisateurs.",
-      });
+      console.error('Erreur chargement utilisateurs:', error);
     }
   };
 
-  const handleSaveSettings = async () => {
+  const saveSettings = async () => {
     if (!user) return;
 
     setLoading(true);
     try {
       const { error } = await supabase
         .from('app_settings')
-        .upsert({ 
+        .upsert({
           user_id: user.id,
           ...settings,
           updated_at: new Date().toISOString()
         });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Erreur sauvegarde:', error);
+        toast({
+          variant: "destructive",
+          title: "Erreur",
+          description: "Impossible de sauvegarder les paramètres",
+        });
+        return;
+      }
 
       toast({
-        title: "Paramètres sauvegardés",
-        description: "Vos paramètres ont été mis à jour avec succès. L'IA est maintenant configurée.",
+        title: "Paramètres sauvegardés ✅",
+        description: "Vos paramètres ont été mis à jour avec succès",
       });
-    } catch (error: any) {
+    } catch (error) {
+      console.error('Erreur:', error);
       toast({
         variant: "destructive",
         title: "Erreur",
-        description: error.message,
+        description: "Une erreur inattendue s'est produite",
       });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleRoleChange = async (userId: string, newRole: string) => {
+  const assignRole = async (userId: string, role: string) => {
     try {
-      // Supprimer tous les rôles existants pour cet utilisateur
-      await supabase
+      const { error } = await supabase
         .from('user_roles')
-        .delete()
-        .eq('user_id', userId);
+        .insert({
+          user_id: userId,
+          role: role as AppRole
+        });
 
-      // Ajouter le nouveau rôle si ce n'est pas 'user'
-      if (newRole !== 'user') {
-        const { error } = await supabase
-          .from('user_roles')
-          .insert({ user_id: userId, role: newRole as AppRole });
-
-        if (error) throw error;
+      if (error) {
+        console.error('Erreur assignation rôle:', error);
+        toast({
+          variant: "destructive",
+          title: "Erreur",
+          description: "Impossible d'assigner le rôle",
+        });
+        return;
       }
 
       toast({
-        title: "Rôle mis à jour",
-        description: "Le rôle de l'utilisateur a été modifié avec succès.",
+        title: "Rôle assigné",
+        description: `Le rôle ${role} a été assigné avec succès`,
       });
 
-      fetchUsers();
-    } catch (error: any) {
+      loadUsers();
+    } catch (error) {
+      console.error('Erreur:', error);
+    }
+  };
+
+  const removeRole = async (userId: string, role: string) => {
+    try {
+      const { error } = await supabase
+        .from('user_roles')
+        .delete()
+        .eq('user_id', userId)
+        .eq('role', role as AppRole);
+
+      if (error) {
+        console.error('Erreur suppression rôle:', error);
+        toast({
+          variant: "destructive",
+          title: "Erreur",
+          description: "Impossible de supprimer le rôle",
+        });
+        return;
+      }
+
       toast({
-        variant: "destructive",
-        title: "Erreur",
-        description: error.message,
+        title: "Rôle supprimé",
+        description: `Le rôle ${role} a été supprimé avec succès`,
       });
+
+      loadUsers();
+    } catch (error) {
+      console.error('Erreur:', error);
     }
   };
-
-  const getRoleBadgeColor = (role: string) => {
-    switch (role) {
-      case 'admin': return 'bg-red-500 hover:bg-red-600';
-      case 'commercial': return 'bg-blue-500 hover:bg-blue-600';
-      case 'client': return 'bg-green-500 hover:bg-green-600';
-      case 'moderator': return 'bg-yellow-500 hover:bg-yellow-600';
-      default: return 'bg-gray-500 hover:bg-gray-600';
-    }
-  };
-
-  if (!user) {
-    return <div>Chargement...</div>;
-  }
 
   return (
-    <div className="container mx-auto p-6 max-w-6xl">
-      {/* Bouton retour */}
-      <div className="mb-6">
-        <Button 
-          variant="outline" 
-          onClick={handleBackToDashboard}
-          className="flex items-center gap-2"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Retour au Dashboard
-        </Button>
+    <div className="container mx-auto px-4 py-8">
+      <div className="flex items-center space-x-2 mb-8">
+        <SettingsIcon className="w-8 h-8 text-blue-600" />
+        <h1 className="text-3xl font-bold">Paramètres</h1>
       </div>
 
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-slate-900">Paramètres</h1>
-        <p className="text-slate-600 mt-2">Configurez votre application et gérez vos préférences</p>
-      </div>
-
-      <Tabs defaultValue="api" className="space-y-6">
+      <Tabs defaultValue="general" className="space-y-6">
         <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="api">API & Intégrations</TabsTrigger>
-          <TabsTrigger value="general">Général</TabsTrigger>
-          <TabsTrigger value="notifications">Notifications</TabsTrigger>
-          {isAdmin && <TabsTrigger value="users">Gestion Utilisateurs</TabsTrigger>}
+          <TabsTrigger value="general">
+            <User className="w-4 h-4 mr-2" />
+            Général
+          </TabsTrigger>
+          <TabsTrigger value="integrations">
+            <Database className="w-4 h-4 mr-2" />
+            Intégrations
+          </TabsTrigger>
+          <TabsTrigger value="notifications">
+            <Bell className="w-4 h-4 mr-2" />
+            Notifications
+          </TabsTrigger>
+          {isAdmin && (
+            <TabsTrigger value="admin">
+              <Shield className="w-4 h-4 mr-2" />
+              Administration
+            </TabsTrigger>
+          )}
         </TabsList>
-
-        <TabsContent value="api">
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <Key className="w-5 h-5" />
-                  <span>Clés API Intelligence Artificielle</span>
-                </CardTitle>
-                <CardDescription>
-                  Configurez vos clés API pour les services d'IA
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="openrouter_api_key">OpenRouter API Key</Label>
-                  <Input
-                    id="openrouter_api_key"
-                    type="password"
-                    value={settings.openrouter_api_key || ''}
-                    onChange={(e) => setSettings({ ...settings, openrouter_api_key: e.target.value })}
-                    placeholder="sk-or-..."
-                  />
-                  <p className="text-xs text-green-600">
-                    ✓ Clé API configurée - L'IA peut maintenant générer du contenu
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="n8n_api_key">n8n API Key</Label>
-                  <Input
-                    id="n8n_api_key"
-                    type="password"
-                    value={settings.n8n_api_key || ''}
-                    onChange={(e) => setSettings({ ...settings, n8n_api_key: e.target.value })}
-                    placeholder="Votre clé API n8n"
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <Share2 className="w-5 h-5" />
-                  <span>Configuration Postiz</span>
-                </CardTitle>
-                <CardDescription>
-                  Configurez l'intégration Postiz pour la gestion des réseaux sociaux
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="postiz_api_key">Clé API Postiz</Label>
-                  <Input
-                    id="postiz_api_key"
-                    type="password"
-                    value={settings.postiz_api_key || ''}
-                    onChange={(e) => setSettings({ ...settings, postiz_api_key: e.target.value })}
-                    placeholder="Votre clé API Postiz"
-                  />
-                  <p className="text-xs text-slate-500">
-                    Trouvez votre clé API dans les paramètres de votre instance Postiz
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="postiz_api_url">URL de l'API Postiz</Label>
-                  <Input
-                    id="postiz_api_url"
-                    value={settings.postiz_api_url || ''}
-                    onChange={(e) => setSettings({ ...settings, postiz_api_url: e.target.value })}
-                    placeholder="https://votre-instance.postiz.com/public/v1"
-                  />
-                  <p className="text-xs text-slate-500">
-                    URL de votre instance Postiz (locale ou serveur). Par défaut: https://api.postiz.com/public/v1
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <MessageCircle className="w-5 h-5" />
-                  <span>Configuration WhatsApp Business</span>
-                </CardTitle>
-                <CardDescription>
-                  Configurez l'intégration WhatsApp avec IA pour répondre automatiquement aux messages
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="whatsapp_api_token">WhatsApp API Token</Label>
-                    <Input
-                      id="whatsapp_api_token"
-                      type="password"
-                      value={settings.whatsapp_api_token || ''}
-                      onChange={(e) => setSettings({ ...settings, whatsapp_api_token: e.target.value })}
-                      placeholder="Token d'accès WhatsApp Business"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="whatsapp_phone_number_id">ID Numéro de téléphone</Label>
-                    <Input
-                      id="whatsapp_phone_number_id"
-                      value={settings.whatsapp_phone_number_id || ''}
-                      onChange={(e) => setSettings({ ...settings, whatsapp_phone_number_id: e.target.value })}
-                      placeholder="ID du numéro WhatsApp Business"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="whatsapp_verify_token">Token de vérification</Label>
-                  <Input
-                    id="whatsapp_verify_token"
-                    value={settings.whatsapp_verify_token || ''}
-                    onChange={(e) => setSettings({ ...settings, whatsapp_verify_token: e.target.value })}
-                    placeholder="Token pour vérifier le webhook"
-                  />
-                </div>
-
-                <Separator />
-
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="whatsapp_ai_enabled">Activer l'IA WhatsApp</Label>
-                      <p className="text-sm text-slate-600">
-                        Permettre à l'IA de répondre automatiquement aux messages WhatsApp
-                      </p>
-                    </div>
-                    <Switch
-                      id="whatsapp_ai_enabled"
-                      checked={settings.whatsapp_ai_enabled || false}
-                      onCheckedChange={(checked) => setSettings({ ...settings, whatsapp_ai_enabled: checked })}
-                    />
-                  </div>
-
-                  {settings.whatsapp_ai_enabled && (
-                    <>
-                      <div className="space-y-2">
-                        <Label htmlFor="whatsapp_response_mode">Mode de réponse</Label>
-                        <Select 
-                          value={settings.whatsapp_response_mode} 
-                          onValueChange={(value) => setSettings({ ...settings, whatsapp_response_mode: value })}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Sélectionner le mode" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="auto">Automatique (réponse immédiate)</SelectItem>
-                            <SelectItem value="manual">Manuel (nécessite validation)</SelectItem>
-                            <SelectItem value="smart">Intelligent (IA décide)</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="whatsapp_ai_instructions">Instructions pour l'IA</Label>
-                        <Textarea
-                          id="whatsapp_ai_instructions"
-                          value={settings.whatsapp_ai_instructions || ''}
-                          onChange={(e) => setSettings({ ...settings, whatsapp_ai_instructions: e.target.value })}
-                          placeholder="Décrivez comment l'IA doit se comporter, quels types de réponses donner, et quelles sont les consignes à suivre..."
-                          rows={6}
-                          className="resize-none"
-                        />
-                        <p className="text-xs text-slate-500">
-                          Exemple: "Tu es l'assistant client de [nom de l'entreprise]. Réponds de manière professionnelle et courtoise. Pour les demandes techniques, oriente vers le support. Ne donne jamais d'informations de prix sans confirmation."
-                        </p>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>APIs Google</CardTitle>
-                <CardDescription>
-                  Intégrations avec les services Google
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="google_analytics_api">Google Analytics API</Label>
-                  <Input
-                    id="google_analytics_api"
-                    type="password"
-                    value={settings.google_analytics_api || ''}
-                    onChange={(e) => setSettings({ ...settings, google_analytics_api: e.target.value })}
-                    placeholder="Clé API Google Analytics"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="google_search_console_api">Google Search Console API</Label>
-                  <Input
-                    id="google_search_console_api"
-                    type="password"
-                    value={settings.google_search_console_api || ''}
-                    onChange={(e) => setSettings({ ...settings, google_search_console_api: e.target.value })}
-                    placeholder="Clé API Google Search Console"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="google_ads_api">Google Ads API</Label>
-                  <Input
-                    id="google_ads_api"
-                    type="password"
-                    value={settings.google_ads_api || ''}
-                    onChange={(e) => setSettings({ ...settings, google_ads_api: e.target.value })}
-                    placeholder="Clé API Google Ads"
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>APIs Réseaux Sociaux</CardTitle>
-                <CardDescription>
-                  Intégrations avec les plateformes sociales
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="facebook_api">Facebook API</Label>
-                    <Input
-                      id="facebook_api"
-                      type="password"
-                      value={settings.facebook_api || ''}
-                      onChange={(e) => setSettings({ ...settings, facebook_api: e.target.value })}
-                      placeholder="Token Facebook"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="twitter_api">Twitter API</Label>
-                    <Input
-                      id="twitter_api"
-                      type="password"
-                      value={settings.twitter_api || ''}
-                      onChange={(e) => setSettings({ ...settings, twitter_api: e.target.value })}
-                      placeholder="Token Twitter"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="linkedin_api">LinkedIn API</Label>
-                    <Input
-                      id="linkedin_api"
-                      type="password"
-                      value={settings.linkedin_api || ''}
-                      onChange={(e) => setSettings({ ...settings, linkedin_api: e.target.value })}
-                      placeholder="Token LinkedIn"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="instagram_api">Instagram API</Label>
-                    <Input
-                      id="instagram_api"
-                      type="password"
-                      value={settings.instagram_api || ''}
-                      onChange={(e) => setSettings({ ...settings, instagram_api: e.target.value })}
-                      placeholder="Token Instagram"
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
 
         <TabsContent value="general">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <Globe className="w-5 h-5" />
-                <span>Préférences Générales</span>
-              </CardTitle>
+              <CardTitle>Paramètres généraux</CardTitle>
               <CardDescription>
-                Configurez les paramètres généraux de l'application
+                Configurez les paramètres de base de votre application
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="default_language">Langue par défaut</Label>
-                  <Select value={settings.default_language} onValueChange={(value) => setSettings({ ...settings, default_language: value })}>
+                  <Label htmlFor="language">Langue par défaut</Label>
+                  <Select
+                    value={settings.default_language || 'fr'}
+                    onValueChange={(value) => setSettings(prev => ({ ...prev, default_language: value }))}
+                  >
                     <SelectTrigger>
-                      <SelectValue placeholder="Sélectionner une langue" />
+                      <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="fr">Français</SelectItem>
                       <SelectItem value="en">English</SelectItem>
                       <SelectItem value="es">Español</SelectItem>
-                      <SelectItem value="de">Deutsch</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="timezone">Fuseau horaire</Label>
-                  <Select value={settings.timezone} onValueChange={(value) => setSettings({ ...settings, timezone: value })}>
+                  <Select
+                    value={settings.timezone || 'Europe/Paris'}
+                    onValueChange={(value) => setSettings(prev => ({ ...prev, timezone: value }))}
+                  >
                     <SelectTrigger>
-                      <SelectValue placeholder="Sélectionner un fuseau" />
+                      <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="Europe/Paris">Europe/Paris</SelectItem>
-                      <SelectItem value="Europe/London">Europe/London</SelectItem>
                       <SelectItem value="America/New_York">America/New_York</SelectItem>
-                      <SelectItem value="America/Los_Angeles">America/Los_Angeles</SelectItem>
                       <SelectItem value="Asia/Tokyo">Asia/Tokyo</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
 
-              <Separator />
-
               <div className="space-y-4">
-                <h3 className="text-lg font-semibold">Limites et quotas</h3>
-                
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="max_workflows">Nombre maximum de workflows</Label>
-                    <Input
-                      id="max_workflows"
-                      type="number"
-                      value={settings.max_workflows || 50}
-                      onChange={(e) => setSettings({ ...settings, max_workflows: parseInt(e.target.value) })}
-                      min="1"
-                      max="1000"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="data_retention_days">Rétention des données (jours)</Label>
-                    <Input
-                      id="data_retention_days"
-                      type="number"
-                      value={settings.data_retention_days || 90}
-                      onChange={(e) => setSettings({ ...settings, data_retention_days: parseInt(e.target.value) })}
-                      min="7"
-                      max="365"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <Separator />
-
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold">Sauvegarde automatique</h3>
-                
                 <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="auto_backup">Sauvegarde automatique</Label>
-                    <p className="text-sm text-slate-600">
-                      Effectuer des sauvegardes régulières de vos données
-                    </p>
+                  <div>
+                    <Label htmlFor="auto-backup">Sauvegarde automatique</Label>
+                    <p className="text-sm text-gray-600">Activer les sauvegardes automatiques</p>
                   </div>
                   <Switch
-                    id="auto_backup"
+                    id="auto-backup"
                     checked={settings.auto_backup || false}
-                    onCheckedChange={(checked) => setSettings({ ...settings, auto_backup: checked })}
+                    onCheckedChange={(checked) => setSettings(prev => ({ ...prev, auto_backup: checked }))}
                   />
                 </div>
 
                 {settings.auto_backup && (
                   <div className="space-y-2">
-                    <Label htmlFor="backup_frequency">Fréquence de sauvegarde</Label>
-                    <Select value={settings.backup_frequency} onValueChange={(value) => setSettings({ ...settings, backup_frequency: value })}>
+                    <Label htmlFor="backup-frequency">Fréquence de sauvegarde</Label>
+                    <Select
+                      value={settings.backup_frequency || 'daily'}
+                      onValueChange={(value) => setSettings(prev => ({ ...prev, backup_frequency: value }))}
+                    >
                       <SelectTrigger>
-                        <SelectValue placeholder="Sélectionner une fréquence" />
+                        <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="hourly">Toutes les heures</SelectItem>
                         <SelectItem value="daily">Quotidienne</SelectItem>
                         <SelectItem value="weekly">Hebdomadaire</SelectItem>
-                        <SelectItem value="monthly">Mensuelle</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                 )}
               </div>
+
+              <Button onClick={saveSettings} disabled={loading}>
+                {loading && <RefreshCw className="w-4 h-4 mr-2 animate-spin" />}
+                <Save className="w-4 h-4 mr-2" />
+                Sauvegarder
+              </Button>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="integrations">
+          <div className="space-y-6">
+            <N8nConfigurationPanel />
+            
+            <Card>
+              <CardHeader>
+                <CardTitle>Autres intégrations</CardTitle>
+                <CardDescription>
+                  Configurez vos API externes et services tiers
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="openrouter-api">Clé API OpenRouter</Label>
+                  <Input
+                    id="openrouter-api"
+                    type="password"
+                    value={settings.openrouter_api_key || ''}
+                    onChange={(e) => setSettings(prev => ({ ...prev, openrouter_api_key: e.target.value }))}
+                    placeholder="sk-or-..."
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="postiz-api">Clé API Postiz</Label>
+                  <Input
+                    id="postiz-api"
+                    type="password"
+                    value={settings.postiz_api_key || ''}
+                    onChange={(e) => setSettings(prev => ({ ...prev, postiz_api_key: e.target.value }))}
+                    placeholder="Clé API Postiz"
+                  />
+                </div>
+
+                <Button onClick={saveSettings} disabled={loading}>
+                  {loading && <RefreshCw className="w-4 h-4 mr-2 animate-spin" />}
+                  <Save className="w-4 h-4 mr-2" />
+                  Sauvegarder
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         <TabsContent value="notifications">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <Bell className="w-5 h-5" />
-                <span>Notifications</span>
-              </CardTitle>
+              <CardTitle>Paramètres de notification</CardTitle>
               <CardDescription>
                 Gérez vos préférences de notification
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label htmlFor="email_notifications">Notifications par email</Label>
-                  <p className="text-sm text-slate-600">
-                    Recevoir des notifications importantes par email
-                  </p>
+                <div>
+                  <Label htmlFor="email-notifications">Notifications email</Label>
+                  <p className="text-sm text-gray-600">Recevoir des notifications par email</p>
                 </div>
                 <Switch
-                  id="email_notifications"
+                  id="email-notifications"
                   checked={settings.email_notifications || false}
-                  onCheckedChange={(checked) => setSettings({ ...settings, email_notifications: checked })}
+                  onCheckedChange={(checked) => setSettings(prev => ({ ...prev, email_notifications: checked }))}
                 />
               </div>
-
-              <Separator />
 
               <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label htmlFor="sms_notifications">Notifications SMS</Label>
-                  <p className="text-sm text-slate-600">
-                    Recevoir des alertes urgentes par SMS
-                  </p>
+                <div>
+                  <Label htmlFor="sms-notifications">Notifications SMS</Label>
+                  <p className="text-sm text-gray-600">Recevoir des notifications par SMS</p>
                 </div>
                 <Switch
-                  id="sms_notifications"
+                  id="sms-notifications"
                   checked={settings.sms_notifications || false}
-                  onCheckedChange={(checked) => setSettings({ ...settings, sms_notifications: checked })}
+                  onCheckedChange={(checked) => setSettings(prev => ({ ...prev, sms_notifications: checked }))}
                 />
               </div>
+
+              <Button onClick={saveSettings} disabled={loading}>
+                {loading && <RefreshCw className="w-4 h-4 mr-2 animate-spin" />}
+                <Save className="w-4 h-4 mr-2" />
+                Sauvegarder
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>
 
         {isAdmin && (
-          <TabsContent value="users">
+          <TabsContent value="admin">
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <Users className="w-5 h-5" />
-                  <span>Gestion des Utilisateurs</span>
-                </CardTitle>
+                <CardTitle>Gestion des utilisateurs</CardTitle>
                 <CardDescription>
-                  Gérez les rôles et permissions des utilisateurs
+                  Gérez les utilisateurs et leurs rôles
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
                   {users.map((userItem) => (
                     <div key={userItem.id} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div className="flex-1">
-                        <div className="font-medium">
-                          {userItem.first_name && userItem.last_name 
-                            ? `${userItem.first_name} ${userItem.last_name}` 
-                            : userItem.email}
-                        </div>
-                        <div className="text-sm text-slate-600">{userItem.email}</div>
-                        <div className="flex gap-1 mt-2">
-                          {userItem.roles.length > 0 ? (
-                            userItem.roles.map((role) => (
-                              <Badge key={role} className={`${getRoleBadgeColor(role)} text-white`}>
-                                {role}
-                              </Badge>
-                            ))
-                          ) : (
-                            <Badge variant="outline">user</Badge>
-                          )}
-                        </div>
+                      <div>
+                        <h4 className="font-medium">
+                          {userItem.first_name} {userItem.last_name}
+                        </h4>
+                        <p className="text-sm text-gray-600">{userItem.email}</p>
                       </div>
                       <div className="flex items-center space-x-2">
-                        <Select
-                          value={userItem.roles[0] || 'user'}
-                          onValueChange={(value) => handleRoleChange(userItem.id, value)}
-                        >
+                        {userItem.roles.map((role) => (
+                          <Badge 
+                            key={role} 
+                            variant="secondary"
+                            className="cursor-pointer"
+                            onClick={() => removeRole(userItem.id, role)}
+                          >
+                            {role} ×
+                          </Badge>
+                        ))}
+                        <Select onValueChange={(value) => assignRole(userItem.id, value)}>
                           <SelectTrigger className="w-32">
-                            <SelectValue />
+                            <SelectValue placeholder="+ Rôle" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="user">User</SelectItem>
-                            <SelectItem value="client">Client</SelectItem>
+                            <SelectItem value="user">Utilisateur</SelectItem>
                             <SelectItem value="commercial">Commercial</SelectItem>
-                            <SelectItem value="moderator">Moderator</SelectItem>
+                            <SelectItem value="client">Client</SelectItem>
                             <SelectItem value="admin">Admin</SelectItem>
                           </SelectContent>
                         </Select>
@@ -754,13 +445,6 @@ const Settings = () => {
           </TabsContent>
         )}
       </Tabs>
-
-      <div className="flex justify-end mt-8">
-        <Button onClick={handleSaveSettings} disabled={loading}>
-          <Save className="w-4 h-4 mr-2" />
-          {loading ? 'Sauvegarde...' : 'Sauvegarder les paramètres'}
-        </Button>
-      </div>
     </div>
   );
 };
