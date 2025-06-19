@@ -1,0 +1,58 @@
+🔍 Test connexion...
+n8nService.ts:134 🔍 Vérification connexion n8n...
+n8nService.ts:149 ✅ n8n connecté avec succès
+n8nTestService.ts:48 📋 Test récupération workflows...
+EnhancedWorkflowManager.tsx:696 🔍 Lancement diagnostic complet...
+n8nDiagnosticService.ts:7 🔍 DIAGNOSTIC COMPLET N8N
+n8nDiagnosticService.ts:8 ========================
+n8nDiagnosticService.ts:11 1️⃣ Test authentification Supabase...
+n8nTestService.ts:56 ❌ Erreur workflows: Error: Configuration n8n manquante. Veuillez configurer votre clé API et URL.
+    at N8nService.makeRequest (n8nService.ts:213:13)
+    at async N8nTestService.testAllEndpoints (n8nTestService.ts:49:31)
+    at async onClick (EnhancedWorkflowManager.tsx:684:23)
+testAllEndpoints @ n8nTestService.ts:56
+n8nTestService.ts:61 ⚡ Test récupération exécutions...
+n8nDiagnosticService.ts:18 ✅ Utilisateur connecté: 8d9632a2-a35b-41c2-a694-775d14d973a0
+n8nDiagnosticService.ts:25 2️⃣ Test fonction get-n8n-secrets...
+n8nDiagnosticService.ts:28 📋 Réponse get-n8n-secrets: Object
+n8nDiagnosticService.ts:36 ⚠️ Pas de clé API dans les secrets
+fullDiagnostic @ n8nDiagnosticService.ts:36
+n8nTestService.ts:67 ❌ Erreur exécutions: Error: Configuration n8n manquante. Veuillez configurer votre clé API et URL.
+    at N8nService.makeRequest (n8nService.ts:213:13)
+    at async N8nTestService.testAllEndpoints (n8nTestService.ts:62:32)
+    at async onClick (EnhancedWorkflowManager.tsx:684:23)
+testAllEndpoints @ n8nTestService.ts:67
+n8nTestService.ts:72 🏷️ Test récupération tags...
+n8nTestService.ts:78 ❌ Erreur tags: Error: Configuration n8n manquante. Veuillez configurer votre clé API et URL.
+    at N8nService.makeRequest (n8nService.ts:213:13)
+    at async N8nTestService.testAllEndpoints (n8nTestService.ts:73:26)
+    at async onClick (EnhancedWorkflowManager.tsx:684:23)
+testAllEndpoints @ n8nTestService.ts:78
+n8nTestService.ts:83 🔧 Test récupération variables...
+n8nTestService.ts:89 ❌ Erreur variables: Error: Configuration n8n manquante. Veuillez configurer votre clé API et URL.
+    at N8nService.makeRequest (n8nService.ts:213:13)
+    at async N8nTestService.testAllEndpoints (n8nTestService.ts:84:31)
+    at async onClick (EnhancedWorkflowManager.tsx:684:23)
+testAllEndpoints @ n8nTestService.ts:89
+n8nTestService.ts:94 📁 Test récupération projets...
+n8nTestService.ts:100 ❌ Erreur projets: Error: Configuration n8n manquante. Veuillez configurer votre clé API et URL.
+    at N8nService.makeRequest (n8nService.ts:213:13)
+    at async N8nTestService.testAllEndpoints (n8nTestService.ts:95:30)
+    at async onClick (EnhancedWorkflowManager.tsx:684:23)
+testAllEndpoints @ n8nTestService.ts:100
+n8nTestService.ts:104 
+📊 RÉSULTATS DES TESTS:
+n8nTestService.ts:105 ======================
+n8nTestService.ts:106 🔌 Connexion: ✅
+n8nTestService.ts:107 📋 Workflows: ❌
+n8nTestService.ts:108 ⚡ Exécutions: ❌
+n8nTestService.ts:109 🏷️ Tags: ❌
+n8nTestService.ts:110 🔧 Variables: ❌
+n8nTestService.ts:111 📁 Projets: ❌
+n8nTestService.ts:114 
+❌ ERREURS DÉTECTÉES:
+n8nTestService.ts:115   - Workflows: Error: Configuration n8n manquante. Veuillez configurer votre clé API et URL.
+n8nTestService.ts:115   - Executions: Error: Configuration n8n manquante. Veuillez configurer votre clé API et URL.
+n8nTestService.ts:115   - Tags: Error: Configuration n8n manquante. Veuillez configurer votre clé API et URL.
+n8nTestService.ts:115   - Variables: Error: Configuration n8n manquante. Veuillez configurer votre clé API et URL.
+n8nTestService.ts:115   - Projects: Error: Configuration n8n manquante. Veuillez configurer votre clé API et URL.
