@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -97,7 +96,6 @@ export const DatabaseManager: React.FC = () => {
     setSelectedTable(tableName);
     
     try {
-      // For column information, we'll use a simpler approach
       // Get sample data first to infer column structure
       const { data: sampleData, error: dataError } = await supabase
         .from(tableName as any)
@@ -121,11 +119,11 @@ export const DatabaseManager: React.FC = () => {
         const sampleRow = sampleData[0];
         const inferredColumns: ColumnInfo[] = Object.keys(sampleRow).map(key => ({
           column_name: key,
-          data_type: typeof sampleRow[key] === 'number' ? 'number' : 
-                     typeof sampleRow[key] === 'boolean' ? 'boolean' :
-                     Array.isArray(sampleRow[key]) ? 'array' :
-                     typeof sampleRow[key] === 'object' ? 'jsonb' : 'text',
-          is_nullable: sampleRow[key] === null ? 'YES' : 'NO',
+          data_type: typeof sampleRow[key as keyof typeof sampleRow] === 'number' ? 'number' : 
+                     typeof sampleRow[key as keyof typeof sampleRow] === 'boolean' ? 'boolean' :
+                     Array.isArray(sampleRow[key as keyof typeof sampleRow]) ? 'array' :
+                     typeof sampleRow[key as keyof typeof sampleRow] === 'object' ? 'jsonb' : 'text',
+          is_nullable: sampleRow[key as keyof typeof sampleRow] === null ? 'YES' : 'NO',
           column_default: null
         }));
         
@@ -208,7 +206,6 @@ export const DatabaseManager: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Liste des tables */}
         <Card className="lg:col-span-1">
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -262,7 +259,6 @@ export const DatabaseManager: React.FC = () => {
           </CardContent>
         </Card>
 
-        {/* Détails de la table */}
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle>
@@ -281,7 +277,6 @@ export const DatabaseManager: React.FC = () => {
               </div>
             ) : (
               <div className="space-y-6">
-                {/* Structure des colonnes */}
                 <div>
                   <h3 className="text-lg font-semibold mb-4">Structure</h3>
                   {columns.length > 0 ? (
@@ -320,7 +315,6 @@ export const DatabaseManager: React.FC = () => {
                   )}
                 </div>
 
-                {/* Données d'exemple */}
                 <div>
                   <h3 className="text-lg font-semibold mb-4">
                     Données (10 premiers enregistrements)

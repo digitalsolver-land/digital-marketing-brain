@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -34,8 +33,8 @@ const mockWorkflowTemplates: WorkflowTemplate[] = [
     description: "Automated email campaign workflow with lead scoring",
     category: "Marketing",
     tags: ["email", "marketing", "automation"],
-    complexity: "medium",
-    estimatedTime: 30,
+    complexity: "intermediate",
+    estimatedTime: "30",
     workflow: {
       name: "Email Marketing Campaign",
       nodes: [
@@ -71,8 +70,8 @@ const mockWorkflowTemplates: WorkflowTemplate[] = [
     description: "Monitor website uptime and send alerts",
     category: "Monitoring",
     tags: ["monitoring", "alerts", "uptime"],
-    complexity: "easy",
-    estimatedTime: 15,
+    complexity: "beginner",
+    estimatedTime: "15",
     workflow: {
       name: "Website Monitor",
       nodes: [
@@ -155,7 +154,6 @@ export const WorkflowTemplateSelector: React.FC<WorkflowTemplateSelectorProps> =
       if (enhancedWorkflowService?.createWorkflowFromTemplate) {
         await enhancedWorkflowService.createWorkflowFromTemplate(templateToCreate);
       } else {
-        // Fallback implementation if enhanced service is not available
         console.log('Creating workflow from template:', templateToCreate);
       }
       

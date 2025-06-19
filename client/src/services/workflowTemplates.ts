@@ -1,4 +1,5 @@
 import { workflowService } from './workflowService';
+import { nanoid } from 'nanoid';
 
 export interface WorkflowTemplate {
   id: string;
@@ -8,10 +9,20 @@ export interface WorkflowTemplate {
   tags: string[];
   complexity: 'beginner' | 'intermediate' | 'advanced';
   estimatedTime: string;
-  workflow: any;
-  preview?: string;
-  author?: string;
-  version?: string;
+  workflow: {
+    name: string;
+    nodes: Array<{
+      id: string;
+      name: string;
+      type: string;
+      position: [number, number];
+      parameters?: any;
+    }>;
+    connections: Record<string, any>;
+    active: boolean;
+    settings?: any;
+    staticData?: any;
+  };
 }
 
 export interface TemplateCategory {
@@ -22,7 +33,7 @@ export interface TemplateCategory {
   templates: WorkflowTemplate[];
 }
 
-const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
+const workflowTemplates: WorkflowTemplate[] = [
   {
     id: 'social-media-scheduler',
     name: 'Programmateur de contenu social',
@@ -620,6 +631,286 @@ const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
       settings: {},
       tags: [{ id: "reporting", name: "Reporting" }]
     }
+  },
+  {
+    id: 'basic-data-processing',
+    name: "Traitement de Données Basique",
+    description: "Un workflow simple pour traiter et transformer des données",
+    category: "Data Processing",
+    tags: ["data", "processing", "transformation"],
+    complexity: "beginner",
+    estimatedTime: "15",
+    workflow: {
+      name: "Traitement de Données Basique",
+      nodes: [
+        {
+          id: "start",
+          name: "Start",
+          type: "n8n-nodes-base.start",
+          position: [250, 300],
+          parameters: {}
+        },
+        {
+          id: "set",
+          name: "Set Data",
+          type: "n8n-nodes-base.set",
+          position: [450, 300],
+          parameters: {
+            values: {
+              string: [
+                {
+                  name: "processed",
+                  value: "true"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      connections: {
+        "start": {
+          "main": [[{"node": "set", "type": "main", "index": 0}]]
+        }
+      },
+      active: false
+    }
+  },
+  {
+    id: 'email-notification-system',
+    name: "Système de Notification Email",
+    description: "Workflow pour envoyer des notifications par email basées sur des déclencheurs",
+    category: "Communication",
+    tags: ["email", "notification", "automation"],
+    complexity: "intermediate",
+    estimatedTime: "30",
+    workflow: {
+      name: "Système de Notification Email",
+      nodes: [
+        {
+          id: "webhook",
+          name: "Webhook",
+          type: "n8n-nodes-base.webhook",
+          position: [250, 300],
+          parameters: {
+            path: "notification",
+            httpMethod: "POST"
+          }
+        },
+        {
+          id: "if",
+          name: "IF",
+          type: "n8n-nodes-base.if",
+          position: [450, 300],
+          parameters: {
+            conditions: {
+              string: [
+                {
+                  value1: "={{$json.type}}",
+                  operation: "equal",
+                  value2: "urgent"
+                }
+              ]
+            }
+          }
+        },
+        {
+          id: "email",
+          name: "Send Email",
+          type: "n8n-nodes-base.emailSend",
+          position: [650, 250],
+          parameters: {
+            fromEmail: "noreply@example.com",
+            toEmail: "admin@example.com",
+            subject: "Notification Urgente",
+            text: "Une notification urgente a été reçue."
+          }
+        },
+        {
+          id: "log",
+          name: "Log",
+          type: "n8n-nodes-base.function",
+          position: [650, 350],
+          parameters: {
+            functionCode: "console.log('Notification reçue:', $input.all());\nreturn $input.all();"
+          }
+        }
+      ],
+      connections: {
+        "webhook": {
+          "main": [[{"node": "if", "type": "main", "index": 0}]]
+        },
+        "if": {
+          "main": [
+            [{"node": "email", "type": "main", "index": 0}],
+            [{"node": "log", "type": "main", "index": 0}]
+          ]
+        }
+      },
+      active: false,
+      settings: {
+        executionOrder: "v1"
+      }
+    }
+  },
+  {
+    id: 'scheduled-backup',
+    name: "Sauvegarde Programmée",
+    description: "Workflow pour effectuer des sauvegardes automatiques à intervalles réguliers",
+    category: "Maintenance",
+    tags: ["backup", "scheduled", "maintenance"],
+    complexity: "intermediate",
+    estimatedTime: "45",
+    workflow: {
+      name: "Sauvegarde Programmée",
+      nodes: [
+        {
+          id: "cron",
+          name: "Schedule Trigger",
+          type: "n8n-nodes-base.cron",
+          position: [250, 300],
+          parameters: {
+            rule: {
+              interval: [{
+                field: "cronExpression",
+                expression: "0 2 * * *"
+              }]
+            }
+          }
+        },
+        {
+          id: "function",
+          name: "Prepare Backup",
+          type: "n8n-nodes-base.function",
+          position: [450, 300],
+          parameters: {
+            functionCode: "const date = new Date().toISOString().split('T')[0];\nreturn [{json: {backupName: `backup_${date}`, timestamp: new Date().getTime()}}];"
+          }
+        },
+        {
+          id: "http",
+          name: "HTTP Request",
+          type: "n8n-nodes-base.httpRequest",
+          position: [650, 300],
+          parameters: {
+            url: "https://api.backup-service.com/create",
+            method: "POST",
+            sendBody: true,
+            bodyContentType: "json",
+            jsonBody: "={{$json}}"
+          }
+        },
+        {
+          id: "email-confirm",
+          name: "Confirmation Email",
+          type: "n8n-nodes-base.emailSend",
+          position: [850, 300],
+          parameters: {
+            fromEmail: "system@example.com",
+            toEmail: "admin@example.com",
+            subject: "Sauvegarde Terminée",
+            text: "La sauvegarde {{$json.backupName}} a été créée avec succès."
+          }
+        }
+      ],
+      connections: {
+        "cron": {
+          "main": [[{"node": "function", "type": "main", "index": 0}]]
+        },
+        "function": {
+          "main": [[{"node": "http", "type": "main", "index": 0}]]
+        },
+        "http": {
+          "main": [[{"node": "email-confirm", "type": "main", "index": 0}]]
+        }
+      },
+      active: false,
+      settings: {
+        executionOrder: "v1"
+      }
+    }
+  },
+  {
+    id: 'api-data-sync',
+    name: "Synchronisation de Données API",
+    description: "Workflow pour synchroniser des données entre différentes APIs",
+    category: "Integration",
+    tags: ["api", "sync", "integration", "data"],
+    complexity: "advanced",
+    estimatedTime: "60",
+    workflow: {
+      name: "Synchronisation de Données API",
+      nodes: [
+        {
+          id: "interval",
+          name: "Interval",
+          type: "n8n-nodes-base.cron",
+          position: [250, 300],
+          parameters: {
+            rule: {
+              interval: [{
+                field: "cronExpression", 
+                expression: "*/15 * * * *"
+              }]
+            }
+          }
+        },
+        {
+          id: "source-api",
+          name: "Source API",
+          type: "n8n-nodes-base.httpRequest",
+          position: [450, 300],
+          parameters: {
+            url: "https://api.source.com/data",
+            method: "GET",
+            authentication: "genericCredentialType",
+            genericAuthType: "httpHeaderAuth"
+          }
+        },
+        {
+          id: "transform",
+          name: "Transform Data",
+          type: "n8n-nodes-base.function",
+          position: [650, 300],
+          parameters: {
+            functionCode: "const transformed = $input.all().map(item => ({\n  id: item.json.id,\n  name: item.json.name,\n  updatedAt: new Date().toISOString(),\n  processed: true\n}));\nreturn transformed;"
+          }
+        },
+        {
+          id: "target-api",
+          name: "Target API",
+          type: "n8n-nodes-base.httpRequest",
+          position: [850, 300],
+          parameters: {
+            url: "https://api.target.com/sync",
+            method: "POST",
+            sendBody: true,
+            bodyContentType: "json",
+            jsonBody: "={{$json}}"
+          }
+        },
+        {
+          id: "error-handler",
+          name: "Error Handler",
+          type: "n8n-nodes-base.function",
+          position: [650, 450],
+          parameters: {
+            functionCode: "console.error('Sync error:', $input.all());\nreturn [{json: {error: 'Sync failed', timestamp: new Date().toISOString()}}];"
+          }
+        }
+      ],
+      connections: {
+        "interval": {
+          "main": [[{"node": "source-api", "type": "main", "index": 0}]]
+        },
+        "source-api": {
+          "main": [[{"node": "transform", "type": "main", "index": 0}]]
+        },
+        "transform": {
+          "main": [[{"node": "target-api", "type": "main", "index": 0}]]
+        }
+      },
+      active: false
+    }
   }
 ];
 
@@ -889,3 +1180,30 @@ class WorkflowTemplateService {
 }
 
 export const workflowTemplateService = new WorkflowTemplateService();
+
+export const getWorkflowTemplates = (): WorkflowTemplate[] => {
+  return workflowTemplates;
+};
+
+export const getCategories = (): string[] => {
+  const categories = new Set(workflowTemplates.map(template => template.category));
+  return Array.from(categories);
+};
+
+export const getTemplateById = (id: string): WorkflowTemplate | undefined => {
+  return workflowTemplates.find(template => template.id === id);
+};
+
+export const getTemplatesByCategory = (category: string): WorkflowTemplate[] => {
+  return workflowTemplates.filter(template => template.category === category);
+};
+
+export const createWorkflowFromTemplate = (template: WorkflowTemplate, customName?: string, customDescription?: string) => {
+  return {
+    id: nanoid(),
+    name: customName || template.name,
+    description: customDescription || template.description,
+    ...template.workflow,
+    active: false
+  };
+};

@@ -237,7 +237,6 @@ export const WorkflowManager: React.FC = () => {
     setLoading(true);
     try {
       if (n8nConnected) {
-        // Vérifier d'abord si le workflow existe
         const exists = await unifiedN8nService.workflowExists(workflow.id);
         if (!exists) {
           toast({
@@ -592,7 +591,21 @@ export const WorkflowManager: React.FC = () => {
 
         <TabsContent value="visualization" className="space-y-6">
           {selectedWorkflow ? (
-            <WorkflowVisualization workflow={selectedWorkflow} />
+            <WorkflowVisualization 
+              workflow={selectedWorkflow} 
+              nodes={selectedWorkflow.nodes?.map(node => ({
+                id: node.id || '',
+                workflow_id: selectedWorkflow.id || '',
+                node_id: node.id || '',
+                node_type: node.type || '',
+                name: node.name || '',
+                position_x: Array.isArray(node.position) ? node.position[0] : 0,
+                position_y: Array.isArray(node.position) ? node.position[1] : 0,
+                parameters: node.parameters || {},
+                created_at: new Date().toISOString()
+              })) || []}
+              connections={[]}
+            />
           ) : (
             <Card>
               <CardContent className="text-center py-8">
