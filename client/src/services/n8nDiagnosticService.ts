@@ -146,6 +146,12 @@ export class N8nDiagnosticService {
       }
 
       console.log('✅ Secrets sauvegardés avec succès vers Supabase');
+      
+      // Invalider le cache de configuration du service principal
+      const { n8nService } = await import('./n8nService');
+      (n8nService as any).configCache = null;
+      (n8nService as any).configCacheTime = 0;
+      
       return { success: true, data };
 
     } catch (error) {

@@ -79,16 +79,28 @@ class N8nService {
     
     // Utiliser le cache si disponible et récent
     if (this.configCache && (now - this.configCacheTime) < this.CONFIG_CACHE_DURATION) {
+      console.log('🔄 Utilisation cache configuration n8n');
       return this.configCache;
     }
 
     try {
+      console.log('🔍 Récupération configuration n8n depuis Supabase...');
+      
       const { data, error } = await supabase.functions.invoke('get-n8n-secrets');
 
       if (error) {
-        console.error('❌ Erreur récupération config n8n:', error);
+        console.error('❌ Erreur Edge Function get-n8n-secrets:', error);
+        this.configCache = null;
+        this.configCacheTime = now;
         return null;
       }
+
+      console.log('📋 Réponse get-n8n-secrets:', {
+        hasData: !!data,
+        hasApiKey: !!(data?.apiKey),
+        hasBaseUrl: !!(data?.baseUrl),
+        apiKeyLength: data?.apiKey?.length || 0
+      });
 
       if (data?.apiKey && data?.baseUrl) {
         this.configCache = {
@@ -96,14 +108,18 @@ class N8nService {
           baseUrl: data.baseUrl
         };
         this.configCacheTime = now;
+        console.log('✅ Configuration n8n chargée avec succès');
         return this.configCache;
       }
 
+      console.log('⚠️ Configuration n8n incomplète ou manquante');
       this.configCache = null;
       this.configCacheTime = now;
       return null;
     } catch (error) {
       console.error('❌ Erreur récupération config n8n:', error);
+      this.configCache = null;
+      this.configCacheTime = now;
       return null;
     }
   }
