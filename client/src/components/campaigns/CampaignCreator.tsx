@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -82,7 +81,7 @@ export const CampaignCreator: React.FC<CampaignCreatorProps> = ({
     setCampaignData(prev => ({
       ...prev,
       platforms: prev.platforms.includes(platformId)
-        ? prev.platforms.filter(p => p !== platformId)
+        ? prev.platforms.filter((p: string) => p !== platformId)
         : [...prev.platforms, platformId]
     }));
   };
@@ -99,7 +98,6 @@ export const CampaignCreator: React.FC<CampaignCreatorProps> = ({
 
   const handlePreview = () => {
     console.log('Aperçu de la campagne:', campaignData);
-    // Ici on pourrait ouvrir un modal de prévisualisation
   };
 
   const handleLaunch = () => {
@@ -249,7 +247,7 @@ export const CampaignCreator: React.FC<CampaignCreatorProps> = ({
                   <div className="mt-4">
                     <h4 className="font-medium mb-2">Plateformes sélectionnées:</h4>
                     <div className="flex flex-wrap gap-2">
-                      {campaignData.platforms.map((platformId) => {
+                      {campaignData.platforms.map((platformId: string) => {
                         const platform = platforms.find(p => p.id === platformId);
                         return platform ? (
                           <Badge key={platformId} variant="outline">

@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -25,11 +24,28 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
+interface Campaign {
+  id: number;
+  name: string;
+  type: string;
+  status: string;
+  budget: number;
+  spent: number;
+  impressions: number;
+  clicks: number;
+  conversions: number;
+  ctr: string;
+  cpc: string;
+  startDate: string;
+  endDate: string;
+  platforms: string[];
+}
+
 export const CampaignList = () => {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
-  const [campaigns, setCampaigns] = useState([
+  const [campaigns, setCampaigns] = useState<Campaign[]>([
     {
       id: 1,
       name: "Black Friday 2024",
@@ -166,13 +182,19 @@ export const CampaignList = () => {
               description: `${campaign.name} a été supprimée`,
               variant: "destructive"
             });
-            return null;
+            return campaign;
           default:
             return campaign;
         }
       }
       return campaign;
-    }).filter(Boolean));
+    }).filter(campaign => {
+      // Remove deleted campaigns
+      if (campaign.id === campaignId && action === 'delete') {
+        return false;
+      }
+      return true;
+    }));
   };
 
   const filteredCampaigns = campaigns.filter(campaign => {

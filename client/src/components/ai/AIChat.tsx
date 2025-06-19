@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,6 +9,17 @@ import { aiService } from '@/services/aiService';
 import { n8nService } from '@/services/n8nService';
 import { useToast } from '@/hooks/use-toast';
 import { AIConversation, ChatMessage } from '@/types/platform';
+
+interface AIAction {
+  type: 'workflow_creation' | 'content_generation' | 'api_call' | 'general';
+  payload: {
+    description?: string;
+    type?: string;
+    keywords?: string[];
+    endpoint?: string;
+    method?: string;
+  };
+}
 
 export const AIChat: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -56,11 +66,8 @@ Comment puis-je vous aider aujourd'hui ?`,
     setIsLoading(true);
 
     try {
-      // Déterminer le type d'action basé sur le message
-      const action = await aiService.processCommand(inputMessage, {
-        currentSection: 'ai-chat',
-        availableWorkflows: await n8nService.getWorkflows()
-      });
+      // Simuler la détection d'action basée sur le message
+      const action: AIAction = determineActionFromMessage(inputMessage);
 
       let response = '';
       let actions = [];
@@ -79,8 +86,8 @@ Comment puis-je vous aider aujourd'hui ?`,
         case 'content_generation':
           response = await aiService.generateContent(
             inputMessage,
-            action.payload.type,
-            action.payload.keywords
+            action.payload.type || 'blog',
+            action.payload.keywords || []
           );
           break;
 
@@ -114,6 +121,36 @@ Comment puis-je vous aider aujourd'hui ?`,
     }
   };
 
+  const determineActionFromMessage = (message: string): AIAction => {
+    const lowerMessage = message.toLowerCase();
+    
+    if (lowerMessage.includes('workflow') || lowerMessage.includes('automatiser') || lowerMessage.includes('n8n')) {
+      return {
+        type: 'workflow_creation',
+        payload: { description: message }
+      };
+    }
+    
+    if (lowerMessage.includes('contenu') || lowerMessage.includes('article') || lowerMessage.includes('blog')) {
+      return {
+        type: 'content_generation',
+        payload: { type: 'blog', keywords: [] }
+      };
+    }
+    
+    if (lowerMessage.includes('api') || lowerMessage.includes('endpoint')) {
+      return {
+        type: 'api_call',
+        payload: { endpoint: '', method: 'GET' }
+      };
+    }
+    
+    return {
+      type: 'general',
+      payload: {}
+    };
+  };
+
   const handleWorkflowCreation = async (payload: any): Promise<string> => {
     try {
       const workflow = await aiService.createWorkflowFromDescription(payload.description);
@@ -132,7 +169,6 @@ Je n'ai pas pu créer le workflow demandé. Pouvez-vous essayer de reformuler vo
   };
 
   const handleApiCall = async (payload: any): Promise<string> => {
-    // Simuler un appel API
     return `🔌 **Commande API exécutée**
 
 **Endpoint :** ${payload.endpoint}
@@ -146,7 +182,6 @@ La commande a été exécutée avec succès.`;
     if (!apiCommand.trim()) return;
 
     try {
-      // Ici, vous pouvez parser et exécuter la commande API
       const result = await fetch(apiCommand, {
         method: 'GET',
         headers: {
