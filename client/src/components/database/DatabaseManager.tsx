@@ -1,601 +1,335 @@
+
 import React, { useState, useEffect } from 'react';
-import { Database, Table, Plus, Edit, Trash2, Search, Filter, Download, Upload, RefreshCw, Eye, Settings } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { 
+  Database, 
+  Table as TableIcon, 
+  RefreshCw, 
+  Eye, 
+  Plus,
+  Trash2,
+  Edit
+} from 'lucide-react';
 
-interface DatabaseTable {
-  name: string;
-  schema: string;
-  rows: number;
-  size: string;
-  lastModified: string;
-  type: 'table' | 'view';
+interface TableInfo {
+  table_name: string;
+  column_count: number;
+  row_count: number;
+  table_size: string;
 }
 
-interface TableColumn {
-  name: string;
-  type: string;
-  nullable: boolean;
-  primaryKey: boolean;
-  foreignKey?: string;
+interface ColumnInfo {
+  column_name: string;
+  data_type: string;
+  is_nullable: string;
+  column_default: string | null;
 }
-
-interface QueryResult {
-  columns: string[];
-  rows: any[];
-  executionTime: number;
-  affectedRows?: number;
-}
-
-type TableMapping = {
-  [key: string]: string;
-};
 
 export const DatabaseManager: React.FC = () => {
-  const [tables, setTables] = useState<DatabaseTable[]>([]);
-  const [selectedTable, setSelectedTable] = useState<DatabaseTable | null>(null);
-  const [tableColumns, setTableColumns] = useState<TableColumn[]>([]);
-  const [tableData, setTableData] = useState<any[]>([]);
-  const [sqlQuery, setSqlQuery] = useState('');
-  const [queryResult, setQueryResult] = useState<QueryResult | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState('tables');
   const { toast } = useToast();
+  const [loading, setLoading] = useState(false);
+  const [tables, setTables] = useState<TableInfo[]>([]);
+  const [selectedTable, setSelectedTable] = useState<string | null>(null);
+  const [columns, setColumns] = useState<ColumnInfo[]>([]);
+  const [tableData, setTableData] = useState<any[]>([]);
+
+  const loadTables = async () => {
+    setLoading(true);
+    try {
+      // Get all tables from information_schema
+      const { data: tablesData, error } = await supabase
+        .from('information_schema.tables')
+        .select('table_name')
+        .eq('table_schema', 'public')
+        .neq('table_type', 'VIEW');
+
+      if (error) {
+        console.error('Erreur chargement tables:', error);
+        toast({
+          variant: "destructive",
+          title: "Erreur",
+          description: "Impossible de charger les tables",
+        });
+        return;
+      }
+
+      // For each table, get additional info
+      const tableInfoPromises = (tablesData || []).map(async (table: any) => {
+        try {
+          // Get column count
+          const { data: columnsData } = await supabase
+            .from('information_schema.columns')
+            .select('column_name')
+            .eq('table_schema', 'public')
+            .eq('table_name', table.table_name);
+
+          // Try to get row count (this might fail for some tables due to RLS)
+          const { count } = await supabase
+            .from(table.table_name)
+            .select('*', { count: 'exact', head: true });
+
+          return {
+            table_name: table.table_name,
+            column_count: columnsData?.length || 0,
+            row_count: count || 0,
+            table_size: 'N/A' // Size calculation would require more complex queries
+          };
+        } catch (error) {
+          return {
+            table_name: table.table_name,
+            column_count: 0,
+            row_count: 0,
+            table_size: 'N/A'
+          };
+        }
+      });
+
+      const tableInfoResults = await Promise.all(tableInfoPromises);
+      setTables(tableInfoResults);
+
+    } catch (error) {
+      console.error('Erreur:', error);
+      toast({
+        variant: "destructive",
+        title: "Erreur",
+        description: "Erreur lors du chargement des tables",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadTableDetails = async (tableName: string) => {
+    setLoading(true);
+    setSelectedTable(tableName);
+    
+    try {
+      // Get column information
+      const { data: columnsData, error: columnsError } = await supabase
+        .from('information_schema.columns')
+        .select('column_name, data_type, is_nullable, column_default')
+        .eq('table_schema', 'public')
+        .eq('table_name', tableName)
+        .order('ordinal_position');
+
+      if (columnsError) {
+        console.error('Erreur colonnes:', columnsError);
+        toast({
+          variant: "destructive",
+          title: "Erreur",
+          description: "Impossible de charger les colonnes",
+        });
+        return;
+      }
+
+      setColumns(columnsData || []);
+
+      // Get sample data (limit to 10 rows)
+      try {
+        const { data: sampleData, error: dataError } = await supabase
+          .from(tableName)
+          .select('*')
+          .limit(10);
+
+        if (dataError) {
+          console.error('Erreur données:', dataError);
+          setTableData([]);
+        } else {
+          setTableData(sampleData || []);
+        }
+      } catch (error) {
+        console.error('Erreur accès données:', error);
+        setTableData([]);
+      }
+
+    } catch (error) {
+      console.error('Erreur:', error);
+      toast({
+        variant: "destructive",
+        title: "Erreur",
+        description: "Erreur lors du chargement des détails",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     loadTables();
   }, []);
 
-  const loadTables = async () => {
-    setIsLoading(true);
-    try {
-      // Use known tables since information_schema is not directly accessible
-      const knownTables: DatabaseTable[] = [
-        {
-          name: 'profiles',
-          schema: 'public',
-          rows: 0,
-          size: '8 KB',
-          lastModified: new Date().toISOString(),
-          type: 'table'
-        },
-        {
-          name: 'user_roles',
-          schema: 'public',
-          rows: 0,
-          size: '4 KB',
-          lastModified: new Date().toISOString(),
-          type: 'table'
-        },
-        {
-          name: 'app_settings',
-          schema: 'public',
-          rows: 0,
-          size: '12 KB',
-          lastModified: new Date().toISOString(),
-          type: 'table'
-        },
-        {
-          name: 'workflows',
-          schema: 'public',
-          rows: 0,
-          size: '16 KB',
-          lastModified: new Date().toISOString(),
-          type: 'table'
-        },
-        {
-          name: 'workflow_nodes',
-          schema: 'public',
-          rows: 0,
-          size: '8 KB',
-          lastModified: new Date().toISOString(),
-          type: 'table'
-        },
-        {
-          name: 'workflow_connections',
-          schema: 'public',
-          rows: 0,
-          size: '6 KB',
-          lastModified: new Date().toISOString(),
-          type: 'table'
-        },
-        {
-          name: 'workflow_executions',
-          schema: 'public',
-          rows: 0,
-          size: '10 KB',
-          lastModified: new Date().toISOString(),
-          type: 'table'
-        }
-      ];
-      setTables(knownTables);
-
-      // Get row counts for each table
-      await updateTableStats();
-    } catch (error) {
-      console.error('Error loading tables:', error);
-      toast({
-        title: "Erreur",
-        description: "Impossible de charger les tables de la base de données",
-        variant: "destructive"
-      });
-    } finally {
-      setIsLoading(false);
+  const renderTableData = () => {
+    if (tableData.length === 0) {
+      return (
+        <div className="text-center py-8 text-slate-600">
+          <TableIcon className="w-12 h-12 mx-auto mb-4 text-slate-400" />
+          <p>Aucune donnée disponible ou accès restreint</p>
+        </div>
+      );
     }
-  };
 
-  const updateTableStats = async () => {
-    // Update table statistics by querying specific known tables
-    const tableMap: TableMapping = {
-      'profiles': 'profiles',
-      'user_roles': 'user_roles', 
-      'app_settings': 'app_settings',
-      'workflows': 'workflows',
-      'workflow_nodes': 'workflow_nodes',
-      'workflow_connections': 'workflow_connections',
-      'workflow_executions': 'workflow_executions'
-    };
+    const sampleRow = tableData[0];
+    const columnKeys = Object.keys(sampleRow);
 
-    const updatedTables = await Promise.all(
-      tables.map(async (table) => {
-        try {
-          const tableName = tableMap[table.name];
-          if (tableName) {
-            const { count, error } = await supabase
-              .from(tableName as any)
-              .select('*', { count: 'exact', head: true });
-            
-            return {
-              ...table,
-              rows: count || 0
-            };
-          }
-          return table;
-        } catch (error) {
-          return table;
-        }
-      })
+    return (
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              {columnKeys.map((key) => (
+                <TableHead key={key}>{key}</TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {tableData.map((row, rowIndex) => (
+              <TableRow key={rowIndex}>
+                {columnKeys.map((key) => (
+                  <TableCell key={key}>
+                    {row[key] !== null && row[key] !== undefined 
+                      ? String(row[key]).substring(0, 100) 
+                      : 'NULL'}
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
     );
-    setTables(updatedTables);
-  };
-
-  const loadTableDetails = async (table: DatabaseTable) => {
-    setIsLoading(true);
-    setSelectedTable(table);
-    
-    try {
-      const tableMap: TableMapping = {
-        'profiles': 'profiles',
-        'user_roles': 'user_roles', 
-        'app_settings': 'app_settings',
-        'workflows': 'workflows',
-        'workflow_nodes': 'workflow_nodes',
-        'workflow_connections': 'workflow_connections',
-        'workflow_executions': 'workflow_executions'
-      };
-
-      const tableName = tableMap[table.name];
-      if (tableName) {
-        const { data, error } = await supabase
-          .from(tableName as any)
-          .select('*')
-          .limit(100);
-
-        if (error) {
-          console.error('Error loading table data:', error);
-          toast({
-            title: "Erreur",
-            description: `Impossible de charger les données de la table ${table.name}`,
-            variant: "destructive"
-          });
-        } else {
-          setTableData(data || []);
-          
-          // Extract column information from the first row
-          if (data && data.length > 0) {
-            const columns: TableColumn[] = Object.keys(data[0]).map(key => ({
-              name: key,
-              type: typeof data[0][key] === 'string' ? 'text' : 
-                    typeof data[0][key] === 'number' ? 'number' : 
-                    typeof data[0][key] === 'boolean' ? 'boolean' : 'unknown',
-              nullable: true,
-              primaryKey: key === 'id',
-              foreignKey: key.includes('_id') ? key : undefined
-            }));
-            setTableColumns(columns);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error loading table details:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const executeQuery = async () => {
-    if (!sqlQuery.trim()) {
-      toast({
-        title: "Erreur",
-        description: "Veuillez saisir une requête SQL",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setIsLoading(true);
-    const startTime = Date.now();
-
-    try {
-      // Simulate query execution for demonstration
-      toast({
-        title: "Limitation",
-        description: "L'exécution de requêtes SQL personnalisées nécessite des privilèges administrateur",
-        variant: "destructive"
-      });
-    } catch (error: any) {
-      console.error('Query execution error:', error);
-      toast({
-        title: "Erreur d'exécution",
-        description: error.message || "Erreur lors de l'exécution de la requête",
-        variant: "destructive"
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const filteredTables = tables.filter(table =>
-    table.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const exportTableData = async (table: DatabaseTable) => {
-    try {
-      const tableMap: TableMapping = {
-        'profiles': 'profiles',
-        'user_roles': 'user_roles', 
-        'app_settings': 'app_settings',
-        'workflows': 'workflows',
-        'workflow_nodes': 'workflow_nodes',
-        'workflow_connections': 'workflow_connections',
-        'workflow_executions': 'workflow_executions'
-      };
-
-      const tableName = tableMap[table.name];
-      if (tableName) {
-        const { data, error } = await supabase
-          .from(tableName as any)
-          .select('*');
-
-        if (error) throw error;
-
-        const csvContent = convertToCSV(data || []);
-        downloadCSV(csvContent, `${table.name}.csv`);
-        
-        toast({
-          title: "Export réussi",
-          description: `Table ${table.name} exportée en CSV`
-        });
-      }
-    } catch (error) {
-      toast({
-        title: "Erreur d'export",
-        description: "Impossible d'exporter la table",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const convertToCSV = (data: any[]): string => {
-    if (data.length === 0) return '';
-    
-    const headers = Object.keys(data[0]);
-    const csvHeaders = headers.join(',');
-    const csvRows = data.map(row =>
-      headers.map(header => {
-        const value = row[header];
-        return typeof value === 'string' ? `"${value.replace(/"/g, '""')}"` : value;
-      }).join(',')
-    );
-    
-    return [csvHeaders, ...csvRows].join('\n');
-  };
-
-  const downloadCSV = (content: string, filename: string) => {
-    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', filename);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
-          Gestionnaire de Base de Données
-        </h2>
-        <div className="flex items-center space-x-2">
-          <Button variant="outline" size="sm" onClick={loadTables} disabled={isLoading}>
-            <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-            Actualiser
-          </Button>
-          <Button variant="outline" size="sm">
-            <Settings className="w-4 h-4 mr-2" />
-            Configuration
-          </Button>
-        </div>
+    <div className="container mx-auto px-4 py-8">
+      <div className="flex items-center space-x-2 mb-8">
+        <Database className="w-8 h-8 text-blue-600" />
+        <h1 className="text-3xl font-bold">Gestionnaire de Base de Données</h1>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="tables">Tables</TabsTrigger>
-          <TabsTrigger value="query">Requêtes SQL</TabsTrigger>
-          <TabsTrigger value="data">Données</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="tables" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center space-x-2">
-                  <Database className="w-5 h-5 text-blue-500" />
-                  <span>Tables de la base de données</span>
-                </CardTitle>
-                <div className="flex items-center space-x-2">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
-                    <Input
-                      placeholder="Rechercher une table..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-10 w-64"
-                    />
-                  </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Liste des tables */}
+        <Card className="lg:col-span-1">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>Tables</CardTitle>
+              <Button onClick={loadTables} disabled={loading} size="sm">
+                <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                Actualiser
+              </Button>
+            </div>
+            <CardDescription>
+              Tables disponibles dans la base de données
+            </CardDescription>
+          </CardHeader>
+          
+          <CardContent>
+            <div className="space-y-2">
+              {loading && tables.length === 0 ? (
+                <div className="text-center py-4">
+                  <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />
+                  <p className="text-sm text-slate-600">Chargement...</p>
                 </div>
-              </div>
-              <CardDescription>
-                Gérez et explorez vos tables de base de données Supabase
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4">
-                {filteredTables.map((table) => (
-                  <div
-                    key={table.name}
-                    className="flex items-center justify-between p-4 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+              ) : tables.length === 0 ? (
+                <div className="text-center py-4 text-slate-600">
+                  <TableIcon className="w-8 h-8 mx-auto mb-2 text-slate-400" />
+                  <p>Aucune table trouvée</p>
+                </div>
+              ) : (
+                tables.map((table) => (
+                  <div 
+                    key={table.table_name}
+                    className={`p-3 border rounded-lg cursor-pointer transition-colors ${
+                      selectedTable === table.table_name 
+                        ? 'bg-blue-50 border-blue-200' 
+                        : 'hover:bg-slate-50'
+                    }`}
+                    onClick={() => loadTableDetails(table.table_name)}
                   >
-                    <div className="flex items-center space-x-4">
-                      <Table className="w-5 h-5 text-slate-500" />
-                      <div>
-                        <h3 className="font-medium text-slate-900 dark:text-slate-100">
-                          {table.name}
-                        </h3>
-                        <div className="flex items-center space-x-4 text-sm text-slate-500">
-                          <span>{table.rows} lignes</span>
-                          <span>{table.size}</span>
-                          <Badge variant={table.type === 'table' ? 'default' : 'secondary'}>
-                            {table.type}
-                          </Badge>
-                        </div>
-                      </div>
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">{table.table_name}</span>
+                      <Badge variant="outline">{table.row_count}</Badge>
                     </div>
-                    <div className="flex space-x-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => loadTableDetails(table)}
-                      >
-                        <Eye className="w-3 h-3 mr-1" />
-                        Voir
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => exportTableData(table)}
-                      >
-                        <Download className="w-3 h-3 mr-1" />
-                        Export
-                      </Button>
+                    <div className="text-sm text-slate-600 mt-1">
+                      {table.column_count} colonnes
                     </div>
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
-        <TabsContent value="query" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <Database className="w-5 h-5 text-green-500" />
-                <span>Éditeur SQL</span>
-              </CardTitle>
-              <CardDescription>
-                Exécutez des requêtes SQL sur votre base de données
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
+        {/* Détails de la table */}
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle>
+              {selectedTable ? `Table: ${selectedTable}` : 'Sélectionnez une table'}
+            </CardTitle>
+            <CardDescription>
+              Structure et données de la table sélectionnée
+            </CardDescription>
+          </CardHeader>
+          
+          <CardContent>
+            {!selectedTable ? (
+              <div className="text-center py-8 text-slate-600">
+                <Eye className="w-12 h-12 mx-auto mb-4 text-slate-400" />
+                <p>Cliquez sur une table pour voir ses détails</p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {/* Structure des colonnes */}
                 <div>
-                  <Label htmlFor="sql-query">Requête SQL</Label>
-                  <Textarea
-                    id="sql-query"
-                    placeholder="SELECT * FROM profiles LIMIT 10;"
-                    value={sqlQuery}
-                    onChange={(e) => setSqlQuery(e.target.value)}
-                    className="min-h-32 font-mono"
-                  />
-                </div>
-                <Button onClick={executeQuery} disabled={isLoading}>
-                  {isLoading ? (
-                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                  ) : (
-                    <Database className="w-4 h-4 mr-2" />
-                  )}
-                  Exécuter la requête
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          {queryResult && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Résultats</CardTitle>
-                <CardDescription>
-                  {queryResult.rows.length} lignes retournées en {queryResult.executionTime}ms
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse border border-slate-200 dark:border-slate-700">
-                    <thead>
-                      <tr className="bg-slate-50 dark:bg-slate-800">
-                        {queryResult.columns.map((column) => (
-                          <th
-                            key={column}
-                            className="border border-slate-200 dark:border-slate-700 px-4 py-2 text-left font-medium"
-                          >
-                            {column}
-                          </th>
+                  <h3 className="text-lg font-semibold mb-4">Structure</h3>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Colonne</TableHead>
+                          <TableHead>Type</TableHead>
+                          <TableHead>Nullable</TableHead>
+                          <TableHead>Défaut</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {columns.map((column) => (
+                          <TableRow key={column.column_name}>
+                            <TableCell className="font-medium">
+                              {column.column_name}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline">{column.data_type}</Badge>
+                            </TableCell>
+                            <TableCell>
+                              {column.is_nullable === 'YES' ? 'Oui' : 'Non'}
+                            </TableCell>
+                            <TableCell>
+                              {column.column_default || 'Aucun'}
+                            </TableCell>
+                          </TableRow>
                         ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {queryResult.rows.map((row, index) => (
-                        <tr key={index} className="hover:bg-slate-50 dark:hover:bg-slate-800">
-                          {queryResult.columns.map((column) => (
-                            <td
-                              key={column}
-                              className="border border-slate-200 dark:border-slate-700 px-4 py-2"
-                            >
-                              {typeof row[column] === 'object' 
-                                ? JSON.stringify(row[column]) 
-                                : String(row[column] ?? '')}
-                            </td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-
-        <TabsContent value="data" className="space-y-4">
-          {selectedTable ? (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <Table className="w-5 h-5 text-purple-500" />
-                  <span>Table: {selectedTable.name}</span>
-                </CardTitle>
-                <CardDescription>
-                  {tableData.length} lignes • {tableColumns.length} colonnes
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {/* Column information */}
-                  <div>
-                    <h3 className="font-medium mb-2">Structure de la table</h3>
-                    <div className="grid gap-2">
-                      {tableColumns.map((column) => (
-                        <div
-                          key={column.name}
-                          className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-800 rounded"
-                        >
-                          <div className="flex items-center space-x-2">
-                            <span className="font-mono text-sm">{column.name}</span>
-                            <Badge variant="outline">{column.type}</Badge>
-                            {column.primaryKey && <Badge className="bg-yellow-500">PK</Badge>}
-                            {column.foreignKey && <Badge variant="secondary">FK</Badge>}
-                          </div>
-                          <span className="text-sm text-slate-500">
-                            {column.nullable ? 'Nullable' : 'Not null'}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Table data */}
-                  <div>
-                    <h3 className="font-medium mb-2">Données</h3>
-                    <div className="overflow-x-auto">
-                      <table className="w-full border-collapse border border-slate-200 dark:border-slate-700">
-                        <thead>
-                          <tr className="bg-slate-50 dark:bg-slate-800">
-                            {tableColumns.map((column) => (
-                              <th
-                                key={column.name}
-                                className="border border-slate-200 dark:border-slate-700 px-4 py-2 text-left font-medium"
-                              >
-                                {column.name}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {tableData.slice(0, 50).map((row, index) => (
-                            <tr key={index} className="hover:bg-slate-50 dark:hover:bg-slate-800">
-                              {tableColumns.map((column) => (
-                                <td
-                                  key={column.name}
-                                  className="border border-slate-200 dark:border-slate-700 px-4 py-2"
-                                >
-                                  {typeof row[column.name] === 'object'
-                                    ? JSON.stringify(row[column.name])
-                                    : String(row[column.name] ?? '')}
-                                </td>
-                              ))}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    {tableData.length > 50 && (
-                      <p className="text-sm text-slate-500 mt-2">
-                        Affichage des 50 premières lignes sur {tableData.length}
-                      </p>
-                    )}
+                      </TableBody>
+                    </Table>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          ) : (
-            <Card>
-              <CardContent className="text-center py-12">
-                <Table className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-slate-600 mb-2">
-                  Sélectionnez une table
-                </h3>
-                <p className="text-slate-500">
-                  Choisissez une table dans l'onglet "Tables" pour voir ses données
-                </p>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-      </Tabs>
+
+                {/* Données d'exemple */}
+                <div>
+                  <h3 className="text-lg font-semibold mb-4">
+                    Données (10 premiers enregistrements)
+                  </h3>
+                  {renderTableData()}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 };

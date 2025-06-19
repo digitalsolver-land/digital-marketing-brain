@@ -1,4 +1,3 @@
-
 import { supabase } from '@/integrations/supabase/client';
 import { WorkflowNode, WorkflowConnection } from '@/types/workflow';
 import { convertNullToUndefined } from '@/lib/typeHelpers';
@@ -22,6 +21,23 @@ export interface WorkflowWithNodes {
   connections: WorkflowConnection[];
 }
 
+export interface N8nWorkflowJSON {
+  id?: string;
+  name: string;
+  nodes: Array<{
+    id: string;
+    name: string;
+    type: string;
+    position: [number, number];
+    parameters?: any;
+  }>;
+  connections: Record<string, any>;
+  active?: boolean;
+  settings?: any;
+  staticData?: any;
+  tags?: Array<{ name: string }>;
+}
+
 class WorkflowService {
   async getAllWorkflows(): Promise<Workflow[]> {
     const { data, error } = await supabase
@@ -34,7 +50,13 @@ class WorkflowService {
       throw new Error(`Erreur de récupération des workflows: ${error.message}`);
     }
 
-    return data || [];
+    // Convert database types to interface types
+    return (data || []).map(item => ({
+      ...item,
+      description: item.description || undefined,
+      n8n_workflow_id: item.n8n_workflow_id || undefined,
+      tags: item.tags || undefined
+    }));
   }
 
   async getWorkflowById(id: string): Promise<WorkflowWithNodes | null> {
@@ -86,23 +108,37 @@ class WorkflowService {
         connections: connections?.length || 0
       });
 
-      // Convertir les null en undefined pour la compatibilité TypeScript
+      // Convert database types to interface types
+      const convertedWorkflow: Workflow = {
+        ...workflow,
+        description: workflow.description || undefined,
+        n8n_workflow_id: workflow.n8n_workflow_id || undefined,
+        tags: workflow.tags || undefined
+      };
+
       const convertedNodes: WorkflowNode[] = (nodes || []).map(node => ({
-        ...convertNullToUndefined(node),
-        source_index: node.source_index ?? 0,
-        target_index: node.target_index ?? 0,
-        connection_type: node.connection_type || 'main'
+        id: node.id,
+        workflow_id: node.workflow_id,
+        node_id: node.node_id,
+        node_type: node.node_type,
+        name: node.name,
+        position_x: node.position_x,
+        position_y: node.position_y,
+        parameters: node.parameters || {}
       }));
 
       const convertedConnections: WorkflowConnection[] = (connections || []).map(conn => ({
-        ...convertNullToUndefined(conn),
+        id: conn.id,
+        workflow_id: conn.workflow_id,
+        source_node_id: conn.source_node_id,
+        target_node_id: conn.target_node_id,
         source_index: conn.source_index ?? 0,
         target_index: conn.target_index ?? 0,
         connection_type: conn.connection_type || 'main'
       }));
 
       return {
-        workflow,
+        workflow: convertedWorkflow,
         nodes: convertedNodes,
         connections: convertedConnections
       };
@@ -142,7 +178,77 @@ class WorkflowService {
     }
 
     console.log('✅ Workflow créé:', data.id);
-    return data;
+    
+    // Convert database type to interface type
+    return {
+      ...data,
+      description: data.description || undefined,
+      n8n_workflow_id: data.n8n_workflow_id || undefined,
+      tags: data.tags || undefined
+    };
+  }
+
+  async createWorkflowFromJSON(workflowData: N8nWorkflowJSON): Promise<Workflow> {
+    const { data: userData } = await supabase.auth.getUser();
+    
+    if (!userData.user) {
+      throw new Error('Utilisateur non authentifié');
+    }
+
+    const workflow = await this.createWorkflow({
+      name: workflowData.name,
+      description: `Workflow importé: ${workflowData.name}`,
+      json_data: workflowData,
+      status: workflowData.active ? 'active' : 'inactive',
+      tags: workflowData.tags?.map(tag => tag.name) || []
+    });
+
+    // Create nodes
+    if (workflowData.nodes && Array.isArray(workflowData.nodes)) {
+      for (const node of workflowData.nodes) {
+        await supabase
+          .from('workflow_nodes')
+          .insert([{
+            workflow_id: workflow.id,
+            node_id: node.id,
+            node_type: node.type,
+            name: node.name,
+            position_x: node.position[0] || 0,
+            position_y: node.position[1] || 0,
+            parameters: node.parameters || {}
+          }]);
+      }
+    }
+
+    // Create connections
+    if (workflowData.connections && typeof workflowData.connections === 'object') {
+      for (const [sourceNodeId, sourceConnections] of Object.entries(workflowData.connections)) {
+        if (sourceConnections && typeof sourceConnections === 'object') {
+          for (const [connectionType, connectionArray] of Object.entries(sourceConnections)) {
+            if (Array.isArray(connectionArray)) {
+              connectionArray.forEach((connGroup: any, sourceIndex: number) => {
+                if (Array.isArray(connGroup)) {
+                  connGroup.forEach((conn: any) => {
+                    supabase
+                      .from('workflow_connections')
+                      .insert([{
+                        workflow_id: workflow.id,
+                        source_node_id: sourceNodeId,
+                        target_node_id: conn.node,
+                        source_index: sourceIndex,
+                        target_index: conn.index || 0,
+                        connection_type: connectionType
+                      }]);
+                  });
+                }
+              });
+            }
+          }
+        }
+      }
+    }
+
+    return workflow;
   }
 
   async updateWorkflow(id: string, updates: Partial<Workflow>): Promise<void> {
@@ -269,7 +375,15 @@ class WorkflowService {
                           if (error) {
                             console.error('❌ Erreur création connexion:', error);
                           } else if (createdConnection) {
-                            connections.push(createdConnection);
+                            connections.push({
+                              id: createdConnection.id,
+                              workflow_id: createdConnection.workflow_id,
+                              source_node_id: createdConnection.source_node_id,
+                              target_node_id: createdConnection.target_node_id,
+                              source_index: createdConnection.source_index ?? 0,
+                              target_index: createdConnection.target_index ?? 0,
+                              connection_type: createdConnection.connection_type || 'main'
+                            });
                           }
                         });
                     });
@@ -417,7 +531,12 @@ class WorkflowService {
       throw new Error(`Erreur de récupération: ${error.message}`);
     }
 
-    return data || [];
+    return (data || []).map(item => ({
+      ...item,
+      description: item.description || undefined,
+      n8n_workflow_id: item.n8n_workflow_id || undefined,
+      tags: item.tags || undefined
+    }));
   }
 
   async getWorkflowsByTag(tag: string): Promise<Workflow[]> {
@@ -432,7 +551,12 @@ class WorkflowService {
       throw new Error(`Erreur de récupération: ${error.message}`);
     }
 
-    return data || [];
+    return (data || []).map(item => ({
+      ...item,
+      description: item.description || undefined,
+      n8n_workflow_id: item.n8n_workflow_id || undefined,
+      tags: item.tags || undefined
+    }));
   }
 
   async searchWorkflows(query: string): Promise<Workflow[]> {
@@ -447,7 +571,12 @@ class WorkflowService {
       throw new Error(`Erreur de recherche: ${error.message}`);
     }
 
-    return data || [];
+    return (data || []).map(item => ({
+      ...item,
+      description: item.description || undefined,
+      n8n_workflow_id: item.n8n_workflow_id || undefined,
+      tags: item.tags || undefined
+    }));
   }
 
   async getWorkflowStats() {

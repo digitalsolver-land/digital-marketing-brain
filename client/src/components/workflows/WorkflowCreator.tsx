@@ -87,7 +87,9 @@ export const WorkflowCreator: React.FC<WorkflowCreatorProps> = ({
         if (!formData.name && parsed.name) {
           setFormData(prev => ({ ...prev, name: parsed.name }));
         }
-        await analyzeWorkflow(parsed);
+        if (n8nWorkflowAnalyzer?.analyzeWorkflow) {
+          await analyzeWorkflow(parsed);
+        }
       } else {
         setParsedWorkflow(null);
       }
@@ -98,6 +100,8 @@ export const WorkflowCreator: React.FC<WorkflowCreatorProps> = ({
   };
 
   const analyzeWorkflow = async (workflowData: N8nWorkflowJSON) => {
+    if (!n8nWorkflowAnalyzer?.analyzeWorkflow) return;
+    
     setAnalyzing(true);
     try {
       const workflowAnalysis = await n8nWorkflowAnalyzer.analyzeWorkflow(workflowData);
@@ -149,7 +153,9 @@ export const WorkflowCreator: React.FC<WorkflowCreatorProps> = ({
 
       setJsonInput(JSON.stringify(enhancedWorkflow, null, 2));
       setParsedWorkflow(enhancedWorkflow);
-      await analyzeWorkflow(enhancedWorkflow);
+      if (n8nWorkflowAnalyzer?.analyzeWorkflow) {
+        await analyzeWorkflow(enhancedWorkflow);
+      }
       
       toast({
         title: "Workflow amélioré",
@@ -201,7 +207,7 @@ export const WorkflowCreator: React.FC<WorkflowCreatorProps> = ({
           active: formData.active
         };
 
-        if (connected) {
+        if (connected && unifiedN8nService?.createWorkflow) {
           await unifiedN8nService.createWorkflow(workflowData);
           toast({
             title: "Workflow créé",
@@ -238,14 +244,14 @@ export const WorkflowCreator: React.FC<WorkflowCreatorProps> = ({
           }
         };
 
-        if (connected) {
+        if (connected && unifiedN8nService?.createWorkflow) {
           await unifiedN8nService.createWorkflow(basicWorkflowData);
         } else {
           await workflowService.createWorkflow({
             name: formData.name,
             description: formData.description,
             status: formData.active ? 'active' : 'inactive',
-            jsonData: basicWorkflowData
+            json_data: basicWorkflowData
           });
         }
 
