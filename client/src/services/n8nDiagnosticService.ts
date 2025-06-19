@@ -175,9 +175,8 @@ export class N8nDiagnosticService {
       return { success: false, error };
     }
   }
-}
 
-static async saveN8nConfig(apiKey: string, baseUrl: string = 'https://n8n.srv860213.hstgr.cloud') {
+  static async saveN8nConfig(apiKey: string, baseUrl: string = 'https://n8n.srv860213.hstgr.cloud') {
     console.log('💾 Sauvegarde configuration n8n...');
     
     try {
