@@ -1,13 +1,251 @@
-import { N8nWorkflowJSON } from './enhancedWorkflowService';
+import { workflowService } from './workflowService';
 
 export interface WorkflowTemplate {
+  id: string;
   name: string;
   description: string;
   category: string;
-  workflow: N8nWorkflowJSON;
+  tags: string[];
+  complexity: 'beginner' | 'intermediate' | 'advanced';
+  estimatedTime: string;
+  workflow: any;
+  preview?: string;
+  author?: string;
+  version?: string;
 }
 
-export const workflowTemplates: WorkflowTemplate[] = [
+export interface TemplateCategory {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  templates: WorkflowTemplate[];
+}
+
+const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
+  {
+    id: 'social-media-scheduler',
+    name: 'Programmateur de contenu social',
+    description: 'Automatise la publication de contenu sur plusieurs plateformes sociales',
+    category: 'social-media',
+    tags: ['réseaux sociaux', 'programmation', 'contenu'],
+    complexity: 'intermediate',
+    estimatedTime: '30 minutes',
+    workflow: {
+      name: 'Programmateur Social Media',
+      nodes: [
+        {
+          id: 'trigger',
+          name: 'Déclencheur Cron',
+          type: 'n8n-nodes-base.cron',
+          position: [300, 300],
+          parameters: {
+            rule: {
+              interval: [{
+                field: 'cronExpression',
+                expression: '0 9 * * 1-5'
+              }]
+            }
+          }
+        },
+        {
+          id: 'get-content',
+          name: 'Récupérer contenu',
+          type: 'n8n-nodes-base.httpRequest',
+          position: [500, 300],
+          parameters: {
+            url: 'https://api.example.com/content',
+            method: 'GET'
+          }
+        },
+        {
+          id: 'format-content',
+          name: 'Formatter pour chaque plateforme',
+          type: 'n8n-nodes-base.function',
+          position: [700, 300],
+          parameters: {
+            functionCode: `
+              const content = items[0].json;
+              return [
+                { platform: 'twitter', text: content.text.substring(0, 280) },
+                { platform: 'linkedin', text: content.text + ' #professionnel' },
+                { platform: 'facebook', text: content.text + '\\n\\n' + content.hashtags }
+              ];
+            `
+          }
+        },
+        {
+          id: 'post-twitter',
+          name: 'Publier sur Twitter',
+          type: 'n8n-nodes-base.twitter',
+          position: [900, 200],
+          parameters: {
+            operation: 'tweet',
+            text: '={{$json.text}}'
+          }
+        },
+        {
+          id: 'post-linkedin',
+          name: 'Publier sur LinkedIn',
+          type: 'n8n-nodes-base.linkedIn',
+          position: [900, 300],
+          parameters: {
+            operation: 'post',
+            text: '={{$json.text}}'
+          }
+        },
+        {
+          id: 'post-facebook',
+          name: 'Publier sur Facebook',
+          type: 'n8n-nodes-base.facebook',
+          position: [900, 400],
+          parameters: {
+            operation: 'post',
+            message: '={{$json.text}}'
+          }
+        }
+      ],
+      connections: {
+        'trigger': {
+          main: [
+            [{ node: 'get-content', type: 'main', index: 0 }]
+          ]
+        },
+        'get-content': {
+          main: [
+            [{ node: 'format-content', type: 'main', index: 0 }]
+          ]
+        },
+        'format-content': {
+          main: [
+            [
+              { node: 'post-twitter', type: 'main', index: 0 },
+              { node: 'post-linkedin', type: 'main', index: 0 },
+              { node: 'post-facebook', type: 'main', index: 0 }
+            ]
+          ]
+        }
+      }
+    },
+    author: 'Équipe n8n',
+    version: '1.0'
+  },
+
+  {
+    id: 'email-marketing-automation',
+    name: 'Automation email marketing',
+    description: 'Workflow complet pour gérer les campagnes email automatisées',
+    category: 'marketing',
+    tags: ['email', 'marketing', 'automation', 'crm'],
+    complexity: 'advanced',
+    estimatedTime: '45 minutes',
+    workflow: {
+      name: 'Email Marketing Automation',
+      nodes: [
+        {
+          id: 'webhook-signup',
+          name: 'Nouveau contact',
+          type: 'n8n-nodes-base.webhook',
+          position: [200, 300],
+          parameters: {
+            path: 'new-contact',
+            httpMethod: 'POST'
+          }
+        },
+        {
+          id: 'validate-email',
+          name: 'Valider email',
+          type: 'n8n-nodes-base.function',
+          position: [400, 300],
+          parameters: {
+            functionCode: `
+              const email = items[0].json.email;
+              const emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;
+              if (!emailRegex.test(email)) {
+                throw new Error('Email invalide');
+              }
+              return items;
+            `
+          }
+        },
+        {
+          id: 'add-to-crm',
+          name: 'Ajouter au CRM',
+          type: 'n8n-nodes-base.httpRequest',
+          position: [600, 300],
+          parameters: {
+            url: 'https://api.crm.com/contacts',
+            method: 'POST',
+            body: {
+              email: '={{$json.email}}',
+              name: '={{$json.name}}',
+              source: 'website'
+            }
+          }
+        },
+        {
+          id: 'welcome-email',
+          name: 'Email de bienvenue',
+          type: 'n8n-nodes-base.emailSend',
+          position: [800, 200],
+          parameters: {
+            to: '={{$json.email}}',
+            subject: 'Bienvenue !',
+            text: 'Merci de vous être inscrit à notre newsletter.'
+          }
+        },
+        {
+          id: 'wait-3-days',
+          name: 'Attendre 3 jours',
+          type: 'n8n-nodes-base.wait',
+          position: [800, 400],
+          parameters: {
+            amount: 3,
+            unit: 'days'
+          }
+        },
+        {
+          id: 'follow-up-email',
+          name: 'Email de suivi',
+          type: 'n8n-nodes-base.emailSend',
+          position: [1000, 400],
+          parameters: {
+            to: '={{$json.email}}',
+            subject: 'Découvrez nos services',
+            text: 'Voici comment nous pouvons vous aider...'
+          }
+        }
+      ],
+      connections: {
+        'webhook-signup': {
+          main: [
+            [{ node: 'validate-email', type: 'main', index: 0 }]
+          ]
+        },
+        'validate-email': {
+          main: [
+            [{ node: 'add-to-crm', type: 'main', index: 0 }]
+          ]
+        },
+        'add-to-crm': {
+          main: [
+            [
+              { node: 'welcome-email', type: 'main', index: 0 },
+              { node: 'wait-3-days', type: 'main', index: 0 }
+            ]
+          ]
+        },
+        'wait-3-days': {
+          main: [
+            [{ node: 'follow-up-email', type: 'main', index: 0 }]
+          ]
+        }
+      }
+    },
+    author: 'Équipe Marketing',
+    version: '2.1'
+  },
+
   {
     name: "Email Marketing Simple",
     description: "Template pour l'envoi d'emails marketing automatisés",
@@ -385,11 +623,269 @@ export const workflowTemplates: WorkflowTemplate[] = [
   }
 ];
 
-export const getTemplatesByCategory = (category?: string) => {
-  if (!category) return workflowTemplates;
-  return workflowTemplates.filter(template => template.category === category);
-};
+const TEMPLATE_CATEGORIES: TemplateCategory[] = [
+  {
+    id: 'social-media',
+    name: 'Réseaux Sociaux',
+    description: 'Automatisez vos publications et interactions sociales',
+    icon: '📱',
+    templates: WORKFLOW_TEMPLATES.filter(t => t.category === 'social-media')
+  },
+  {
+    id: 'marketing',
+    name: 'Marketing',
+    description: 'Campagnes marketing et génération de leads',
+    icon: '📈',
+    templates: WORKFLOW_TEMPLATES.filter(t => t.category === 'marketing')
+  },
+  {
+    id: 'ecommerce',
+    name: 'E-commerce',
+    description: 'Gestion des commandes et relation client',
+    icon: '🛒',
+    templates: WORKFLOW_TEMPLATES.filter(t => t.category === 'ecommerce')
+  },
+  {
+    id: 'data-processing',
+    name: 'Traitement de données',
+    description: 'Collecte, transformation et analyse de données',
+    icon: '📊',
+    templates: WORKFLOW_TEMPLATES.filter(t => t.category === 'data-processing')
+  },
+  {
+    id: 'automation',
+    name: 'Automation générale',
+    description: 'Workflows d\'automatisation généralistes',
+    icon: '⚙️',
+    templates: WORKFLOW_TEMPLATES.filter(t => t.category === 'automation')
+  }
+];
 
-export const getCategories = () => {
-  return [...new Set(workflowTemplates.map(template => template.category))];
-};
+class WorkflowTemplateService {
+  /**
+   * Récupère tous les templates disponibles
+   */
+  getAllTemplates(): WorkflowTemplate[] {
+    return WORKFLOW_TEMPLATES;
+  }
+
+  /**
+   * Récupère toutes les catégories avec leurs templates
+   */
+  getCategories(): TemplateCategory[] {
+    return TEMPLATE_CATEGORIES;
+  }
+
+  /**
+   * Récupère un template par son ID
+   */
+  getTemplateById(id: string): WorkflowTemplate | null {
+    return WORKFLOW_TEMPLATES.find(template => template.id === id) || null;
+  }
+
+  /**
+   * Récupère les templates d'une catégorie
+   */
+  getTemplatesByCategory(categoryId: string): WorkflowTemplate[] {
+    return WORKFLOW_TEMPLATES.filter(template => template.category === categoryId);
+  }
+
+  /**
+   * Recherche des templates par mots-clés
+   */
+  searchTemplates(query: string): WorkflowTemplate[] {
+    const searchQuery = query.toLowerCase();
+    return WORKFLOW_TEMPLATES.filter(template => 
+      template.name.toLowerCase().includes(searchQuery) ||
+      template.description.toLowerCase().includes(searchQuery) ||
+      template.tags.some(tag => tag.toLowerCase().includes(searchQuery))
+    );
+  }
+
+  /**
+   * Filtre les templates par complexité
+   */
+  getTemplatesByComplexity(complexity: 'beginner' | 'intermediate' | 'advanced'): WorkflowTemplate[] {
+    return WORKFLOW_TEMPLATES.filter(template => template.complexity === complexity);
+  }
+
+  /**
+   * Filtre les templates par tags
+   */
+  getTemplatesByTags(tags: string[]): WorkflowTemplate[] {
+    return WORKFLOW_TEMPLATES.filter(template =>
+      tags.some(tag => template.tags.includes(tag))
+    );
+  }
+
+  /**
+   * Récupère les templates populaires (les plus utilisés)
+   */
+  getPopularTemplates(limit: number = 6): WorkflowTemplate[] {
+    // Pour l'instant, on retourne les premiers templates
+    // Dans une vraie app, on baserait ça sur des statistiques d'usage
+    return WORKFLOW_TEMPLATES.slice(0, limit);
+  }
+
+  /**
+   * Récupère tous les tags uniques
+   */
+  getAllTags(): string[] {
+    const allTags = WORKFLOW_TEMPLATES.flatMap(template => template.tags);
+    return Array.from(new Set(allTags)).sort();
+  }
+
+  /**
+   * Crée un nouveau workflow basé sur un template
+   */
+  async createWorkflowFromTemplate(templateId: string, customName?: string): Promise<any> {
+    const template = this.getTemplateById(templateId);
+    
+    if (!template) {
+      throw new Error(`Template ${templateId} non trouvé`);
+    }
+
+    try {
+      // Créer le workflow avec le service workflow
+      const workflow = await workflowService.createWorkflow({
+        name: customName || template.name,
+        description: `Créé à partir du template: ${template.description}`,
+        json_data: template.workflow,
+        status: 'inactive',
+        tags: [...template.tags, 'template', template.category]
+      });
+
+      console.log('✅ Workflow créé depuis template:', {
+        templateId,
+        workflowId: workflow.id,
+        name: workflow.name
+      });
+
+      return workflow;
+    } catch (error) {
+      console.error('❌ Erreur création workflow depuis template:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Valide un template avant de l'utiliser
+   */
+  validateTemplate(template: WorkflowTemplate): { valid: boolean; errors: string[] } {
+    const errors: string[] = [];
+
+    // Vérifications de base
+    if (!template.name || template.name.trim() === '') {
+      errors.push('Le nom du template est requis');
+    }
+
+    if (!template.description || template.description.trim() === '') {
+      errors.push('La description du template est requise');
+    }
+
+    if (!template.workflow) {
+      errors.push('Le workflow du template est requis');
+    }
+
+    // Vérification de la structure du workflow
+    if (template.workflow) {
+      if (!template.workflow.nodes || !Array.isArray(template.workflow.nodes)) {
+        errors.push('Le workflow doit contenir un tableau de nœuds');
+      }
+
+      if (!template.workflow.connections || typeof template.workflow.connections !== 'object') {
+        errors.push('Le workflow doit contenir un objet de connexions');
+      }
+
+      // Vérifier que tous les nœuds référencés dans les connexions existent
+      if (template.workflow.nodes && template.workflow.connections) {
+        const nodeIds = new Set(template.workflow.nodes.map((node: any) => node.id));
+        
+        for (const [sourceId, connections] of Object.entries(template.workflow.connections)) {
+          if (!nodeIds.has(sourceId)) {
+            errors.push(`Nœud source '${sourceId}' introuvable dans les connexions`);
+          }
+
+          if (connections && typeof connections === 'object') {
+            for (const [connType, connArray] of Object.entries(connections)) {
+              if (Array.isArray(connArray)) {
+                connArray.forEach((connGroup: any, index: number) => {
+                  if (Array.isArray(connGroup)) {
+                    connGroup.forEach((conn: any) => {
+                      if (conn.node && !nodeIds.has(conn.node)) {
+                        errors.push(`Nœud cible '${conn.node}' introuvable dans les connexions`);
+                      }
+                    });
+                  }
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors
+    };
+  }
+
+  /**
+   * Récupère des templates recommandés basés sur l'historique utilisateur
+   */
+  getRecommendedTemplates(userTags: string[] = [], limit: number = 3): WorkflowTemplate[] {
+    if (userTags.length === 0) {
+      return this.getPopularTemplates(limit);
+    }
+
+    // Calculer un score de pertinence pour chaque template
+    const templatesWithScores = WORKFLOW_TEMPLATES.map(template => {
+      const matchingTags = template.tags.filter(tag => userTags.includes(tag));
+      const score = matchingTags.length / template.tags.length;
+      
+      return { template, score };
+    });
+
+    // Trier par score et retourner les meilleurs
+    return templatesWithScores
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit)
+      .map(item => item.template);
+  }
+
+  /**
+   * Exporte un template au format JSON
+   */
+  exportTemplate(templateId: string): string {
+    const template = this.getTemplateById(templateId);
+    
+    if (!template) {
+      throw new Error(`Template ${templateId} non trouvé`);
+    }
+
+    return JSON.stringify(template, null, 2);
+  }
+
+  /**
+   * Importe un template depuis JSON
+   */
+  importTemplate(jsonData: string): WorkflowTemplate {
+    try {
+      const template: WorkflowTemplate = JSON.parse(jsonData);
+      
+      // Valider le template
+      const validation = this.validateTemplate(template);
+      if (!validation.valid) {
+        throw new Error(`Template invalide: ${validation.errors.join(', ')}`);
+      }
+
+      return template;
+    } catch (error) {
+      console.error('❌ Erreur import template:', error);
+      throw new Error('Données JSON invalides pour le template');
+    }
+  }
+}
+
+export const workflowTemplateService = new WorkflowTemplateService();

@@ -13,6 +13,8 @@ import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import { AppSettings, UserRole, AppRole } from '@/types/workflow';
+import { convertAppSettings, convertUserRoles } from '@/lib/typeHelpers';
 
 interface AppSettings {
   // API Keys
@@ -93,7 +95,7 @@ export const AdvancedSettings: React.FC = () => {
           variant: "destructive"
         });
       } else if (data) {
-        setSettings(data);
+        setSettings(convertAppSettings(data));
       }
     } catch (error) {
       console.error('Error loading settings:', error);
@@ -118,7 +120,7 @@ export const AdvancedSettings: React.FC = () => {
 
       if (rolesError) throw rolesError;
 
-      const usersWithRoles: UserRole[] = (profiles || []).map(profile => ({
+      const usersWithRoles = (profiles || []).map(profile => ({
         id: profile.id,
         email: profile.email,
         first_name: profile.first_name,
@@ -128,7 +130,7 @@ export const AdvancedSettings: React.FC = () => {
           .map(role => role.role)
       }));
 
-      setUsers(usersWithRoles);
+      setUsers(convertUserRoles(usersWithRoles));
     } catch (error) {
       console.error('Error loading users:', error);
       toast({
@@ -177,7 +179,7 @@ export const AdvancedSettings: React.FC = () => {
       if (action === 'add') {
         const { error } = await supabase
           .from('user_roles')
-          .insert({ user_id: userId, role });
+          .insert({ user_id: userId, role: role as AppRole });
         
         if (error) throw error;
       } else {
@@ -185,7 +187,7 @@ export const AdvancedSettings: React.FC = () => {
           .from('user_roles')
           .delete()
           .eq('user_id', userId)
-          .eq('role', role);
+          .eq('role', role as AppRole);
         
         if (error) throw error;
       }

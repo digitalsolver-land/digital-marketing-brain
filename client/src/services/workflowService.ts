@@ -1,512 +1,476 @@
+
 import { supabase } from '@/integrations/supabase/client';
-import { Workflow } from '@/types/platform';
+import { WorkflowNode, WorkflowConnection } from '@/types/workflow';
+import { convertNullToUndefined } from '@/lib/typeHelpers';
 
-export interface N8nWorkflowJSON {
-  id?: string;
+export interface Workflow {
+  id: string;
   name: string;
-  nodes: Array<{
-    id: string;
-    name: string;
-    type: string;
-    typeVersion?: number;
-    position: [number, number];
-    parameters?: any;
-    credentials?: any;
-  }>;
-  connections: {
-    [key: string]: {
-      main?: Array<Array<{
-        node: string;
-        type: string;
-        index: number;
-      }>>;
-    };
-  };
-  active?: boolean;
-  settings?: any;
-  staticData?: any;
-  meta?: any;
-  tags?: Array<{ id: string; name: string }>;
-  createdAt?: string;
-  updatedAt?: string;
+  description?: string;
+  json_data: any;
+  status: string;
+  user_id: string;
+  n8n_workflow_id?: string;
+  tags?: string[];
+  created_at: string;
+  updated_at: string;
 }
 
-export interface WorkflowNode {
-  id: string;
-  workflow_id: string;
-  node_id: string;
-  node_type: string;
-  name: string;
-  position_x: number;
-  position_y: number;
-  parameters: any;
-}
-
-export interface WorkflowConnection {
-  id: string;
-  workflow_id: string;
-  source_node_id: string;
-  target_node_id: string;
-  source_index: number;
-  target_index: number;
-  connection_type: string;
+export interface WorkflowWithNodes {
+  workflow: Workflow;
+  nodes: WorkflowNode[];
+  connections: WorkflowConnection[];
 }
 
 class WorkflowService {
-  private static instance: WorkflowService;
+  async getAllWorkflows(): Promise<Workflow[]> {
+    const { data, error } = await supabase
+      .from('workflows')
+      .select('*')
+      .order('updated_at', { ascending: false });
 
-  public static getInstance(): WorkflowService {
-    if (!WorkflowService.instance) {
-      WorkflowService.instance = new WorkflowService();
+    if (error) {
+      console.error('❌ Erreur récupération workflows:', error);
+      throw new Error(`Erreur de récupération des workflows: ${error.message}`);
     }
-    return WorkflowService.instance;
+
+    return data || [];
   }
 
-  async createWorkflow(workflowData: {
-    name: string;
-    description?: string;
-    status?: 'active' | 'inactive' | 'draft';
-    n8nWorkflowId?: string;
-    jsonData?: any;
-  }): Promise<Workflow> {
+  async getWorkflowById(id: string): Promise<WorkflowWithNodes | null> {
+    console.log('🔍 Récupération workflow:', id);
+
     try {
-      console.log('🚀 Création workflow:', workflowData);
-      
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        console.error('❌ Utilisateur non authentifié');
-        throw new Error('Utilisateur non authentifié');
-      }
-
-      const insertData = {
-        user_id: user.id,
-        name: workflowData.name.trim(),
-        description: workflowData.description || '',
-        json_data: workflowData.jsonData || { nodes: [], connections: {} },
-        status: workflowData.status || 'inactive',
-        n8n_workflow_id: workflowData.n8nWorkflowId,
-        tags: []
-      };
-
+      // Récupérer le workflow principal
       const { data: workflow, error: workflowError } = await supabase
         .from('workflows')
-        .insert(insertData)
-        .select()
+        .select('*')
+        .eq('id', id)
         .single();
 
       if (workflowError) {
-        console.error('❌ Erreur création workflow:', workflowError);
-        throw new Error(`Erreur base de données: ${workflowError.message}`);
+        console.error('❌ Erreur workflow:', workflowError);
+        throw workflowError;
       }
 
-      console.log('✅ Workflow créé avec ID:', workflow.id);
-      return this.mapToWorkflow(workflow);
-    } catch (error) {
-      console.error('💥 Erreur création workflow:', error);
-      throw new Error(`Impossible de créer le workflow: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
-    }
-  }
-
-  async updateWorkflow(workflowId: string, updateData: {
-    name?: string;
-    description?: string;
-    status?: 'active' | 'inactive' | 'draft';
-    jsonData?: any;
-  }): Promise<void> {
-    try {
-      console.log('🔄 Mise à jour workflow:', workflowId);
-
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Utilisateur non authentifié');
-
-      const { error } = await supabase
-        .from('workflows')
-        .update({
-          name: updateData.name,
-          description: updateData.description,
-          status: updateData.status,
-          json_data: updateData.jsonData
-        })
-        .eq('id', workflowId)
-        .eq('user_id', user.id);
-
-      if (error) {
-        console.error('❌ Erreur mise à jour workflow:', error);
-        throw error;
+      if (!workflow) {
+        console.log('❌ Workflow non trouvé:', id);
+        return null;
       }
 
-      console.log('✅ Workflow mis à jour avec succès');
-    } catch (error) {
-      console.error('💥 Erreur mise à jour workflow:', error);
-      throw new Error(`Impossible de mettre à jour le workflow: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
-    }
-  }
+      // Récupérer les nœuds
+      const { data: nodes, error: nodesError } = await supabase
+        .from('workflow_nodes')
+        .select('*')
+        .eq('workflow_id', id);
 
-  async createWorkflowFromJSON(jsonData: N8nWorkflowJSON): Promise<Workflow> {
-    try {
-      console.log('🚀 Création workflow depuis JSON:', jsonData);
-      
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        console.error('❌ Utilisateur non authentifié');
-        throw new Error('Utilisateur non authentifié');
+      if (nodesError) {
+        console.error('❌ Erreur nœuds:', nodesError);
+        throw nodesError;
       }
 
-      // Validation des données JSON
-      if (!jsonData.name?.trim()) {
-        console.error('❌ Nom de workflow manquant');
-        throw new Error('Le nom du workflow est requis');
+      // Récupérer les connexions
+      const { data: connections, error: connectionsError } = await supabase
+        .from('workflow_connections')
+        .select('*')
+        .eq('workflow_id', id);
+
+      if (connectionsError) {
+        console.error('❌ Erreur connexions:', connectionsError);
+        throw connectionsError;
       }
 
-      if (!jsonData.nodes || jsonData.nodes.length === 0) {
-        console.error('❌ Aucun nœud fourni');
-        throw new Error('Au moins un nœud est requis');
-      }
-
-      // Validation des nœuds
-      for (const node of jsonData.nodes) {
-        if (!node.id || !node.name || !node.type) {
-          console.error('❌ Nœud invalide:', node);
-          throw new Error('Tous les nœuds doivent avoir un id, name et type');
-        }
-        if (!Array.isArray(node.position) || node.position.length !== 2) {
-          console.error('❌ Position invalide pour le nœud:', node);
-          throw new Error('La position du nœud doit être un tableau [x, y]');
-        }
-      }
-
-      // Créer le workflow principal
-      const workflowData = {
-        user_id: user.id,
-        name: jsonData.name.trim(),
-        description: `Workflow avec ${jsonData.nodes.length} nœud(s)`,
-        json_data: jsonData as any,
-        status: jsonData.active ? 'active' : 'inactive',
-        tags: jsonData.tags?.map(tag => tag.name) || []
-      };
-
-      console.log('📝 Données workflow à insérer:', {
-        ...workflowData,
-        json_data: '[OBJECT]' // Éviter d'afficher tout l'objet JSON
+      console.log('✅ Workflow récupéré:', {
+        workflow: workflow.name,
+        nodes: nodes?.length || 0,
+        connections: connections?.length || 0
       });
 
-      const { data: workflow, error: workflowError } = await supabase
-        .from('workflows')
-        .insert(workflowData)
-        .select()
-        .single();
+      // Convertir les null en undefined pour la compatibilité TypeScript
+      const convertedNodes: WorkflowNode[] = (nodes || []).map(node => ({
+        ...convertNullToUndefined(node),
+        source_index: node.source_index ?? 0,
+        target_index: node.target_index ?? 0,
+        connection_type: node.connection_type || 'main'
+      }));
 
-      if (workflowError) {
-        console.error('❌ Erreur création workflow:', workflowError);
-        throw new Error(`Erreur base de données: ${workflowError.message}`);
-      }
+      const convertedConnections: WorkflowConnection[] = (connections || []).map(conn => ({
+        ...convertNullToUndefined(conn),
+        source_index: conn.source_index ?? 0,
+        target_index: conn.target_index ?? 0,
+        connection_type: conn.connection_type || 'main'
+      }));
 
-      console.log('✅ Workflow créé avec ID:', workflow.id);
+      return {
+        workflow,
+        nodes: convertedNodes,
+        connections: convertedConnections
+      };
 
-      // Créer les nœuds et connexions
-      await this.createNodesAndConnections(workflow.id, jsonData);
-
-      console.log('🎉 Workflow créé avec succès!');
-      return this.mapToWorkflow(workflow);
     } catch (error) {
-      console.error('💥 Erreur création workflow:', error);
-      
-      if (error instanceof Error) {
-        throw new Error(`Impossible de créer le workflow: ${error.message}`);
-      } else {
-        throw new Error('Impossible de créer le workflow: Erreur inconnue');
-      }
-    }
-  }
-
-  private async createNodesAndConnections(workflowId: string, jsonData: N8nWorkflowJSON) {
-    try {
-      console.log('🔗 Création des nœuds et connexions pour workflow:', workflowId);
-
-      // Créer les nœuds
-      if (jsonData.nodes && jsonData.nodes.length > 0) {
-        const nodes = jsonData.nodes.map(node => {
-          const nodeData = {
-            workflow_id: workflowId,
-            node_id: node.id,
-            node_type: node.type,
-            name: node.name,
-            position_x: Number(node.position[0]) || 0,
-            position_y: Number(node.position[1]) || 0,
-            parameters: node.parameters || {}
-          };
-          
-          console.log('📦 Nœud préparé:', nodeData);
-          return nodeData;
-        });
-
-        console.log(`📊 Insertion de ${nodes.length} nœuds...`);
-
-        const { error: nodesError } = await supabase
-          .from('workflow_nodes')
-          .insert(nodes);
-
-        if (nodesError) {
-          console.error('❌ Erreur insertion nœuds:', nodesError);
-          throw new Error(`Erreur lors de l'insertion des nœuds: ${nodesError.message}`);
-        }
-
-        console.log(`✅ ${nodes.length} nœuds créés avec succès`);
-      }
-
-      // Créer les connexions
-      if (jsonData.connections && Object.keys(jsonData.connections).length > 0) {
-        const connections: any[] = [];
-        
-        Object.entries(jsonData.connections).forEach(([sourceNodeId, nodeConnections]) => {
-          if (nodeConnections.main) {
-            nodeConnections.main.forEach((connectionGroup, sourceIndex) => {
-              if (Array.isArray(connectionGroup)) {
-                connectionGroup.forEach(connection => {
-                  const connectionData = {
-                    workflow_id: workflowId,
-                    source_node_id: sourceNodeId,
-                    target_node_id: connection.node,
-                    source_index: sourceIndex,
-                    target_index: connection.index || 0,
-                    connection_type: connection.type || 'main'
-                  };
-                  
-                  console.log('🔗 Connexion préparée:', connectionData);
-                  connections.push(connectionData);
-                });
-              }
-            });
-          }
-        });
-
-        if (connections.length > 0) {
-          console.log(`🔗 Insertion de ${connections.length} connexions...`);
-
-          const { error: connectionsError } = await supabase
-            .from('workflow_connections')
-            .insert(connections);
-
-          if (connectionsError) {
-            console.error('❌ Erreur insertion connexions:', connectionsError);
-            throw new Error(`Erreur lors de l'insertion des connexions: ${connectionsError.message}`);
-          }
-
-          console.log(`✅ ${connections.length} connexions créées avec succès`);
-        } else {
-          console.log('ℹ️ Aucune connexion à créer');
-        }
-      } else {
-        console.log('ℹ️ Aucune connexion définie');
-      }
-    } catch (error) {
-      console.error('💥 Erreur création nœuds/connexions:', error);
+      console.error('❌ Erreur complète récupération workflow:', error);
       throw error;
     }
   }
 
-  async updateWorkflowJSON(workflowId: string, jsonData: N8nWorkflowJSON): Promise<void> {
-    try {
-      console.log('🔄 Mise à jour workflow:', workflowId);
-
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Utilisateur non authentifié');
-
-      // Mettre à jour le workflow
-      const { error: workflowError } = await supabase
-        .from('workflows')
-        .update({
-          json_data: jsonData as any,
-          name: jsonData.name,
-          tags: jsonData.tags?.map(tag => tag.name) || [],
-          status: jsonData.active ? 'active' : 'inactive'
-        })
-        .eq('id', workflowId)
-        .eq('user_id', user.id);
-
-      if (workflowError) {
-        console.error('❌ Erreur mise à jour workflow:', workflowError);
-        throw workflowError;
-      }
-
-      // Supprimer les anciens nœuds et connexions
-      console.log('🗑️ Suppression des anciens nœuds et connexions...');
-      const [nodesResult, connectionsResult] = await Promise.allSettled([
-        supabase.from('workflow_nodes').delete().eq('workflow_id', workflowId),
-        supabase.from('workflow_connections').delete().eq('workflow_id', workflowId)
-      ]);
-
-      if (nodesResult.status === 'rejected') {
-        console.warn('⚠️ Erreur suppression nœuds:', nodesResult.reason);
-      }
-      if (connectionsResult.status === 'rejected') {
-        console.warn('⚠️ Erreur suppression connexions:', connectionsResult.reason);
-      }
-
-      // Recréer les nœuds et connexions
-      await this.createNodesAndConnections(workflowId, jsonData);
-
-      console.log('✅ Workflow mis à jour avec succès');
-    } catch (error) {
-      console.error('💥 Erreur mise à jour workflow:', error);
-      throw new Error(`Impossible de mettre à jour le workflow: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
+  async createWorkflow(workflow: Partial<Workflow>): Promise<Workflow> {
+    const { data: userData } = await supabase.auth.getUser();
+    
+    if (!userData.user) {
+      throw new Error('Utilisateur non authentifié');
     }
+
+    const newWorkflow = {
+      name: workflow.name || 'Nouveau Workflow',
+      description: workflow.description || '',
+      json_data: workflow.json_data || { nodes: [], connections: {} },
+      status: workflow.status || 'inactive',
+      user_id: userData.user.id,
+      tags: workflow.tags || [],
+      n8n_workflow_id: workflow.n8n_workflow_id
+    };
+
+    const { data, error } = await supabase
+      .from('workflows')
+      .insert([newWorkflow])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('❌ Erreur création workflow:', error);
+      throw new Error(`Erreur de création: ${error.message}`);
+    }
+
+    console.log('✅ Workflow créé:', data.id);
+    return data;
   }
 
-  async getWorkflows(): Promise<Workflow[]> {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        console.log('⚠️ Utilisateur non authentifié');
-        return [];
-      }
+  async updateWorkflow(id: string, updates: Partial<Workflow>): Promise<void> {
+    const { error } = await supabase
+      .from('workflows')
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id);
 
-      console.log('📊 Récupération des workflows pour l\'utilisateur:', user.id);
-
-      const { data: workflows, error } = await supabase
-        .from('workflows')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('❌ Erreur récupération workflows:', error);
-        throw error;
-      }
-
-      console.log(`✅ ${workflows?.length || 0} workflows récupérés`);
-      return (workflows || []).map(workflow => this.mapToWorkflow(workflow));
-    } catch (error) {
-      console.error('💥 Erreur récupération workflows:', error);
-      return [];
+    if (error) {
+      console.error('❌ Erreur mise à jour workflow:', error);
+      throw new Error(`Erreur de mise à jour: ${error.message}`);
     }
+
+    console.log('✅ Workflow mis à jour:', id);
   }
 
-  async getWorkflowWithDetails(workflowId: string): Promise<{
-    workflow: any;
-    nodes: WorkflowNode[];
-    connections: WorkflowConnection[];
-  } | null> {
+  async deleteWorkflow(id: string): Promise<void> {
+    // Supprimer d'abord les nœuds et connexions liés
+    const { error: nodesError } = await supabase
+      .from('workflow_nodes')
+      .delete()
+      .eq('workflow_id', id);
+
+    if (nodesError) {
+      console.error('❌ Erreur suppression nœuds:', nodesError);
+    }
+
+    const { error: connectionsError } = await supabase
+      .from('workflow_connections')
+      .delete()
+      .eq('workflow_id', id);
+
+    if (connectionsError) {
+      console.error('❌ Erreur suppression connexions:', connectionsError);
+    }
+
+    // Supprimer le workflow
+    const { error } = await supabase
+      .from('workflows')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('❌ Erreur suppression workflow:', error);
+      throw new Error(`Erreur de suppression: ${error.message}`);
+    }
+
+    console.log('✅ Workflow supprimé:', id);
+  }
+
+  async importWorkflowFromN8n(n8nWorkflow: any): Promise<WorkflowWithNodes> {
+    console.log('📥 Import workflow n8n:', n8nWorkflow.name);
+
     try {
-      console.log('🔍 Récupération détails workflow:', workflowId);
+      // Créer le workflow principal
+      const workflow = await this.createWorkflow({
+        name: n8nWorkflow.name,
+        description: `Importé depuis n8n: ${n8nWorkflow.name}`,
+        json_data: n8nWorkflow,
+        status: n8nWorkflow.active ? 'active' : 'inactive',
+        n8n_workflow_id: n8nWorkflow.id?.toString(),
+        tags: n8nWorkflow.tags || []
+      });
 
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Utilisateur non authentifié');
+      // Créer les nœuds
+      const nodes: WorkflowNode[] = [];
+      if (n8nWorkflow.nodes && Array.isArray(n8nWorkflow.nodes)) {
+        for (const n8nNode of n8nWorkflow.nodes) {
+          const node = {
+            id: undefined, // Auto-généré par Supabase
+            workflow_id: workflow.id,
+            node_id: n8nNode.id,
+            node_type: n8nNode.type,
+            name: n8nNode.name,
+            position_x: n8nNode.position?.[0] || 0,
+            position_y: n8nNode.position?.[1] || 0,
+            parameters: n8nNode.parameters || {}
+          };
 
-      // Récupérer le workflow, nœuds et connexions en parallèle
-      const [workflowResult, nodesResult, connectionsResult] = await Promise.allSettled([
-        supabase
-          .from('workflows')
-          .select('*')
-          .eq('id', workflowId)
-          .eq('user_id', user.id)
-          .single(),
-        
-        supabase
-          .from('workflow_nodes')
-          .select('*')
-          .eq('workflow_id', workflowId),
-        
-        supabase
-          .from('workflow_connections')
-          .select('*')
-          .eq('workflow_id', workflowId)
-      ]);
+          const { data: createdNode, error } = await supabase
+            .from('workflow_nodes')
+            .insert([node])
+            .select()
+            .single();
 
-      if (workflowResult.status === 'rejected' || workflowResult.value.error) {
-        console.error('❌ Erreur récupération workflow:', workflowResult.status === 'rejected' ? workflowResult.reason : workflowResult.value.error);
-        return null;
+          if (error) {
+            console.error('❌ Erreur création nœud:', error);
+            continue;
+          }
+
+          nodes.push(createdNode);
+        }
       }
 
-      const nodes = nodesResult.status === 'fulfilled' && !nodesResult.value.error ? nodesResult.value.data || [] : [];
-      const connections = connectionsResult.status === 'fulfilled' && !connectionsResult.value.error ? connectionsResult.value.data || [] : [];
+      // Créer les connexions
+      const connections: WorkflowConnection[] = [];
+      if (n8nWorkflow.connections && typeof n8nWorkflow.connections === 'object') {
+        for (const [sourceNodeId, sourceConnections] of Object.entries(n8nWorkflow.connections)) {
+          if (sourceConnections && typeof sourceConnections === 'object') {
+            for (const [connectionType, connectionArray] of Object.entries(sourceConnections)) {
+              if (Array.isArray(connectionArray)) {
+                connectionArray.forEach((connGroup, sourceIndex) => {
+                  if (Array.isArray(connGroup)) {
+                    connGroup.forEach(conn => {
+                      const connection = {
+                        id: undefined, // Auto-généré par Supabase
+                        workflow_id: workflow.id,
+                        source_node_id: sourceNodeId,
+                        target_node_id: conn.node,
+                        source_index: sourceIndex,
+                        target_index: conn.index || 0,
+                        connection_type: connectionType
+                      };
 
-      const result = {
-        workflow: workflowResult.value.data,
+                      supabase
+                        .from('workflow_connections')
+                        .insert([connection])
+                        .select()
+                        .single()
+                        .then(({ data: createdConnection, error }) => {
+                          if (error) {
+                            console.error('❌ Erreur création connexion:', error);
+                          } else if (createdConnection) {
+                            connections.push(createdConnection);
+                          }
+                        });
+                    });
+                  }
+                });
+              }
+            }
+          }
+        }
+      }
+
+      console.log('✅ Workflow importé:', {
+        id: workflow.id,
+        name: workflow.name,
+        nodes: nodes.length,
+        connections: connections.length
+      });
+
+      return {
+        workflow,
         nodes,
         connections
       };
 
-      console.log('✅ Détails workflow récupérés:', {
-        workflow: result.workflow.name,
-        nodesCount: result.nodes.length,
-        connectionsCount: result.connections.length
-      });
-
-      return result;
     } catch (error) {
-      console.error('💥 Erreur récupération détails workflow:', error);
-      return null;
+      console.error('❌ Erreur import workflow:', error);
+      throw error;
     }
   }
 
-  async deleteWorkflow(workflowId: string): Promise<void> {
-    try {
-      console.log('🗑️ Suppression workflow:', workflowId);
-
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Utilisateur non authentifié');
-
-      const { error } = await supabase
-        .from('workflows')
-        .delete()
-        .eq('id', workflowId)
-        .eq('user_id', user.id);
-
-      if (error) {
-        console.error('❌ Erreur suppression workflow:', error);
-        throw error;
-      }
-
-      console.log('✅ Workflow supprimé avec succès');
-    } catch (error) {
-      console.error('💥 Erreur suppression workflow:', error);
-      throw new Error(`Impossible de supprimer le workflow: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
+  async exportWorkflowToN8n(workflowId: string): Promise<any> {
+    const workflowData = await this.getWorkflowById(workflowId);
+    
+    if (!workflowData) {
+      throw new Error('Workflow non trouvé');
     }
-  }
 
-  async updateWorkflowStatus(workflowId: string, status: 'active' | 'inactive' | 'draft'): Promise<void> {
-    try {
-      console.log('🔄 Mise à jour statut workflow:', workflowId, status);
+    const { workflow, nodes, connections } = workflowData;
 
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Utilisateur non authentifié');
-
-      const { error } = await supabase
-        .from('workflows')
-        .update({ status })
-        .eq('id', workflowId)
-        .eq('user_id', user.id);
-
-      if (error) {
-        console.error('❌ Erreur mise à jour statut:', error);
-        throw error;
-      }
-
-      console.log('✅ Statut workflow mis à jour avec succès');
-    } catch (error) {
-      console.error('💥 Erreur mise à jour statut workflow:', error);
-      throw new Error(`Impossible de mettre à jour le statut: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
-    }
-  }
-
-  private mapToWorkflow(workflow: any): Workflow {
-    return {
-      id: workflow.id,
+    // Convertir au format n8n
+    const n8nWorkflow = {
       name: workflow.name,
-      description: workflow.description || '',
-      status: workflow.status as 'active' | 'inactive' | 'draft',
-      trigger: workflow.json_data?.nodes?.find((n: any) => n.type.includes('trigger') || n.type.includes('start'))?.type || 'manual',
-      nodes: [],
-      executionCount: 0,
-      successRate: 100,
-      tags: workflow.tags || [],
-      createdAt: workflow.created_at,
-      updatedAt: workflow.updated_at,
-      n8nWorkflowId: workflow.n8n_workflow_id,
-      jsonData: workflow.json_data
+      active: workflow.status === 'active',
+      nodes: nodes.map(node => ({
+        id: node.node_id,
+        name: node.name,
+        type: node.node_type,
+        position: [node.position_x, node.position_y],
+        parameters: node.parameters
+      })),
+      connections: connections.reduce((acc, conn) => {
+        if (!acc[conn.source_node_id]) {
+          acc[conn.source_node_id] = { main: [] };
+        }
+        if (!acc[conn.source_node_id].main[conn.source_index]) {
+          acc[conn.source_node_id].main[conn.source_index] = [];
+        }
+        acc[conn.source_node_id].main[conn.source_index].push({
+          node: conn.target_node_id,
+          type: conn.connection_type,
+          index: conn.target_index
+        });
+        return acc;
+      }, {} as any),
+      tags: workflow.tags || []
+    };
+
+    return n8nWorkflow;
+  }
+
+  async duplicateWorkflow(sourceId: string, newName?: string): Promise<Workflow> {
+    const sourceWorkflow = await this.getWorkflowById(sourceId);
+    
+    if (!sourceWorkflow) {
+      throw new Error('Workflow source non trouvé');
+    }
+
+    const { workflow, nodes, connections } = sourceWorkflow;
+
+    // Créer le nouveau workflow
+    const newWorkflow = await this.createWorkflow({
+      name: newName || `${workflow.name} (copie)`,
+      description: workflow.description,
+      json_data: workflow.json_data,
+      status: 'inactive', // Les copies sont inactives par défaut
+      tags: workflow.tags
+    });
+
+    // Dupliquer les nœuds
+    const nodeIdMapping: { [oldId: string]: string } = {};
+    for (const node of nodes) {
+      const newNodeId = `${node.node_id}_copy_${Date.now()}`;
+      nodeIdMapping[node.node_id] = newNodeId;
+
+      await supabase
+        .from('workflow_nodes')
+        .insert([{
+          workflow_id: newWorkflow.id,
+          node_id: newNodeId,
+          node_type: node.node_type,
+          name: node.name,
+          position_x: node.position_x + 50, // Décaler légèrement
+          position_y: node.position_y + 50,
+          parameters: node.parameters
+        }]);
+    }
+
+    // Dupliquer les connexions avec les nouveaux IDs
+    for (const connection of connections) {
+      const newSourceId = nodeIdMapping[connection.source_node_id];
+      const newTargetId = nodeIdMapping[connection.target_node_id];
+
+      if (newSourceId && newTargetId) {
+        await supabase
+          .from('workflow_connections')
+          .insert([{
+            workflow_id: newWorkflow.id,
+            source_node_id: newSourceId,
+            target_node_id: newTargetId,
+            source_index: connection.source_index,
+            target_index: connection.target_index,
+            connection_type: connection.connection_type
+          }]);
+      }
+    }
+
+    console.log('✅ Workflow dupliqué:', newWorkflow.id);
+    return newWorkflow;
+  }
+
+  async getUserWorkflows(userId?: string): Promise<Workflow[]> {
+    let query = supabase
+      .from('workflows')
+      .select('*')
+      .order('updated_at', { ascending: false });
+
+    if (userId) {
+      query = query.eq('user_id', userId);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('❌ Erreur récupération workflows utilisateur:', error);
+      throw new Error(`Erreur de récupération: ${error.message}`);
+    }
+
+    return data || [];
+  }
+
+  async getWorkflowsByTag(tag: string): Promise<Workflow[]> {
+    const { data, error } = await supabase
+      .from('workflows')
+      .select('*')
+      .contains('tags', [tag])
+      .order('updated_at', { ascending: false });
+
+    if (error) {
+      console.error('❌ Erreur récupération workflows par tag:', error);
+      throw new Error(`Erreur de récupération: ${error.message}`);
+    }
+
+    return data || [];
+  }
+
+  async searchWorkflows(query: string): Promise<Workflow[]> {
+    const { data, error } = await supabase
+      .from('workflows')
+      .select('*')
+      .or(`name.ilike.%${query}%,description.ilike.%${query}%`)
+      .order('updated_at', { ascending: false });
+
+    if (error) {
+      console.error('❌ Erreur recherche workflows:', error);
+      throw new Error(`Erreur de recherche: ${error.message}`);
+    }
+
+    return data || [];
+  }
+
+  async getWorkflowStats() {
+    const { data: totalData, error: totalError } = await supabase
+      .from('workflows')
+      .select('*', { count: 'exact', head: true });
+
+    const { data: activeData, error: activeError } = await supabase
+      .from('workflows')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'active');
+
+    if (totalError || activeError) {
+      console.error('❌ Erreur stats workflows:', totalError || activeError);
+      throw new Error('Erreur de récupération des statistiques');
+    }
+
+    return {
+      total: totalData?.length || 0,
+      active: activeData?.length || 0,
+      inactive: (totalData?.length || 0) - (activeData?.length || 0)
     };
   }
 }
 
-export const workflowService = WorkflowService.getInstance();
+export const workflowService = new WorkflowService();

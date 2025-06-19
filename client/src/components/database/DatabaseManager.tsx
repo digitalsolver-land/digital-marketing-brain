@@ -36,6 +36,10 @@ interface QueryResult {
   affectedRows?: number;
 }
 
+type TableMapping = {
+  [key: string]: string;
+};
+
 export const DatabaseManager: React.FC = () => {
   const [tables, setTables] = useState<DatabaseTable[]>([]);
   const [selectedTable, setSelectedTable] = useState<DatabaseTable | null>(null);
@@ -132,7 +136,7 @@ export const DatabaseManager: React.FC = () => {
 
   const updateTableStats = async () => {
     // Update table statistics by querying specific known tables
-    const tableMap: Record<string, string> = {
+    const tableMap: TableMapping = {
       'profiles': 'profiles',
       'user_roles': 'user_roles', 
       'app_settings': 'app_settings',
@@ -145,9 +149,10 @@ export const DatabaseManager: React.FC = () => {
     const updatedTables = await Promise.all(
       tables.map(async (table) => {
         try {
-          if (tableMap[table.name]) {
+          const tableName = tableMap[table.name];
+          if (tableName) {
             const { count, error } = await supabase
-              .from(tableMap[table.name] as any)
+              .from(tableName as any)
               .select('*', { count: 'exact', head: true });
             
             return {
@@ -169,7 +174,7 @@ export const DatabaseManager: React.FC = () => {
     setSelectedTable(table);
     
     try {
-      const tableMap: Record<string, string> = {
+      const tableMap: TableMapping = {
         'profiles': 'profiles',
         'user_roles': 'user_roles', 
         'app_settings': 'app_settings',
@@ -179,9 +184,10 @@ export const DatabaseManager: React.FC = () => {
         'workflow_executions': 'workflow_executions'
       };
 
-      if (tableMap[table.name]) {
+      const tableName = tableMap[table.name];
+      if (tableName) {
         const { data, error } = await supabase
-          .from(tableMap[table.name] as any)
+          .from(tableName as any)
           .select('*')
           .limit(100);
 
@@ -255,7 +261,7 @@ export const DatabaseManager: React.FC = () => {
 
   const exportTableData = async (table: DatabaseTable) => {
     try {
-      const tableMap: Record<string, string> = {
+      const tableMap: TableMapping = {
         'profiles': 'profiles',
         'user_roles': 'user_roles', 
         'app_settings': 'app_settings',
@@ -265,9 +271,10 @@ export const DatabaseManager: React.FC = () => {
         'workflow_executions': 'workflow_executions'
       };
 
-      if (tableMap[table.name]) {
+      const tableName = tableMap[table.name];
+      if (tableName) {
         const { data, error } = await supabase
-          .from(tableMap[table.name] as any)
+          .from(tableName as any)
           .select('*');
 
         if (error) throw error;

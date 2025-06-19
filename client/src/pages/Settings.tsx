@@ -35,7 +35,7 @@ const Settings: React.FC = () => {
   const [users, setUsers] = useState<UserWithRoles[]>([]);
 
   useEffect(() => {
-    if (user) {
+    if (user?.id) {
       loadSettings();
       if (isAdmin) {
         loadUsers();
@@ -44,11 +44,13 @@ const Settings: React.FC = () => {
   }, [user, isAdmin]);
 
   const loadSettings = async () => {
+    if (!user?.id) return;
+    
     try {
       const { data, error } = await supabase
         .from('app_settings')
         .select('*')
-        .eq('user_id', user?.id)
+        .eq('user_id', user.id)
         .single();
 
       if (error && error.code !== 'PGRST116') {
@@ -84,10 +86,10 @@ const Settings: React.FC = () => {
         return;
       }
 
-      const usersWithRoles = profilesData?.map(profile => ({
+      const usersWithRoles = (profilesData || []).map(profile => ({
         ...profile,
-        roles: rolesData?.filter(role => role.user_id === profile.id).map(r => r.role) || []
-      })) || [];
+        roles: (rolesData || []).filter(role => role.user_id === profile.id).map(r => r.role) || []
+      }));
 
       setUsers(convertUserWithRoles(usersWithRoles));
     } catch (error) {
@@ -96,7 +98,7 @@ const Settings: React.FC = () => {
   };
 
   const saveSettings = async () => {
-    if (!user) return;
+    if (!user?.id) return;
 
     setLoading(true);
     try {
